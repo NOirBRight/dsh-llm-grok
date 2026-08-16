@@ -1,11 +1,17 @@
-/** Grok Plugin configuration card: Host-owned xAI login and a read-only catalog. */
+/** Grok Plugin configuration card: Host-owned xAI login, usage, and a read-only catalog. */
 
 import { useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import { GROK_CATALOG } from '../client-contract.ts'
-import type { GrokAuthStartReply, GrokAuthStatus } from '../client-contract.ts'
+import type {
+  GrokAuthStartReply,
+  GrokAuthStatus,
+  GrokUsageReply,
+  GrokUsageView,
+  GrokUsageWindow,
+} from '../client-contract.ts'
 import type { GrokSettingsKey } from './locales.ts'
 
 /** Dependencies injected by the browser-plugin registration. */
@@ -18,6 +24,8 @@ export interface GrokPluginCardFace {
   readAuthStatus: () => Promise<GrokAuthStatus>
   /** Delete the Host session. */
   logout: () => Promise<void>
+  /** Read the Host-decoded billing snapshot. Tokens never cross this call. */
+  fetchUsage: () => Promise<GrokUsageReply>
 }
 
 /** Props delivered by the Plugin configuration item slot. */
@@ -29,6 +37,13 @@ type AuthUi =
   | { kind: 'signed-out', message?: string }
   | { kind: 'signing-in' }
   | { kind: 'signed-in', email?: string }
+
+type UsageState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready', usage: GrokUsageView }
+  | { status: 'unsupported' }
+  | { status: 'error', message: string }
 
 const cardStyle: CSSProperties = {
   overflow: 'hidden',
@@ -67,7 +82,17 @@ const sectionTitleStyle: CSSProperties = {
   color: 'var(--dsw-alias-label-primary)',
 }
 const hintStyle: CSSProperties = { margin: 0, fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' }
+const labelStyle: CSSProperties = { fontSize: 13, color: 'var(--dsw-alias-label-secondary)' }
 const statusStyle: CSSProperties = { margin: 0, fontSize: 13, color: 'var(--dsw-alias-label-secondary)' }
+const errorStyle: CSSProperties = { ...statusStyle, color: 'var(--dsw-alias-state-error-primary)' }
+const barTrackStyle: CSSProperties = {
+  boxSizing: 'border-box',
+  height: 14,
+  display: 'flex',
+  overflow: 'hidden',
+  borderRadius: 999,
+  background: 'color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent)',
+}
 const buttonStyle: CSSProperties = {
   alignSelf: 'flex-start',
   minHeight: 34,
@@ -103,30 +128,104 @@ function formatSignedIn(t: GrokPluginCardFace['t'], email: string | undefined): 
   return t('signedInAs').replace('{email}', email)
 }
 
+function messageOf(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.length > 0 ? error.message : fallback
+}
+
+/** One quota window: used/limit numbers and a solid meter. */
+function UsageBar({ usedText, window: quota }: {
+  usedText: string
+  window: GrokUsageWindow
+}): ReactNode {
+  const ratio = quota.limit > 0 ? quota.used / quota.limit : quota.used > 0 ? 1 : 0
+  const percent = Math.round(ratio * 1000) / 10
+  const fill = Math.min(100, Math.max(0, percent))
+  const label = quota.period === undefined ? quota.id : `${quota.id} (${quota.period})`
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+        <span style={labelStyle}>{label}</span>
+        <span style={hintStyle}>{usedText} {String(quota.used)} / {String(quota.limit)}</span>
+      </div>
+      <div
+        style={barTrackStyle}
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(fill)}
+      >
+        <span
+          data-usage-fill="true"
+          style={{
+            width: String(fill) + '%',
+            height: '100%',
+            flex: 'none',
+            background: 'var(--dsw-alias-state-business-primary)',
+            transition: 'width 200ms ease',
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
 /** Render the single-package Grok contribution under Plugin configuration. */
 export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
-  const { t, startAuth, readAuthStatus, logout } = props
+  const { t, startAuth, readAuthStatus, logout, fetchUsage } = props
   const [open, setOpen] = useState(false)
   const [auth, setAuth] = useState<AuthUi>({ kind: 'signed-out' })
+  const [usage, setUsage] = useState<UsageState>({ status: 'idle' })
   const title = t('title')
   const busy = auth.kind === 'signing-in'
+
+  const loadUsage = async (): Promise<void> => {
+    setUsage({ status: 'loading' })
+    try {
+      const read = await fetchUsage()
+      if (read.status === 'logged-out') {
+        setAuth({ kind: 'signed-out' })
+        setUsage({ status: 'idle' })
+        return
+      }
+      if (read.status === 'unsupported') {
+        setUsage({ status: 'unsupported' })
+        return
+      }
+      setUsage({ status: 'ready', usage: read.usage })
+    } catch (error: unknown) {
+      setUsage({ status: 'error', message: messageOf(error, t('usageFailed')) })
+    }
+  }
 
   useEffect(() => {
     if (!open) return
     let cancelled = false
     void readAuthStatus().then((status) => {
       if (cancelled) return
-      setAuth(status.loggedIn
-        ? { kind: 'signed-in', ...status.email === undefined ? {} : { email: status.email } }
-        : { kind: 'signed-out' })
+      if (status.loggedIn) {
+        setAuth({ kind: 'signed-in', ...status.email === undefined ? {} : { email: status.email } })
+        return
+      }
+      setAuth({ kind: 'signed-out' })
+      setUsage({ status: 'idle' })
     }).catch(() => {
-      if (!cancelled) setAuth({ kind: 'signed-out', message: t('statusFailed') })
+      if (!cancelled) {
+        setAuth({ kind: 'signed-out', message: t('statusFailed') })
+        setUsage({ status: 'idle' })
+      }
     })
     return () => { cancelled = true }
   }, [open, readAuthStatus, t])
 
+  useEffect(() => {
+    if (!open || auth.kind !== 'signed-in' || usage.status !== 'idle') return
+    void loadUsage()
+  }, [open, auth.kind, usage.status])
+
   const onSignIn = async (): Promise<void> => {
     setAuth({ kind: 'signing-in' })
+    setUsage({ status: 'idle' })
     try {
       const started = await startAuth()
       if (!started.ok) {
@@ -146,6 +245,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
     try {
       await logout()
       setAuth({ kind: 'signed-out' })
+      setUsage({ status: 'idle' })
     } catch {
       setAuth(current => current.kind === 'signed-in'
         ? current
@@ -193,6 +293,34 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                   </button>
                 )}
             </section>
+            {auth.kind === 'signed-in'
+              ? (
+                <section style={sectionStyle} aria-label={t('usage')}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <h3 style={sectionTitleStyle}>{t('usage')}</h3>
+                    <button
+                      type="button"
+                      style={buttonStyle}
+                      disabled={usage.status === 'loading'}
+                      onClick={() => { void loadUsage() }}
+                    >
+                      {t(usage.status === 'loading' ? 'usageLoading' : 'usageRefresh')}
+                    </button>
+                  </div>
+                  {usage.status === 'ready'
+                    ? usage.usage.windows.map((window, index) => (
+                      <UsageBar
+                        key={`${window.id}:${String(index)}`}
+                        usedText={t('usageUsed')}
+                        window={window}
+                      />
+                    ))
+                    : null}
+                  {usage.status === 'unsupported' ? <p style={hintStyle}>{t('usageUnsupported')}</p> : null}
+                  {usage.status === 'error' ? <p style={errorStyle}>{usage.message}</p> : null}
+                </section>
+              )
+              : null}
             <section style={sectionStyle} aria-label={t('models')}>
               <h3 style={sectionTitleStyle}>{t('models')}</h3>
               <ul style={catalogStyle}>

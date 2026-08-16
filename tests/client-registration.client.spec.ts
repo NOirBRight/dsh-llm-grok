@@ -48,6 +48,53 @@ describe('Grok client plugin registration', () => {
     expect(inject).toEqual(['slots', 'locale', 'connection'])
   })
 
+  it('reads usage through the grok usage/read RPC without exposing tokens', async () => {
+    const ctx = new Context()
+    await ctx.plugin(FakeSlots).await()
+    const slots = ctx.get('slots') as FakeSlots
+    ctx.provide('locale', {
+      register: () => () => undefined,
+      bind: () => (key: string) => key,
+    } as never)
+    const calls: Array<{ channel: string, endpoint: string, payload: unknown }> = []
+    ctx.provide('connection', {
+      rpc: {
+        call: async (channel: string, endpoint: string, payload: unknown) => {
+          calls.push({ channel, endpoint, payload })
+          return {
+            ok: true,
+            value: {
+              status: 'ok',
+              usage: {
+                fetchedAt: '2026-08-17T00:00:00.000Z',
+                windows: [{ id: 'monthly', used: 1, limit: 10 }],
+              },
+            },
+          }
+        },
+      },
+    } as never)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+
+    const face = (slots.entries('settings.plugin.item')[0] as {
+      inject?: () => { fetchUsage: () => Promise<unknown> }
+    }).inject?.()
+    const usage = await face?.fetchUsage()
+    expect(calls).toEqual([{ channel: '/grok', endpoint: 'usage/read', payload: {} }])
+    expect(usage).toEqual({
+      status: 'ok',
+      usage: {
+        fetchedAt: '2026-08-17T00:00:00.000Z',
+        windows: [{ id: 'monthly', used: 1, limit: 10 }],
+      },
+    })
+    expect(JSON.stringify(usage)).not.toMatch(/accessToken|refreshToken|Bearer/u)
+
+    await fiber.dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('registers the card, then removes it with the plugin fiber', async () => {
     const { ctx, slots } = await bench()
     const fiber = ctx.plugin({ inject: [...inject], apply })

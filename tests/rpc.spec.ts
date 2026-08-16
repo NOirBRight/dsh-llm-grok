@@ -10,15 +10,19 @@ import {
   GROK_AUTH_START_ENDPOINT,
   GROK_AUTH_STATUS_ENDPOINT,
   GROK_RPC_CHANNEL,
+  GROK_USAGE_ENDPOINT,
   decodeGrokAuthStatus,
+  decodeGrokUsageReply,
 } from '../src/client-contract.ts'
 import { apply, Config, createGrokRpcHandler, inject } from '../src/index.ts'
 import { createGrokAuthRuntime } from '../src/oauth.ts'
 import { readSession, resolveGrokSessionPath, writeSession } from '../src/session.ts'
 import { closeFakeAuthServers, fakeAuthServer } from './fake-auth-server.ts'
+import { closeFakeBillingServers, fakeBillingServer } from './fake-billing-server.ts'
 
 afterEach(async () => {
   await closeFakeAuthServers()
+  await closeFakeBillingServers()
 })
 
 type Handler = (
@@ -137,9 +141,9 @@ describe('Grok loopback auth RPC', () => {
     const handler = createGrokRpcHandler(createGrokAuthRuntime({
       resolveSessionPath: () => join(tmpdir(), 'unused-grok-oauth.json'),
     }))
-    const result = await handler('usage/read', {}, new AbortController().signal)
+    const result = await handler('models/discover', {}, new AbortController().signal)
     expect(result.ok).toBe(false)
-    expect(result.error?.message).toBe('unknown Grok endpoint: usage/read')
+    expect(result.error?.message).toBe('unknown Grok endpoint: models/discover')
   })
 
   it('rejects status payloads that try to send token fields', async () => {
@@ -184,6 +188,117 @@ describe('Grok loopback auth RPC', () => {
       },
     })
     expect(JSON.stringify(status)).not.toMatch(/access-secret|refresh-secret/u)
+  })
+
+  it('returns logged-out usage without contacting billing', async () => {
+    const fetchImpl = vi.fn()
+    const handler = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => join(tmpdir(), 'missing-grok-oauth.json'),
+      fetch: fetchImpl,
+    }), { billingURL: 'http://127.0.0.1:1/v1/billing' })
+
+    const result = await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+    expect(result).toEqual({ ok: true, value: { status: 'logged-out' } })
+    expect(decodeGrokUsageReply(result.ok ? result.value : undefined)).toEqual({ status: 'logged-out' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('returns decoded billing windows and never includes tokens', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-llm-grok-rpc-usage-'))
+    const path = join(root, 'grok-oauth.json')
+    const billing = await fakeBillingServer([{
+      status: 200,
+      body: { windows: [{ id: 'monthly', used: 12, limit: 100, period: 'month' }] },
+    }])
+    await writeSession(path, {
+      accessToken: 'access-secret',
+      refreshToken: 'refresh-secret',
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+      email: 'user@example.test',
+    })
+    const handler = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => path,
+      issuer: 'http://127.0.0.1:1',
+    }), { billingURL: billing.url })
+
+    const result = await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        status: 'ok',
+        usage: {
+          fetchedAt: expect.any(String),
+          windows: [{ id: 'monthly', used: 12, limit: 100, period: 'month' }],
+        },
+      },
+    })
+    expect(decodeGrokUsageReply(result.ok ? result.value : undefined)).toMatchObject({
+      status: 'ok',
+      usage: { windows: [{ id: 'monthly', used: 12, limit: 100, period: 'month' }] },
+    })
+    expect(billing.requests[0]?.authorization).toBe('Bearer access-secret')
+    expect(JSON.stringify(result)).not.toMatch(/access-secret|refresh-secret|Bearer/u)
+  })
+
+  it('returns unsupported when billing is missing or unrecognized', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-llm-grok-rpc-usage-unsup-'))
+    const path = join(root, 'grok-oauth.json')
+    const billing = await fakeBillingServer([
+      { status: 404, body: { error: 'not found' } },
+      { status: 200, body: { quota: 1 } },
+    ])
+    await writeSession(path, {
+      accessToken: 'access-secret',
+      refreshToken: 'refresh-secret',
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+    })
+    const handler = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => path,
+      issuer: 'http://127.0.0.1:1',
+    }), { billingURL: billing.url })
+
+    expect(await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)).toEqual({
+      ok: true,
+      value: { status: 'unsupported' },
+    })
+    expect(await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)).toEqual({
+      ok: true,
+      value: { status: 'unsupported' },
+    })
+  })
+
+  it('returns a transport error without token material', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-llm-grok-rpc-usage-err-'))
+    const path = join(root, 'grok-oauth.json')
+    await writeSession(path, {
+      accessToken: 'access-secret',
+      refreshToken: 'refresh-secret',
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+    })
+    const handler = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => path,
+      issuer: 'http://127.0.0.1:1',
+    }), { billingURL: 'http://127.0.0.1:1/v1/billing' })
+
+    const result = await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+    expect(result.ok).toBe(false)
+    expect(result.error?.message).toMatch(/could not reach/u)
+    expect(JSON.stringify(result)).not.toMatch(/access-secret|refresh-secret/u)
+  })
+
+  it('rejects usage payloads that try to send token fields', async () => {
+    const fetchImpl = vi.fn()
+    const handler = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => join(tmpdir(), 'unused-grok-oauth.json'),
+      fetch: fetchImpl,
+    }))
+    const result = await handler(
+      GROK_USAGE_ENDPOINT,
+      { accessToken: 'nope' },
+      new AbortController().signal,
+    )
+    expect(result.ok).toBe(false)
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 
   it('resolves the session file from the launch-environment DSH_HOME', async () => {

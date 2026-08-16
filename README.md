@@ -21,7 +21,7 @@ The repository tracks release-ready lib artifacts, so GitHub installation needs 
 
 Open Settings → Plugins → Plugin configuration → Grok. **Sign in with xAI** starts a Host-owned PKCE flow against `auth.x.ai` (the Grok CLI public client), opens the system browser, and stores the session only on the Host at `$DSH_HOME/grok-oauth.json` (mode `0600`). The card then shows the account email. Sign out deletes that file. The browser never receives tokens. This plugin does not read or write `~/.grok/auth.json`.
 
-The frozen model catalog (`grok-4.6` with reasoning and vision) is shown read-only. After sign-in, the conversation picker lists those models and streams through `POST https://cli-chat-proxy.grok.com/v1/responses`. Every request includes DSH function tools plus always-on server-side `{ type: "web_search" }` and `{ type: "x_search" }`. Search is not a `ctx.web` provider. Usage lands in a later ticket.
+The frozen model catalog (`grok-4.6` with reasoning and vision) is shown read-only. After sign-in, the conversation picker lists those models and streams through `POST https://cli-chat-proxy.grok.com/v1/responses`. Every request includes DSH function tools plus always-on server-side `{ type: "web_search" }` and `{ type: "x_search" }`. Search is not a `ctx.web` provider. When signed in, the card also shows subscription usage from a Host billing read (`GET /v1/billing`). Logged-out cards do not request billing; an unrecognized surface is shown as unsupported, not as an error.
 
 Chat without a session fails `MISSING_CREDENTIAL`. A stored session whose refresh fails is cleared and fails `AUTH`. `ensureFreshSession` already runs before each chat request; a later 401 is not retried at the Responses layer.
 

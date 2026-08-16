@@ -13,6 +13,8 @@ export declare const GROK_AUTH_START_ENDPOINT = "auth/start";
 export declare const GROK_AUTH_STATUS_ENDPOINT = "auth/status";
 /** Delete the Host session file. */
 export declare const GROK_AUTH_LOGOUT_ENDPOINT = "auth/logout";
+/** Secret-free subscription-usage snapshot inside {@link GROK_RPC_CHANNEL}. */
+export declare const GROK_USAGE_ENDPOINT = "usage/read";
 /** One model in the plugin's frozen catalog. */
 export interface GrokCatalogModel {
     /** Wire model id accepted by the chat proxy. */
@@ -57,6 +59,37 @@ export interface GrokAuthLogoutReply {
     /** Logout always reports success after the session file is gone. */
     ok: true;
 }
+/** One metered quota window decoded from the Host billing snapshot. */
+export interface GrokUsageWindow {
+    /** Stable window id shown as the meter label (`monthly`, `weekly`, …). */
+    id: string;
+    /** Consumed amount in the window. */
+    used: number;
+    /** Window ceiling. */
+    limit: number;
+    /** Optional period label from the billing payload (`month`, `week`, …). */
+    period?: string;
+}
+/** Secret-free usage snapshot the configuration card renders. */
+export interface GrokUsageView {
+    /** ISO-8601 time the Host read the snapshot. */
+    fetchedAt: string;
+    /** Decoded windows, provider order, at least one entry. */
+    windows: GrokUsageWindow[];
+}
+/**
+ * Usage answer crossing the plugin RPC. Logged-out and unsupported are
+ * legitimate answers, not transport failures, so they ride the success
+ * branch instead of an error code.
+ */
+export type GrokUsageReply = {
+    status: 'ok';
+    usage: GrokUsageView;
+} | {
+    status: 'unsupported';
+} | {
+    status: 'logged-out';
+};
 /**
  * Narrow the schema-resolved settings section before it enters React state.
  * @param value - untrusted settings response value.
@@ -88,4 +121,16 @@ export declare function decodeGrokAuthStatus(value: unknown): GrokAuthStatus | u
  * @returns the validated reply, or undefined when it is malformed or carries secrets.
  */
 export declare function decodeGrokAuthLogoutReply(value: unknown): GrokAuthLogoutReply | undefined;
+/**
+ * Narrow one usage snapshot.
+ * @param value - untrusted JSON value.
+ * @returns the validated snapshot, or undefined when it is malformed or carries secrets.
+ */
+export declare function decodeGrokUsageView(value: unknown): GrokUsageView | undefined;
+/**
+ * Narrow the usage reply returned by the Host usage endpoint.
+ * @param value - untrusted RPC result value.
+ * @returns the validated reply, or undefined when it is malformed or carries secrets.
+ */
+export declare function decodeGrokUsageReply(value: unknown): GrokUsageReply | undefined;
 //# sourceMappingURL=client-contract.d.ts.map
