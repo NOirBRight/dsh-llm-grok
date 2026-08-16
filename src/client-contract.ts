@@ -14,6 +14,8 @@ export const GROK_AUTH_START_ENDPOINT = 'auth/start'
 export const GROK_AUTH_STATUS_ENDPOINT = 'auth/status'
 /** Delete the Host session file. */
 export const GROK_AUTH_LOGOUT_ENDPOINT = 'auth/logout'
+/** Secret-free subscription-usage snapshot inside {@link GROK_RPC_CHANNEL}. */
+export const GROK_USAGE_ENDPOINT = 'usage/read'
 
 /** One model in the plugin's frozen catalog. */
 export interface GrokCatalogModel {
@@ -62,6 +64,36 @@ export interface GrokAuthLogoutReply {
   /** Logout always reports success after the session file is gone. */
   ok: true
 }
+
+/** One metered quota window decoded from the Host billing snapshot. */
+export interface GrokUsageWindow {
+  /** Stable window id shown as the meter label (`monthly`, `weekly`, …). */
+  id: string
+  /** Consumed amount in the window. */
+  used: number
+  /** Window ceiling. */
+  limit: number
+  /** Optional period label from the billing payload (`month`, `week`, …). */
+  period?: string
+}
+
+/** Secret-free usage snapshot the configuration card renders. */
+export interface GrokUsageView {
+  /** ISO-8601 time the Host read the snapshot. */
+  fetchedAt: string
+  /** Decoded windows, provider order, at least one entry. */
+  windows: GrokUsageWindow[]
+}
+
+/**
+ * Usage answer crossing the plugin RPC. Logged-out and unsupported are
+ * legitimate answers, not transport failures, so they ride the success
+ * branch instead of an error code.
+ */
+export type GrokUsageReply =
+  | { status: 'ok', usage: GrokUsageView }
+  | { status: 'unsupported' }
+  | { status: 'logged-out' }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -142,4 +174,54 @@ export function decodeGrokAuthStatus(value: unknown): GrokAuthStatus | undefined
 export function decodeGrokAuthLogoutReply(value: unknown): GrokAuthLogoutReply | undefined {
   if (!isRecord(value) || hasTokenFields(value) || value['ok'] !== true) return undefined
   return { ok: true }
+}
+
+function decodeGrokUsageWindow(value: unknown): GrokUsageWindow | undefined {
+  if (!isRecord(value) || hasTokenFields(value)) return undefined
+  const id = value['id']
+  const used = value['used']
+  const limit = value['limit']
+  const period = value['period']
+  if (typeof id !== 'string' || id.length === 0) return undefined
+  if (typeof used !== 'number' || !Number.isFinite(used) || used < 0) return undefined
+  if (typeof limit !== 'number' || !Number.isFinite(limit) || limit < 0) return undefined
+  if (!optionalNonEmptyString(period)) return undefined
+  return {
+    id,
+    used,
+    limit,
+    ...period === undefined ? {} : { period },
+  }
+}
+
+/**
+ * Narrow one usage snapshot.
+ * @param value - untrusted JSON value.
+ * @returns the validated snapshot, or undefined when it is malformed or carries secrets.
+ */
+export function decodeGrokUsageView(value: unknown): GrokUsageView | undefined {
+  if (!isRecord(value) || hasTokenFields(value)) return undefined
+  if (typeof value['fetchedAt'] !== 'string' || value['fetchedAt'].length === 0) return undefined
+  if (!Array.isArray(value['windows']) || value['windows'].length === 0) return undefined
+  const windows: GrokUsageWindow[] = []
+  for (const entry of value['windows']) {
+    const decoded = decodeGrokUsageWindow(entry)
+    if (decoded === undefined) return undefined
+    windows.push(decoded)
+  }
+  return { fetchedAt: value['fetchedAt'], windows }
+}
+
+/**
+ * Narrow the usage reply returned by the Host usage endpoint.
+ * @param value - untrusted RPC result value.
+ * @returns the validated reply, or undefined when it is malformed or carries secrets.
+ */
+export function decodeGrokUsageReply(value: unknown): GrokUsageReply | undefined {
+  if (!isRecord(value) || hasTokenFields(value)) return undefined
+  if (value['status'] === 'unsupported') return { status: 'unsupported' }
+  if (value['status'] === 'logged-out') return { status: 'logged-out' }
+  if (value['status'] !== 'ok') return undefined
+  const usage = decodeGrokUsageView(value['usage'])
+  return usage === undefined ? undefined : { status: 'ok', usage }
 }

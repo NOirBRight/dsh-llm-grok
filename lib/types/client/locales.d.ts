@@ -17,6 +17,12 @@ export declare const en: {
     readonly models: "Model catalog";
     readonly thinking: "Reasoning";
     readonly vision: "Vision";
+    readonly usage: "Subscription usage";
+    readonly usageRefresh: "Refresh";
+    readonly usageLoading: "Reading usage…";
+    readonly usageUsed: "Used";
+    readonly usageUnsupported: "This subscription does not report usage.";
+    readonly usageFailed: "Could not read usage.";
 };
 /** Locale keys owned by the Grok configuration card. */
 export type GrokSettingsKey = keyof typeof en;

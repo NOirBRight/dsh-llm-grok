@@ -18,6 +18,12 @@ export const en = {
   models: 'Model catalog',
   thinking: 'Reasoning',
   vision: 'Vision',
+  usage: 'Subscription usage',
+  usageRefresh: 'Refresh',
+  usageLoading: 'Reading usage…',
+  usageUsed: 'Used',
+  usageUnsupported: 'This subscription does not report usage.',
+  usageFailed: 'Could not read usage.',
 } as const
 
 /** Locale keys owned by the Grok configuration card. */
@@ -41,4 +47,10 @@ export const zh: Record<GrokSettingsKey, string> = {
   models: '模型目录',
   thinking: '推理',
   vision: '视觉',
+  usage: '订阅额度',
+  usageRefresh: '刷新',
+  usageLoading: '正在读取额度…',
+  usageUsed: '已用',
+  usageUnsupported: '此订阅不提供额度信息。',
+  usageFailed: '无法读取额度。',
 }

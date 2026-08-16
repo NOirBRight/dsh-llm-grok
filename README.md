@@ -21,7 +21,7 @@ The repository tracks release-ready lib artifacts, so GitHub installation needs 
 
 Open Settings → Plugins → Plugin configuration → Grok. **Sign in with xAI** starts a Host-owned PKCE flow against `auth.x.ai` (the Grok CLI public client), opens the system browser, and stores the session only on the Host at `$DSH_HOME/grok-oauth.json` (mode `0600`). The card then shows the account email. Sign out deletes that file. The browser never receives tokens. This plugin does not read or write `~/.grok/auth.json`.
 
-The frozen model catalog (`grok-4.6` with reasoning and vision) is shown read-only. Chat and usage land in later tickets.
+The frozen model catalog (`grok-4.6` with reasoning and vision) is shown read-only. When signed in, the card shows subscription usage from a Host billing read. Chat lands in a later ticket.
 
 The Models page, if it lists Grok at all, is hint-only. Because this package does not declare `apiKeyEnv`, that row must not show a missing-API-key badge.
 
