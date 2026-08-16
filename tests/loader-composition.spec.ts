@@ -71,7 +71,7 @@ describe('llm-grok real composition', () => {
     expect(ctx.llm.listConfigurableProviders()).toEqual([
       { provider: 'grok', displayName: 'Grok', settingsNs: 'llm-grok', settingsPath: [] },
     ])
-    expect(ctx.llm.listProviders()).toEqual([])
+    expect(ctx.llm.listProviders()).toEqual([{ id: 'grok', name: 'Grok' }])
 
     const schema = Config.toJSON() as { uid: number, refs: Record<string, { dict?: Record<string, unknown> }> }
     const dict = schema.refs[String(schema.uid)]?.dict

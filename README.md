@@ -21,7 +21,11 @@ The repository tracks release-ready lib artifacts, so GitHub installation needs 
 
 Open Settings → Plugins → Plugin configuration → Grok. **Sign in with xAI** starts a Host-owned PKCE flow against `auth.x.ai` (the Grok CLI public client), opens the system browser, and stores the session only on the Host at `$DSH_HOME/grok-oauth.json` (mode `0600`). The card then shows the account email. Sign out deletes that file. The browser never receives tokens. This plugin does not read or write `~/.grok/auth.json`.
 
-The frozen model catalog (`grok-4.6` with reasoning and vision) is shown read-only. Chat and usage land in later tickets.
+The frozen model catalog (`grok-4.6` with reasoning and vision) is shown read-only. After sign-in, the conversation picker lists those models and streams through `POST https://cli-chat-proxy.grok.com/v1/responses`. Every request includes DSH function tools plus always-on server-side `{ type: "web_search" }` and `{ type: "x_search" }`. Search is not a `ctx.web` provider. Usage lands in a later ticket.
+
+Chat without a session fails `MISSING_CREDENTIAL`. A stored session whose refresh fails is cleared and fails `AUTH`. `ensureFreshSession` already runs before each chat request; a later 401 is not retried at the Responses layer.
+
+Proxy identity starts as this plugin's own name/version (`X-Dsh-Plugin: dsh-llm-grok/<version>`). The harness also sends its standard `User-Agent`. This package does not send Grok CLI compatibility headers. If the proxy later answers 426 for missing CLI headers, the minimum headers that make the request succeed would be a documented compatibility constraint, not an attempt to impersonate the official CLI.
 
 The Models page, if it lists Grok at all, is hint-only. Because this package does not declare `apiKeyEnv`, that row must not show a missing-API-key badge.
 

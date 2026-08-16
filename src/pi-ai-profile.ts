@@ -1,0 +1,122 @@
+/**
+ * Translate the frozen Grok catalog into the pi-ai profile used for OpenAI
+ * Responses against the Grok CLI chat proxy.
+ */
+
+import { createRequire } from 'node:module'
+import { createProvider } from '@earendil-works/pi-ai'
+import type { Model, Provider, ThinkingLevelMap } from '@earendil-works/pi-ai'
+import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
+import type { ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
+import { GROK_CATALOG, GROK_PROVIDER } from './client-contract.ts'
+import type { GrokCatalogModel } from './client-contract.ts'
+import { grokResponsesApi } from './responses-tools.ts'
+
+/** Chat proxy base used by the Grok CLI (`POST {base}/responses`). */
+export const GROK_CHAT_BASE_URL = 'https://cli-chat-proxy.grok.com/v1'
+/** Context capacity used when the frozen catalog entry has none. */
+export const GROK_DEFAULT_CONTEXT_WINDOW = 262_144
+/** Safe output capability used when the frozen catalog entry has none. */
+export const GROK_DEFAULT_MODEL_MAX_TOKENS = 32_768
+
+const NO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+
+const { name: PACKAGE_NAME, version: PACKAGE_VERSION } = createRequire(import.meta.url)('../package.json') as {
+  name: string
+  version: string
+}
+
+/** Plugin identity sent beside the harness User-Agent. Not a Grok CLI header. */
+export const GROK_PLUGIN_IDENTITY_HEADER = `${PACKAGE_NAME}/${PACKAGE_VERSION}`
+
+const THINKING_LEVELS: ThinkingLevelMap = {
+  off: 'none',
+  minimal: null,
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  xhigh: null,
+  max: null,
+}
+
+/** Validated connection facts for one chat operation. */
+export interface GrokConnectionOptions {
+  /** Responses API base, including `/v1`. */
+  baseURL: string
+  /** Maximum provider idle time while one stream read is outstanding. */
+  streamIdleTimeoutMs: number
+  /** Provider-owned model-request retry policy, already resolved. */
+  retryPolicy: ResolvedRetryPolicy
+}
+
+function thinkingLevelMap(model: GrokCatalogModel): ThinkingLevelMap | undefined {
+  if (model.thinking !== true) return undefined
+  return THINKING_LEVELS
+}
+
+function toPiAiModel(model: GrokCatalogModel, baseUrl: string): Model<'openai-responses'> {
+  const levels = thinkingLevelMap(model)
+  return {
+    id: model.id,
+    name: model.id,
+    api: 'openai-responses',
+    provider: GROK_PROVIDER,
+    baseUrl,
+    reasoning: model.thinking === true,
+    ...levels === undefined ? {} : { thinkingLevelMap: levels },
+    input: model.vision === true ? ['text', 'image'] : ['text'],
+    cost: NO_COST,
+    contextWindow: GROK_DEFAULT_CONTEXT_WINDOW,
+    maxTokens: GROK_DEFAULT_MODEL_MAX_TOKENS,
+    compat: {
+      supportsDeveloperRole: false,
+      supportsLongCacheRetention: false,
+      supportsStrictMode: false,
+      supportsOpenAIGrammarTools: false,
+      supportsToolSearch: false,
+      supportsExplicitPromptCacheMode: false,
+    },
+  }
+}
+
+/** Harness-authenticated provider auth; the access token is supplied per request. */
+function grokAuth(): Provider['auth'] {
+  return {
+    apiKey: {
+      name: 'Grok subscription',
+      resolve: ({ credential }) => Promise.resolve({
+        auth: credential?.key === undefined ? {} : { apiKey: credential.key },
+        source: 'Grok',
+      }),
+    },
+  }
+}
+
+/** Resolve the complete pi-ai profile for one Grok options snapshot. */
+export function createGrokPiAiProfile(connection: GrokConnectionOptions): ResolvedPiAiProviderProfile {
+  const baseURL = connection.baseURL.replace(/\/+$/u, '')
+  const models = GROK_CATALOG.map(model => toPiAiModel(model, baseURL))
+  const configuredMaxTokens = new Map<string, number>()
+  const piProvider = createProvider({
+    id: GROK_PROVIDER,
+    name: 'Grok',
+    baseUrl: baseURL,
+    auth: grokAuth(),
+    models,
+    api: grokResponsesApi(),
+    headers: { 'X-Dsh-Plugin': GROK_PLUGIN_IDENTITY_HEADER },
+  })
+  return {
+    provider: GROK_PROVIDER,
+    displayName: 'Grok',
+    baseURL,
+    defaultContextWindow: GROK_DEFAULT_CONTEXT_WINDOW,
+    defaultMaxTokens: GROK_DEFAULT_MODEL_MAX_TOKENS,
+    defaultInput: ['text'],
+    streamIdleTimeoutMs: connection.streamIdleTimeoutMs,
+    retryPolicy: connection.retryPolicy,
+    piProvider,
+    configuredMaxTokens,
+    headers: { 'X-Dsh-Plugin': GROK_PLUGIN_IDENTITY_HEADER },
+  }
+}
