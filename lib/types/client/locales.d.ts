@@ -11,6 +11,10 @@ export declare const en: {
     readonly signIn: "Sign in with xAI";
     readonly signOut: "Sign out";
     readonly signingIn: "Waiting for browser sign-in…";
+    readonly pasteCode: "If the page asks you to copy a code into Grok Build, paste it here.";
+    readonly pasteCodeLabel: "Sign-in code";
+    readonly pasteCodeSubmit: "Submit code";
+    readonly pasteCodeEmpty: "Paste the code from the browser page.";
     readonly signInFailed: "Sign-in did not complete. You can try again.";
     readonly signOutFailed: "Could not sign out. Try again.";
     readonly statusFailed: "Could not read sign-in status.";

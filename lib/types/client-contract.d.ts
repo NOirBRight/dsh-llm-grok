@@ -13,6 +13,8 @@ export declare const GROK_AUTH_START_ENDPOINT = "auth/start";
 export declare const GROK_AUTH_STATUS_ENDPOINT = "auth/status";
 /** Delete the Host session file. */
 export declare const GROK_AUTH_LOGOUT_ENDPOINT = "auth/logout";
+/** Deliver a Grok Build paste-code into the in-flight PKCE exchange. */
+export declare const GROK_AUTH_COMPLETE_ENDPOINT = "auth/complete";
 /** Secret-free subscription-usage snapshot inside {@link GROK_RPC_CHANNEL}. */
 export declare const GROK_USAGE_ENDPOINT = "usage/read";
 /** One model in the plugin's frozen catalog. */
@@ -54,6 +56,11 @@ export type GrokAuthStartReply = {
     retryable: true;
     message: string;
 };
+/** Loopback payload for {@link GROK_AUTH_COMPLETE_ENDPOINT}. */
+export interface GrokAuthCompleteRequest {
+    /** Short-lived authorization code copied from the IdP page. Not a token. */
+    code: string;
+}
 /** Result of {@link GROK_AUTH_LOGOUT_ENDPOINT}. */
 export interface GrokAuthLogoutReply {
     /** Logout always reports success after the session file is gone. */
@@ -102,6 +109,12 @@ export declare function decodeGrokSettings(value: unknown): GrokSettingsView | u
  * @param value - untrusted RPC request payload.
  * @returns an empty object, or undefined when the payload is invalid.
  */
+/**
+ * Narrow a paste-code completion request. The value is an authorization code,
+ * not an access token; token-shaped field names are still rejected.
+ * @param value - untrusted RPC request payload.
+ */
+export declare function decodeGrokAuthCompleteRequest(value: unknown): GrokAuthCompleteRequest | undefined;
 export declare function decodeGrokEmptyRequest(value: unknown): Record<string, never> | undefined;
 /**
  * Narrow the Host start-login reply before the card updates.

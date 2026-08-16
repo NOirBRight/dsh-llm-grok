@@ -14,6 +14,8 @@ export const GROK_AUTH_START_ENDPOINT = 'auth/start'
 export const GROK_AUTH_STATUS_ENDPOINT = 'auth/status'
 /** Delete the Host session file. */
 export const GROK_AUTH_LOGOUT_ENDPOINT = 'auth/logout'
+/** Deliver a Grok Build paste-code into the in-flight PKCE exchange. */
+export const GROK_AUTH_COMPLETE_ENDPOINT = 'auth/complete'
 /** Secret-free subscription-usage snapshot inside {@link GROK_RPC_CHANNEL}. */
 export const GROK_USAGE_ENDPOINT = 'usage/read'
 
@@ -58,6 +60,12 @@ export interface GrokAuthStatus {
 export type GrokAuthStartReply =
   | { ok: true }
   | { ok: false, retryable: true, message: string }
+
+/** Loopback payload for {@link GROK_AUTH_COMPLETE_ENDPOINT}. */
+export interface GrokAuthCompleteRequest {
+  /** Short-lived authorization code copied from the IdP page. Not a token. */
+  code: string
+}
 
 /** Result of {@link GROK_AUTH_LOGOUT_ENDPOINT}. */
 export interface GrokAuthLogoutReply {
@@ -129,6 +137,18 @@ export function decodeGrokSettings(value: unknown): GrokSettingsView | undefined
  * @param value - untrusted RPC request payload.
  * @returns an empty object, or undefined when the payload is invalid.
  */
+/**
+ * Narrow a paste-code completion request. The value is an authorization code,
+ * not an access token; token-shaped field names are still rejected.
+ * @param value - untrusted RPC request payload.
+ */
+export function decodeGrokAuthCompleteRequest(value: unknown): GrokAuthCompleteRequest | undefined {
+  if (!isRecord(value) || hasTokenFields(value)) return undefined
+  const code = value['code']
+  if (typeof code !== 'string' || code.trim().length === 0) return undefined
+  return { code: code.trim() }
+}
+
 export function decodeGrokEmptyRequest(value: unknown): Record<string, never> | undefined {
   if (value === undefined || value === null) return {}
   if (!isRecord(value) || hasTokenFields(value)) return undefined

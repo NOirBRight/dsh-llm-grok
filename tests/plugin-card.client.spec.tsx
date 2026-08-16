@@ -13,6 +13,7 @@ function props(overrides: Partial<GrokPluginCardProps> = {}): GrokPluginCardProp
   return {
     t: key => en[key],
     startAuth: vi.fn(() => Promise.resolve({ ok: true } satisfies GrokAuthStartReply)),
+    completeAuth: vi.fn(() => Promise.resolve({ ok: true } satisfies GrokAuthStartReply)),
     readAuthStatus: vi.fn(() => Promise.resolve({ loggedIn: false } satisfies GrokAuthStatus)),
     logout: vi.fn(() => Promise.resolve()),
     fetchUsage: vi.fn(() => Promise.resolve({ status: 'unsupported' } satisfies GrokUsageReply)),
@@ -74,6 +75,34 @@ describe('GrokPluginCard', () => {
     expect(screen.getByRole('button', { name: en.signOut })).toBeTruthy()
     expect(screen.queryByRole('button', { name: en.signIn })).toBeNull()
     expect(JSON.stringify(startAuth.mock.results)).not.toMatch(/accessToken|refreshToken/u)
+  })
+
+  it('lets the user paste a Grok Build code while sign-in is waiting', async () => {
+    let finishStart: ((value: GrokAuthStartReply) => void) | undefined
+    const startAuth = vi.fn(() => new Promise<GrokAuthStartReply>(resolve => {
+      finishStart = resolve
+    }))
+    const completeAuth = vi.fn(() => Promise.resolve({ ok: true } satisfies GrokAuthStartReply))
+    const readAuthStatus = vi.fn()
+      .mockResolvedValueOnce({ loggedIn: false } satisfies GrokAuthStatus)
+      .mockResolvedValueOnce({
+        loggedIn: true,
+        email: 'user@example.test',
+      } satisfies GrokAuthStatus)
+    render(<GrokPluginCard {...props({ startAuth, completeAuth, readAuthStatus })} />)
+    expand()
+    await waitFor(() => { expect(screen.getByRole('button', { name: en.signIn })).toBeTruthy() })
+
+    fireEvent.click(screen.getByRole('button', { name: en.signIn }))
+    await waitFor(() => { expect(screen.getByLabelText(en.pasteCodeLabel)).toBeTruthy() })
+    fireEvent.change(screen.getByLabelText(en.pasteCodeLabel), { target: { value: 'paste-code-1' } })
+    fireEvent.click(screen.getByRole('button', { name: en.pasteCodeSubmit }))
+
+    await waitFor(() => { expect(completeAuth).toHaveBeenCalledWith('paste-code-1') })
+    finishStart?.({ ok: true })
+    await waitFor(() => {
+      expect(screen.getByText('Signed in as user@example.test.')).toBeTruthy()
+    })
   })
 
   it('signs out through mock RPC and returns to the logged-out card', async () => {

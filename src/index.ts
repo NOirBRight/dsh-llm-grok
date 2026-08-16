@@ -16,6 +16,7 @@ import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { GrokAdapter, resolveGrokAccessToken } from './adapter.ts'
 import type { GrokConnectionOptions } from './adapter.ts'
 import {
+  GROK_AUTH_COMPLETE_ENDPOINT,
   GROK_AUTH_LOGOUT_ENDPOINT,
   GROK_AUTH_START_ENDPOINT,
   GROK_AUTH_STATUS_ENDPOINT,
@@ -24,9 +25,10 @@ import {
   GROK_RPC_CHANNEL,
   GROK_SETTINGS_NAMESPACE,
   GROK_USAGE_ENDPOINT,
+  decodeGrokAuthCompleteRequest,
   decodeGrokEmptyRequest,
 } from './client-contract.ts'
-import { createGrokAuthRuntime, ensureFreshSession, startPkceLogin } from './oauth.ts'
+import { completePkceLogin, createGrokAuthRuntime, ensureFreshSession, startPkceLogin } from './oauth.ts'
 import type { GrokOAuthRuntime } from './oauth.ts'
 import { GROK_CHAT_BASE_URL } from './pi-ai-profile.ts'
 import { deleteSession, resolveGrokSessionPath, statusFromSession } from './session.ts'
@@ -43,11 +45,13 @@ export {
   GROK_AUTH_START_ENDPOINT,
   GROK_AUTH_STATUS_ENDPOINT,
   GROK_AUTH_LOGOUT_ENDPOINT,
+  GROK_AUTH_COMPLETE_ENDPOINT,
   GROK_USAGE_ENDPOINT,
   decodeGrokSettings,
   decodeGrokAuthStatus,
   decodeGrokAuthStartReply,
   decodeGrokAuthLogoutReply,
+  decodeGrokAuthCompleteRequest,
   decodeGrokEmptyRequest,
   decodeGrokUsageView,
   decodeGrokUsageReply,
@@ -75,6 +79,7 @@ export {
   GROK_OAUTH_CLIENT_ID,
   GROK_OAUTH_SCOPE,
   createGrokAuthRuntime,
+  completePkceLogin,
   ensureFreshSession,
   refreshSession,
   startPkceLogin,
@@ -197,6 +202,11 @@ export function createGrokRpcHandler(
       if (decodeGrokEmptyRequest(payload) === undefined) return internalError('invalid Grok auth logout request')
       await deleteSession(runtime.resolveSessionPath())
       return { ok: true as const, value: { ok: true as const } }
+    }
+    if (endpoint === GROK_AUTH_COMPLETE_ENDPOINT) {
+      const request = decodeGrokAuthCompleteRequest(payload)
+      if (request === undefined) return internalError('invalid Grok auth complete request')
+      return { ok: true as const, value: await completePkceLogin(runtime, request.code) }
     }
     if (endpoint === GROK_USAGE_ENDPOINT) {
       if (decodeGrokEmptyRequest(payload) === undefined) return internalError('invalid Grok usage request')

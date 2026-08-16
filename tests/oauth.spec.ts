@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  completePkceLogin,
   createGrokAuthRuntime,
   ensureFreshSession,
   startPkceLogin,
@@ -39,6 +40,7 @@ describe('Host-owned xAI PKCE', () => {
         const parsed = new URL(url)
         expect(parsed.searchParams.get('code_challenge_method')).toBe('S256')
         expect(parsed.searchParams.get('client_id')).toBe('b1a00492-073a-47ea-816f-4c329264a828')
+        expect(parsed.searchParams.get('scope') ?? '').toContain('grok-cli:access')
         auth.expectedChallenge = parsed.searchParams.get('code_challenge') ?? undefined
         const redirect = parsed.searchParams.get('redirect_uri')
         const state = parsed.searchParams.get('state')
@@ -122,6 +124,32 @@ describe('Host-owned xAI PKCE', () => {
       message: 'Sign-in was cancelled.',
     })
     expect(await readSession(path)).toBeUndefined()
+  })
+
+  it('exchanges a pasted Grok Build code without a loopback callback', async () => {
+    const path = join(await home(), 'grok-oauth.json')
+    const auth = await fakeAuthServer({ authorizationCode: tokens })
+    const runtime = createGrokAuthRuntime({
+      resolveSessionPath: () => path,
+      issuer: auth.issuer,
+      timeoutMs: 2_000,
+      openBrowser: async (url) => {
+        const parsed = new URL(url)
+        auth.expectedChallenge = parsed.searchParams.get('code_challenge') ?? undefined
+        const completed = await completePkceLogin(runtime, auth.nextCode)
+        expect(completed).toEqual({ ok: true })
+      },
+    })
+
+    expect(await startPkceLogin(runtime)).toEqual({ ok: true })
+    const session = await readSession(path)
+    expect(session).toMatchObject({
+      accessToken: 'access-one',
+      refreshToken: 'refresh-one',
+      email: 'user@example.test',
+    })
+    const exchange = auth.requests.find(request => request.body.get('grant_type') === 'authorization_code')
+    expect(exchange?.body.get('code')).toBe(auth.nextCode)
   })
 })
 

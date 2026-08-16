@@ -9,6 +9,8 @@ export interface GrokPluginCardFace {
     t: (key: GrokSettingsKey) => string;
     /** Begin Host PKCE; the browser never receives tokens. */
     startAuth: () => Promise<GrokAuthStartReply>;
+    /** Deliver a Grok Build paste-code into the in-flight Host exchange. */
+    completeAuth: (code: string) => Promise<GrokAuthStartReply>;
     /** Read secret-free login status. */
     readAuthStatus: () => Promise<GrokAuthStatus>;
     /** Delete the Host session. */

@@ -20,6 +20,8 @@ export interface GrokPluginCardFace {
   t: (key: GrokSettingsKey) => string
   /** Begin Host PKCE; the browser never receives tokens. */
   startAuth: () => Promise<GrokAuthStartReply>
+  /** Deliver a Grok Build paste-code into the in-flight Host exchange. */
+  completeAuth: (code: string) => Promise<GrokAuthStartReply>
   /** Read secret-free login status. */
   readAuthStatus: () => Promise<GrokAuthStatus>
   /** Delete the Host session. */
@@ -104,6 +106,17 @@ const buttonStyle: CSSProperties = {
   font: 'inherit',
   cursor: 'pointer',
 }
+const inputStyle: CSSProperties = {
+  boxSizing: 'border-box',
+  width: '100%',
+  minHeight: 36,
+  border: '1px solid var(--dsw-alias-border-l2)',
+  borderRadius: 8,
+  padding: '7px 10px',
+  background: 'var(--dsw-alias-bg-layer-1)',
+  color: 'var(--dsw-alias-label-primary)',
+  font: 'inherit',
+}
 const catalogStyle: CSSProperties = {
   margin: 0,
   padding: 0,
@@ -172,9 +185,10 @@ function UsageBar({ usedText, window: quota }: {
 
 /** Render the single-package Grok contribution under Plugin configuration. */
 export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
-  const { t, startAuth, readAuthStatus, logout, fetchUsage } = props
+  const { t, startAuth, completeAuth, readAuthStatus, logout, fetchUsage } = props
   const [open, setOpen] = useState(false)
   const [auth, setAuth] = useState<AuthUi>({ kind: 'signed-out' })
+  const [pasteCode, setPasteCode] = useState('')
   const [usage, setUsage] = useState<UsageState>({ status: 'idle' })
   const title = t('title')
   const busy = auth.kind === 'signing-in'
@@ -225,6 +239,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
 
   const onSignIn = async (): Promise<void> => {
     setAuth({ kind: 'signing-in' })
+    setPasteCode('')
     setUsage({ status: 'idle' })
     try {
       const started = await startAuth()
@@ -238,6 +253,22 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
         : { kind: 'signed-out', message: t('signInFailed') })
     } catch {
       setAuth({ kind: 'signed-out', message: t('signInFailed') })
+    }
+  }
+
+  const onPasteCode = async (): Promise<void> => {
+    const code = pasteCode.trim()
+    if (code.length === 0) {
+      setAuth({ kind: 'signing-in' })
+      return
+    }
+    try {
+      const completed = await completeAuth(code)
+      if (!completed.ok) {
+        setAuth({ kind: 'signing-in' })
+      }
+    } catch {
+      setAuth({ kind: 'signing-in' })
     }
   }
 
@@ -288,9 +319,36 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                   </button>
                 )
                 : (
-                  <button type="button" style={buttonStyle} disabled={busy} onClick={() => { void onSignIn() }}>
-                    {t('signIn')}
-                  </button>
+                  <>
+                    <button type="button" style={buttonStyle} disabled={busy} onClick={() => { void onSignIn() }}>
+                      {t('signIn')}
+                    </button>
+                    {auth.kind === 'signing-in'
+                      ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <p style={hintStyle}>{t('pasteCode')}</p>
+                          <label style={labelStyle} htmlFor="grok-oauth-code">{t('pasteCodeLabel')}</label>
+                          <input
+                            id="grok-oauth-code"
+                            style={inputStyle}
+                            value={pasteCode}
+                            autoComplete="off"
+                            spellCheck={false}
+                            aria-label={t('pasteCodeLabel')}
+                            onChange={event => { setPasteCode(event.target.value) }}
+                          />
+                          <button
+                            type="button"
+                            style={buttonStyle}
+                            disabled={pasteCode.trim().length === 0}
+                            onClick={() => { void onPasteCode() }}
+                          >
+                            {t('pasteCodeSubmit')}
+                          </button>
+                        </div>
+                      )
+                      : null}
+                  </>
                 )}
             </section>
             {auth.kind === 'signed-in'

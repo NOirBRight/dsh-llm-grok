@@ -19,8 +19,23 @@ import type { GrokSession } from './session.ts'
 export const GROK_OAUTH_ISSUER = 'https://auth.x.ai'
 /** Public client_id from the Grok CLI auth.json key `https://auth.x.ai::<client_id>`. */
 export const GROK_OAUTH_CLIENT_ID = 'b1a00492-073a-47ea-816f-4c329264a828'
-/** Grok CLI documented OIDC scopes. `offline_access` is required for refresh. */
-export const GROK_OAUTH_SCOPE = 'openid profile email offline_access api:access'
+/**
+ * Scopes the official Grok CLI requests. `grok-cli:access` is what
+ * cli-chat-proxy billing and chat treat as a CLI token; `api:access` alone
+ * signs in but is rejected as "must be performed by Grok CLI token users".
+ */
+export const GROK_OAUTH_SCOPE = [
+  'openid',
+  'profile',
+  'email',
+  'offline_access',
+  'grok-cli:access',
+  'api:access',
+  'conversations:read',
+  'conversations:write',
+  'workspaces:read',
+  'workspaces:write',
+].join(' ')
 /** Pinned authorize path when OIDC discovery is unavailable. */
 export const GROK_OAUTH_AUTHORIZE_PATH = '/oauth2/authorize'
 /** Pinned token path when OIDC discovery is unavailable. */
@@ -401,6 +416,21 @@ function waitForCallback(
 
 const loginInFlight = new WeakSet<GrokOAuthRuntime>()
 
+interface PendingPaste {
+  deliver: (code: string) => void
+  wait: Promise<string>
+}
+
+const pendingPaste = new WeakMap<GrokOAuthRuntime, PendingPaste>()
+
+function createPendingPaste(): PendingPaste {
+  let deliver: (code: string) => void = () => undefined
+  const wait = new Promise<string>(resolve => {
+    deliver = resolve
+  })
+  return { deliver, wait }
+}
+
 /**
  * Run one loopback PKCE sign-in. Cancel, timeout, and state mismatch leave
  * the session file untouched.
@@ -432,6 +462,8 @@ export async function startPkceLogin(
     authorize.searchParams.set('state', pkce.state)
     authorize.searchParams.set('code_challenge', pkce.challenge)
     authorize.searchParams.set('code_challenge_method', 'S256')
+    const paste = createPendingPaste()
+    pendingPaste.set(runtime, paste)
     const callback = waitForCallback(server, pkce.state, runtime.timeoutMs, local.signal)
     try {
       await runtime.openBrowser(authorize.toString())
@@ -440,7 +472,8 @@ export async function startPkceLogin(
       await callback.catch(() => undefined)
       return retryable('Sign-in could not be completed.')
     }
-    const result = await callback
+    const pasted = paste.wait.then((code): CallbackResult => ({ kind: 'code', code }))
+    const result = await Promise.race([callback, pasted])
     if (result.kind === 'mismatch') return retryable('Sign-in rejected a mismatched state.')
     if (result.kind === 'denied') return retryable('Sign-in did not complete.')
     const response = await runtime.fetch(endpoints.tokenEndpoint, {
@@ -473,6 +506,26 @@ export async function startPkceLogin(
   } finally {
     signal?.removeEventListener('abort', onParentAbort)
     if (server !== undefined) await closeServer(server)
+    pendingPaste.delete(runtime)
     loginInFlight.delete(runtime)
   }
+}
+
+/**
+ * Deliver a code copied from the Grok Build "paste this code" page into the
+ * in-flight PKCE exchange. The Host still owns the verifier; the browser only
+ * sends the short-lived authorization code over loopback RPC.
+ * @param runtime - the same runtime `startPkceLogin` is waiting on.
+ * @param code - trimmed authorization code from the IdP page.
+ */
+export async function completePkceLogin(
+  runtime: GrokOAuthRuntime,
+  code: string,
+): Promise<GrokAuthStartReply> {
+  const trimmed = code.trim()
+  if (trimmed.length === 0) return retryable('Paste the sign-in code from the browser page.')
+  const pending = pendingPaste.get(runtime)
+  if (pending === undefined) return retryable('Sign-in is not waiting for a code.')
+  pending.deliver(trimmed)
+  return { ok: true }
 }

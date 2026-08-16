@@ -71,6 +71,47 @@ function parseWindow(value: unknown): GrokUsageWindow | undefined {
   }
 }
 
+/** cli-chat-proxy wraps money-like amounts as `{ val: number }`. */
+function moneyVal(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value
+  if (!isRecord(value)) return undefined
+  const val = value['val']
+  if (typeof val !== 'number' || !Number.isFinite(val) || val < 0) return undefined
+  return val
+}
+
+function periodFromConfig(config: Record<string, unknown>): string | undefined {
+  const start = config['billingPeriodStart']
+  const end = config['billingPeriodEnd']
+  if (typeof start !== 'string' || start.length === 0) return undefined
+  if (typeof end !== 'string' || end.length === 0) return start
+  return `${start.slice(0, 10)} – ${end.slice(0, 10)}`
+}
+
+/** Official proxy body: `{ config: { monthlyLimit, used, onDemandCap, billingPeriod* } }`. */
+function parseCliBillingConfig(value: unknown, fetchedAt: string): GrokUsageView | undefined {
+  if (!isRecord(value)) return undefined
+  const config = value['config']
+  if (!isRecord(config)) return undefined
+  const used = moneyVal(config['used'])
+  const limit = moneyVal(config['monthlyLimit'])
+  if (used === undefined || limit === undefined) return undefined
+  const period = periodFromConfig(config)
+  const windows: GrokUsageWindow[] = [
+    {
+      id: 'monthly',
+      used,
+      limit,
+      ...period === undefined ? {} : { period },
+    },
+  ]
+  const onDemand = moneyVal(config['onDemandCap'])
+  if (onDemand !== undefined && onDemand > 0) {
+    windows.push({ id: 'on-demand', used: 0, limit: onDemand })
+  }
+  return { fetchedAt, windows }
+}
+
 /**
  * Convert the proxy billing JSON into the secret-free snapshot the card renders.
  * Unknown bodies and windows that cannot be read return undefined (unsupported).
@@ -78,6 +119,8 @@ function parseWindow(value: unknown): GrokUsageWindow | undefined {
  * @param fetchedAt - ISO-8601 instant the Host read the body.
  */
 export function parseGrokBilling(value: unknown, fetchedAt: string): GrokUsageView | undefined {
+  const fromConfig = parseCliBillingConfig(value, fetchedAt)
+  if (fromConfig !== undefined) return fromConfig
   const windowsValue = isRecord(value) ? (value as WireBillingResponse).windows : undefined
   if (!Array.isArray(windowsValue)) return undefined
   const windows: GrokUsageWindow[] = []
@@ -127,6 +170,10 @@ export async function readGrokUsage(
   if (response.status === 404) {
     await response.body?.cancel()
     return { status: 'unsupported' }
+  }
+  if (response.status === 403) {
+    await response.body?.cancel()
+    throw new Error('This session cannot read Grok CLI billing. Sign out and sign in again.')
   }
   if (!response.ok) {
     await response.body?.cancel()

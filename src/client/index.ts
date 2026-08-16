@@ -6,6 +6,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import {
+  GROK_AUTH_COMPLETE_ENDPOINT,
   GROK_AUTH_LOGOUT_ENDPOINT,
   GROK_AUTH_START_ENDPOINT,
   GROK_AUTH_STATUS_ENDPOINT,
@@ -51,6 +52,14 @@ export function apply(ctx: ClientContext): void {
     return decoded
   }
 
+  const completeAuth: GrokPluginCardFace['completeAuth'] = async (code) => {
+    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_COMPLETE_ENDPOINT, { code })
+    if (!result.ok) return { ok: false, retryable: true, message: result.error.message }
+    const decoded = decodeGrokAuthStartReply(result.value)
+    if (decoded === undefined) return { ok: false, retryable: true, message: t('signInFailed') }
+    return decoded
+  }
+
   const readAuthStatus: GrokPluginCardFace['readAuthStatus'] = async () => {
     const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_STATUS_ENDPOINT, {})
     if (!result.ok) throw new Error(result.error.message)
@@ -78,6 +87,6 @@ export function apply(ctx: ClientContext): void {
     id: 'grok',
     order: 40,
     locale: localeNamespace,
-    inject: (): GrokPluginCardFace => ({ t, startAuth, readAuthStatus, logout, fetchUsage }),
+    inject: (): GrokPluginCardFace => ({ t, startAuth, completeAuth, readAuthStatus, logout, fetchUsage }),
   }, GrokPluginCard))
 }

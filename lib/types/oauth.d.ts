@@ -8,8 +8,12 @@ import type { GrokSession } from './session.ts';
 export declare const GROK_OAUTH_ISSUER = "https://auth.x.ai";
 /** Public client_id from the Grok CLI auth.json key `https://auth.x.ai::<client_id>`. */
 export declare const GROK_OAUTH_CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
-/** Grok CLI documented OIDC scopes. `offline_access` is required for refresh. */
-export declare const GROK_OAUTH_SCOPE = "openid profile email offline_access api:access";
+/**
+ * Scopes the official Grok CLI requests. `grok-cli:access` is what
+ * cli-chat-proxy billing and chat treat as a CLI token; `api:access` alone
+ * signs in but is rejected as "must be performed by Grok CLI token users".
+ */
+export declare const GROK_OAUTH_SCOPE: string;
 /** Pinned authorize path when OIDC discovery is unavailable. */
 export declare const GROK_OAUTH_AUTHORIZE_PATH = "/oauth2/authorize";
 /** Pinned token path when OIDC discovery is unavailable. */
@@ -85,4 +89,12 @@ export declare function ensureFreshSession(runtime: GrokOAuthRuntime): Promise<G
  * @param signal - RPC abort signal.
  */
 export declare function startPkceLogin(runtime: GrokOAuthRuntime, signal?: AbortSignal): Promise<GrokAuthStartReply>;
+/**
+ * Deliver a code copied from the Grok Build "paste this code" page into the
+ * in-flight PKCE exchange. The Host still owns the verifier; the browser only
+ * sends the short-lived authorization code over loopback RPC.
+ * @param runtime - the same runtime `startPkceLogin` is waiting on.
+ * @param code - trimmed authorization code from the IdP page.
+ */
+export declare function completePkceLogin(runtime: GrokOAuthRuntime, code: string): Promise<GrokAuthStartReply>;
 //# sourceMappingURL=oauth.d.ts.map

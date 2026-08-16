@@ -38,6 +38,25 @@ describe('parseGrokBilling', () => {
     })
   })
 
+  it('reads the cli-chat-proxy config envelope', () => {
+    const usage = parseGrokBilling({
+      config: {
+        monthlyLimit: { val: 20 },
+        used: { val: 4 },
+        onDemandCap: { val: 0 },
+        billingPeriodStart: '2026-08-01T00:00:00+00:00',
+        billingPeriodEnd: '2026-09-01T00:00:00+00:00',
+      },
+    }, '2026-08-17T00:00:00.000Z')
+
+    expect(usage).toEqual({
+      fetchedAt: '2026-08-17T00:00:00.000Z',
+      windows: [
+        { id: 'monthly', used: 4, limit: 20, period: '2026-08-01 – 2026-09-01' },
+      ],
+    })
+  })
+
   it('marks an unknown body as unsupported', () => {
     expect(parseGrokBilling({ limits: { monthly: 1 } }, '2026-08-17T00:00:00.000Z')).toBeUndefined()
     expect(parseGrokBilling({ windows: [] }, '2026-08-17T00:00:00.000Z')).toBeUndefined()
@@ -98,6 +117,22 @@ describe('readGrokUsage', () => {
       accessToken: 'access-secret',
       billingURL: server.url,
     })).resolves.toEqual({ status: 'unsupported' })
+  })
+
+  it('tells the user to re-login when billing rejects a non-CLI token', async () => {
+    const server = await fakeBillingServer([{
+      status: 403,
+      body: { error: 'Action must be performed by Grok CLI token users.' },
+    }])
+
+    const failure = await readGrokUsage({
+      accessToken: 'access-secret',
+      billingURL: server.url,
+    }).catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(Error)
+    expect((failure as Error).message).toMatch(/Sign out and sign in again/u)
+    expect((failure as Error).message).not.toMatch(/access-secret/u)
   })
 
   it('surfaces a transport failure without token material', async () => {
