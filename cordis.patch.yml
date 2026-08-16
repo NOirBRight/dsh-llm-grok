@@ -1,0 +1,6 @@
+# dsh-llm-grok bundle patch: register the Grok adapter as one new loader
+# row. There is no apiKeyEnv — this provider authenticates with an xAI
+# subscription, not a console API key.
+- insert:
+    - id: llm-grok
+      name: 'dsh-llm-grok'
