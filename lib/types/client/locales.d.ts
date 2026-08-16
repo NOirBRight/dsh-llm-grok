@@ -6,7 +6,14 @@ export declare const en: {
     readonly expand: "Expand settings";
     readonly collapse: "Collapse settings";
     readonly signedOut: "Not signed in.";
+    readonly signedInAs: "Signed in as {email}.";
+    readonly signedInNoEmail: "Signed in.";
     readonly signIn: "Sign in with xAI";
+    readonly signOut: "Sign out";
+    readonly signingIn: "Waiting for browser sign-in…";
+    readonly signInFailed: "Sign-in did not complete. You can try again.";
+    readonly signOutFailed: "Could not sign out. Try again.";
+    readonly statusFailed: "Could not read sign-in status.";
     readonly models: "Model catalog";
     readonly thinking: "Reasoning";
     readonly vision: "Vision";

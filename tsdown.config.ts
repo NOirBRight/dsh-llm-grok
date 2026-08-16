@@ -16,7 +16,9 @@ const host: UserConfig = {
     neverBundle: [
       '@deepseek-ai/cordis',
       '@deepseek-ai/schemastery',
+      '@deepseek-ai/dsh-client-connection',
       '@deepseek-ai/dsh-invariants',
+      '@deepseek-ai/dsh-launch-environment',
       '@deepseek-ai/dsh-llm',
       '@deepseek-ai/dsh-settings',
       '@deepseek-ai/dsh-timeout',
@@ -39,6 +41,7 @@ const client: UserConfig = {
       'react/jsx-runtime',
       'react-dom',
       '@deepseek-ai/cordis',
+      '@deepseek-ai/dsh-client-connection/client',
       '@deepseek-ai/dsh-client-locale/client',
       '@deepseek-ai/dsh-client-runtime/client',
       '@deepseek-ai/dsh-client-ui-settings-plugins/client',

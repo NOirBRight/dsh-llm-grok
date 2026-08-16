@@ -19,7 +19,9 @@ dsh web
 
 ## Web 配置
 
-打开 Settings → Plugins → Plugin configuration → Grok。卡片目前展示未登录状态、不可用的登录控件，以及冻结的模型目录（`grok-4.6`，带推理和视觉）。登录、聊天和额度属于后续工单。
+打开 Settings → Plugins → Plugin configuration → Grok。**用 xAI 登录**会在 Host 上对 `auth.x.ai` 走 PKCE（与 Grok CLI 同一公开 client），打开系统浏览器，并把会话只写在 Host 的 `$DSH_HOME/grok-oauth.json`（权限 `0600`）。卡片随后显示账号邮箱。退出登录会删除该文件。浏览器永远收不到 token。本插件不读、不写 `~/.grok/auth.json`。
+
+冻结的模型目录（`grok-4.6`，带推理和视觉）只读展示。聊天和额度属于后续工单。
 
 Models 页面如果列出 Grok，也只是 hint。因为本包不声明 `apiKeyEnv`，该行不应出现「缺 API key」红点。
 

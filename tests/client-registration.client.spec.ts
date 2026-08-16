@@ -35,12 +35,17 @@ async function bench() {
     register: () => () => undefined,
     bind: () => (key: string) => key,
   } as never)
+  ctx.provide('connection', {
+    rpc: {
+      call: async () => ({ ok: true, value: { loggedIn: false } }),
+    },
+  } as never)
   return { ctx, slots }
 }
 
 describe('Grok client plugin registration', () => {
   it('declares only the client services it consumes', () => {
-    expect(inject).toEqual(['slots', 'locale'])
+    expect(inject).toEqual(['slots', 'locale', 'connection'])
   })
 
   it('registers the card, then removes it with the plugin fiber', async () => {
