@@ -1,8 +1,8 @@
 /**
  * Reading the account's Grok subscription quota for the configuration card.
  *
- * The Host calls `GET https://cli-chat-proxy.grok.com/v1/billing` with the
- * stored access token. The browser only receives the decoded window view.
+ * The Host calls `GET …/v1/billing?format=credits` with the stored access
+ * token. The browser only receives the decoded window view.
  *
  * A missing or unrecognized billing surface is `unsupported`, not a failure:
  * usage is advisory information, never a blocker.
@@ -12,8 +12,10 @@
 
 import type { GrokUsageView, GrokUsageWindow } from './client-contract.ts'
 
-/** Production billing URL used by the Grok CLI chat proxy. */
-export const GROK_BILLING_URL = 'https://cli-chat-proxy.grok.com/v1/billing'
+import { GROK_CLI_REQUEST_HEADERS } from './cli-identity.ts'
+
+/** SuperGrok quota lives on the credits flavor, not the prepaid 0/0 envelope. */
+export const GROK_BILLING_URL = 'https://cli-chat-proxy.grok.com/v1/billing?format=credits'
 
 /** Per-read budget for one billing request. */
 export const DEFAULT_USAGE_REQUEST_TIMEOUT_MS = 15_000
@@ -81,35 +83,72 @@ function moneyVal(value: unknown): number | undefined {
 }
 
 function periodFromConfig(config: Record<string, unknown>): string | undefined {
-  const start = config['billingPeriodStart']
-  const end = config['billingPeriodEnd']
+  const current = isRecord(config['currentPeriod']) ? config['currentPeriod'] : undefined
+  const start = (current?.['start'] ?? config['billingPeriodStart'])
+  const end = (current?.['end'] ?? config['billingPeriodEnd'])
   if (typeof start !== 'string' || start.length === 0) return undefined
-  if (typeof end !== 'string' || end.length === 0) return start
+  if (typeof end !== 'string' || end.length === 0) return start.slice(0, 10)
   return `${start.slice(0, 10)} – ${end.slice(0, 10)}`
 }
 
-/** Official proxy body: `{ config: { monthlyLimit, used, onDemandCap, billingPeriod* } }`. */
-function parseCliBillingConfig(value: unknown, fetchedAt: string): GrokUsageView | undefined {
-  if (!isRecord(value)) return undefined
-  const config = value['config']
-  if (!isRecord(config)) return undefined
+function percentWindow(id: string, percent: number, period: string | undefined): GrokUsageWindow {
+  const used = Math.round(Math.min(1, Math.max(0, percent)) * 100)
+  return {
+    id,
+    used,
+    limit: 100,
+    unit: 'percent',
+    ...period === undefined ? {} : { period },
+  }
+}
+
+/** Credits flavor: weekly window + per-product usagePercent (0–1). */
+function parseCreditsConfig(config: Record<string, unknown>, fetchedAt: string): GrokUsageView | undefined {
+  const period = periodFromConfig(config)
+  const windows: GrokUsageWindow[] = []
+  const products = config['productUsage']
+  if (Array.isArray(products)) {
+    for (const entry of products) {
+      if (!isRecord(entry)) continue
+      const product = entry['product']
+      const percent = entry['usagePercent']
+      if (typeof product !== 'string' || product.length === 0) continue
+      if (typeof percent !== 'number' || !Number.isFinite(percent)) continue
+      windows.push(percentWindow(product, percent, period))
+    }
+  }
+  if (windows.length === 0) {
+    const percent = config['creditUsagePercent']
+    if (typeof percent === 'number' && Number.isFinite(percent)) {
+      windows.push(percentWindow('weekly', percent, period))
+    }
+  }
+  return windows.length === 0 ? undefined : { fetchedAt, windows }
+}
+
+/** Prepaid envelope: `{ config: { monthlyLimit, used } }` — SuperGrok is usually 0/0 here. */
+function parsePrepaidConfig(config: Record<string, unknown>, fetchedAt: string): GrokUsageView | undefined {
   const used = moneyVal(config['used'])
   const limit = moneyVal(config['monthlyLimit'])
   if (used === undefined || limit === undefined) return undefined
+  if (used === 0 && limit === 0) return undefined
   const period = periodFromConfig(config)
-  const windows: GrokUsageWindow[] = [
-    {
+  return {
+    fetchedAt,
+    windows: [{
       id: 'monthly',
       used,
       limit,
       ...period === undefined ? {} : { period },
-    },
-  ]
-  const onDemand = moneyVal(config['onDemandCap'])
-  if (onDemand !== undefined && onDemand > 0) {
-    windows.push({ id: 'on-demand', used: 0, limit: onDemand })
+    }],
   }
-  return { fetchedAt, windows }
+}
+
+function parseCliBillingConfig(value: unknown, fetchedAt: string): GrokUsageView | undefined {
+  if (!isRecord(value)) return undefined
+  const config = value['config']
+  if (!isRecord(config)) return undefined
+  return parseCreditsConfig(config, fetchedAt) ?? parsePrepaidConfig(config, fetchedAt)
 }
 
 /**
@@ -155,6 +194,7 @@ export async function readGrokUsage(
       headers: {
         accept: 'application/json',
         authorization: `Bearer ${request.accessToken}`,
+        ...GROK_CLI_REQUEST_HEADERS,
       },
       // The request carries the credential; a redirect would forward it.
       redirect: 'error',

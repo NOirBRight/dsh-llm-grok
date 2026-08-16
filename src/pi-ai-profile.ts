@@ -10,6 +10,7 @@ import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { GROK_CATALOG, GROK_PROVIDER } from './client-contract.ts'
 import type { GrokCatalogModel } from './client-contract.ts'
+import { GROK_CLI_REQUEST_HEADERS } from './cli-identity.ts'
 import { grokResponsesApi } from './responses-tools.ts'
 
 /** Chat proxy base used by the Grok CLI (`POST {base}/responses`). */
@@ -26,8 +27,15 @@ const { name: PACKAGE_NAME, version: PACKAGE_VERSION } = createRequire(import.me
   version: string
 }
 
-/** Plugin identity sent beside the harness User-Agent. Not a Grok CLI header. */
+/** Plugin identity sent beside the required CLI version headers. */
 export const GROK_PLUGIN_IDENTITY_HEADER = `${PACKAGE_NAME}/${PACKAGE_VERSION}`
+
+function proxyHeaders(): Record<string, string> {
+  return {
+    ...GROK_CLI_REQUEST_HEADERS,
+    'X-Dsh-Plugin': GROK_PLUGIN_IDENTITY_HEADER,
+  }
+}
 
 const THINKING_LEVELS: ThinkingLevelMap = {
   off: 'none',
@@ -43,6 +51,8 @@ const THINKING_LEVELS: ThinkingLevelMap = {
 export interface GrokConnectionOptions {
   /** Responses API base, including `/v1`. */
   baseURL: string
+  /** Models exposed to the picker and accepted for chat. */
+  models: readonly GrokCatalogModel[]
   /** Maximum provider idle time while one stream read is outstanding. */
   streamIdleTimeoutMs: number
   /** Provider-owned model-request retry policy, already resolved. */
@@ -58,7 +68,7 @@ function toPiAiModel(model: GrokCatalogModel, baseUrl: string): Model<'openai-re
   const levels = thinkingLevelMap(model)
   return {
     id: model.id,
-    name: model.id,
+    name: model.name ?? model.id,
     api: 'openai-responses',
     provider: GROK_PROVIDER,
     baseUrl,
@@ -95,8 +105,10 @@ function grokAuth(): Provider['auth'] {
 /** Resolve the complete pi-ai profile for one Grok options snapshot. */
 export function createGrokPiAiProfile(connection: GrokConnectionOptions): ResolvedPiAiProviderProfile {
   const baseURL = connection.baseURL.replace(/\/+$/u, '')
-  const models = GROK_CATALOG.map(model => toPiAiModel(model, baseURL))
+  const source = connection.models.length > 0 ? connection.models : GROK_CATALOG
+  const models = source.map(model => toPiAiModel(model, baseURL))
   const configuredMaxTokens = new Map<string, number>()
+  const headers = proxyHeaders()
   const piProvider = createProvider({
     id: GROK_PROVIDER,
     name: 'Grok',
@@ -104,7 +116,7 @@ export function createGrokPiAiProfile(connection: GrokConnectionOptions): Resolv
     auth: grokAuth(),
     models,
     api: grokResponsesApi(),
-    headers: { 'X-Dsh-Plugin': GROK_PLUGIN_IDENTITY_HEADER },
+    headers,
   })
   return {
     provider: GROK_PROVIDER,
@@ -117,6 +129,6 @@ export function createGrokPiAiProfile(connection: GrokConnectionOptions): Resolv
     retryPolicy: connection.retryPolicy,
     piProvider,
     configuredMaxTokens,
-    headers: { 'X-Dsh-Plugin': GROK_PLUGIN_IDENTITY_HEADER },
+    headers,
   }
 }

@@ -23,6 +23,8 @@ export const GROK_USAGE_ENDPOINT = 'usage/read'
 export interface GrokCatalogModel {
   /** Wire model id accepted by the chat proxy. */
   id: string
+  /** Selector label; omission uses {@link id}. */
+  name?: string
   /** Whether the model supports native thinking. */
   thinking?: boolean
   /** Whether the model accepts image input. */
@@ -30,12 +32,15 @@ export interface GrokCatalogModel {
 }
 
 /**
- * Source-frozen advisory catalog. V1 does not fetch an account directory;
- * later tickets may append ids to this constant only.
+ * Offline fallback when the account catalog cannot be read. Live ids come
+ * from GET /v1/models-v2 after sign-in.
  */
 export const GROK_CATALOG: readonly GrokCatalogModel[] = Object.freeze([
-  Object.freeze({ id: 'grok-4.6', thinking: true, vision: true }),
+  Object.freeze({ id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true }),
+  Object.freeze({ id: 'grok-4.5', name: 'Grok 4.5', thinking: true, vision: true }),
 ])
+/** Account model list inside {@link GROK_RPC_CHANNEL}. */
+export const GROK_MODELS_ENDPOINT = 'models/list'
 
 /** Settings fields presented by the package's Web configuration card. No apiKeyEnv. */
 export interface GrokSettingsView {
@@ -83,6 +88,8 @@ export interface GrokUsageWindow {
   limit: number
   /** Optional period label from the billing payload (`month`, `week`, …). */
   period?: string
+  /** When `percent`, the card shows used as a 0–100 percentage. */
+  unit?: 'percent'
 }
 
 /** Secret-free usage snapshot the configuration card renders. */
@@ -98,6 +105,11 @@ export interface GrokUsageView {
  * legitimate answers, not transport failures, so they ride the success
  * branch instead of an error code.
  */
+export interface GrokModelsReply {
+  /** Models the signed-in account can use, provider order. */
+  models: GrokCatalogModel[]
+}
+
 export type GrokUsageReply =
   | { status: 'ok', usage: GrokUsageView }
   | { status: 'unsupported' }
@@ -202,15 +214,18 @@ function decodeGrokUsageWindow(value: unknown): GrokUsageWindow | undefined {
   const used = value['used']
   const limit = value['limit']
   const period = value['period']
+  const unit = value['unit']
   if (typeof id !== 'string' || id.length === 0) return undefined
   if (typeof used !== 'number' || !Number.isFinite(used) || used < 0) return undefined
   if (typeof limit !== 'number' || !Number.isFinite(limit) || limit < 0) return undefined
   if (!optionalNonEmptyString(period)) return undefined
+  if (unit !== undefined && unit !== 'percent') return undefined
   return {
     id,
     used,
     limit,
     ...period === undefined ? {} : { period },
+    ...unit === undefined ? {} : { unit },
   }
 }
 
@@ -237,6 +252,35 @@ export function decodeGrokUsageView(value: unknown): GrokUsageView | undefined {
  * @param value - untrusted RPC result value.
  * @returns the validated reply, or undefined when it is malformed or carries secrets.
  */
+export function decodeGrokCatalogModel(value: unknown): GrokCatalogModel | undefined {
+  if (!isRecord(value) || hasTokenFields(value)) return undefined
+  const id = value['id']
+  const name = value['name']
+  const thinking = value['thinking']
+  const vision = value['vision']
+  if (typeof id !== 'string' || id.length === 0) return undefined
+  if (name !== undefined && (typeof name !== 'string' || name.length === 0)) return undefined
+  if (thinking !== undefined && typeof thinking !== 'boolean') return undefined
+  if (vision !== undefined && typeof vision !== 'boolean') return undefined
+  return {
+    id,
+    ...name === undefined ? {} : { name },
+    ...thinking === undefined ? {} : { thinking },
+    ...vision === undefined ? {} : { vision },
+  }
+}
+
+export function decodeGrokModelsReply(value: unknown): GrokModelsReply | undefined {
+  if (!isRecord(value) || hasTokenFields(value) || !Array.isArray(value['models'])) return undefined
+  const models: GrokCatalogModel[] = []
+  for (const entry of value['models']) {
+    const model = decodeGrokCatalogModel(entry)
+    if (model === undefined) return undefined
+    models.push(model)
+  }
+  return { models }
+}
+
 export function decodeGrokUsageReply(value: unknown): GrokUsageReply | undefined {
   if (!isRecord(value) || hasTokenFields(value)) return undefined
   if (value['status'] === 'unsupported') return { status: 'unsupported' }

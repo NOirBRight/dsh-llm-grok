@@ -1,8 +1,8 @@
 /**
  * Reading the account's Grok subscription quota for the configuration card.
  *
- * The Host calls `GET https://cli-chat-proxy.grok.com/v1/billing` with the
- * stored access token. The browser only receives the decoded window view.
+ * The Host calls `GET …/v1/billing?format=credits` with the stored access
+ * token. The browser only receives the decoded window view.
  *
  * A missing or unrecognized billing surface is `unsupported`, not a failure:
  * usage is advisory information, never a blocker.
@@ -10,8 +10,8 @@
  * @module dsh-llm-grok/usage
  */
 import type { GrokUsageView } from './client-contract.ts';
-/** Production billing URL used by the Grok CLI chat proxy. */
-export declare const GROK_BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing";
+/** SuperGrok quota lives on the credits flavor, not the prepaid 0/0 envelope. */
+export declare const GROK_BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits";
 /** Per-read budget for one billing request. */
 export declare const DEFAULT_USAGE_REQUEST_TIMEOUT_MS = 15000;
 /** One Host billing read: stored access token plus test overrides. */

@@ -19,6 +19,8 @@ export interface GrokAdapterOptions {
     resolveApiKey: () => Promise<string>;
     /** Resolve the optional durable attachment service at request time. */
     resolveAttachments?: () => AttachmentStore | undefined;
+    /** Refresh the account catalog before listing models for the picker. */
+    refreshCatalog?: () => Promise<void>;
 }
 /**
  * Return the current access token, refreshing when the session is near expiry.

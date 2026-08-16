@@ -20,7 +20,9 @@ import {
   GROK_AUTH_LOGOUT_ENDPOINT,
   GROK_AUTH_START_ENDPOINT,
   GROK_AUTH_STATUS_ENDPOINT,
+  GROK_CATALOG,
   GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+  GROK_MODELS_ENDPOINT,
   GROK_PROVIDER,
   GROK_RPC_CHANNEL,
   GROK_SETTINGS_NAMESPACE,
@@ -28,10 +30,12 @@ import {
   decodeGrokAuthCompleteRequest,
   decodeGrokEmptyRequest,
 } from './client-contract.ts'
+import type { GrokCatalogModel } from './client-contract.ts'
 import { completePkceLogin, createGrokAuthRuntime, ensureFreshSession, startPkceLogin } from './oauth.ts'
 import type { GrokOAuthRuntime } from './oauth.ts'
 import { GROK_CHAT_BASE_URL } from './pi-ai-profile.ts'
 import { deleteSession, resolveGrokSessionPath, statusFromSession } from './session.ts'
+import { fallbackGrokCatalog, readGrokModels } from './discovery.ts'
 import { readGrokUsage } from './usage.ts'
 
 export { GrokAdapter, resolveGrokAccessToken } from './adapter.ts'
@@ -46,6 +50,7 @@ export {
   GROK_AUTH_STATUS_ENDPOINT,
   GROK_AUTH_LOGOUT_ENDPOINT,
   GROK_AUTH_COMPLETE_ENDPOINT,
+  GROK_MODELS_ENDPOINT,
   GROK_USAGE_ENDPOINT,
   decodeGrokSettings,
   decodeGrokAuthStatus,
@@ -55,6 +60,7 @@ export {
   decodeGrokEmptyRequest,
   decodeGrokUsageView,
   decodeGrokUsageReply,
+  decodeGrokModelsReply,
 } from './client-contract.ts'
 export {
   GROK_CHAT_BASE_URL,
@@ -73,6 +79,7 @@ export type {
   GrokUsageWindow,
   GrokUsageView,
   GrokUsageReply,
+  GrokModelsReply,
 } from './client-contract.ts'
 export {
   GROK_OAUTH_ISSUER,
@@ -101,6 +108,7 @@ export {
   parseGrokBilling,
   readGrokUsage,
 } from './usage.ts'
+export { GROK_MODELS_URL, parseGrokModels, readGrokModels, fallbackGrokCatalog } from './discovery.ts'
 export type { GrokUsageRequest } from './usage.ts'
 
 export const name = 'llm-grok'
@@ -127,6 +135,7 @@ export function resolveAdapterOptions(config: Config): ResolvedGrokOptions {
   }
   return {
     baseURL: GROK_CHAT_BASE_URL,
+    models: GROK_CATALOG,
     streamIdleTimeoutMs,
     retryPolicy: resolveRetryPolicy(config.retryPolicy, 'llm-grok: retryPolicy'),
   }
@@ -166,6 +175,10 @@ function internalError(message: string) {
 export interface GrokRpcHandlerOptions {
   /** Override {@link GROK_BILLING_URL} for a local fake billing server. */
   billingURL?: string
+  /** Override the production models-v2 URL for tests. */
+  modelsURL?: string
+  /** Remember a discovered catalog for the chat adapter. */
+  adoptCatalog?: (models: readonly GrokCatalogModel[]) => void
 }
 
 function usageFailure(error: unknown, secrets: readonly string[]) {
@@ -208,6 +221,19 @@ export function createGrokRpcHandler(
       if (request === undefined) return internalError('invalid Grok auth complete request')
       return { ok: true as const, value: await completePkceLogin(runtime, request.code) }
     }
+    if (endpoint === GROK_MODELS_ENDPOINT) {
+      if (decodeGrokEmptyRequest(payload) === undefined) return internalError('invalid Grok models request')
+      const session = await ensureFreshSession(runtime)
+      if (session === undefined) return { ok: true as const, value: { models: fallbackGrokCatalog() } }
+      const models = await readGrokModels({
+        accessToken: session.accessToken,
+        ...options?.modelsURL === undefined ? {} : { modelsURL: options.modelsURL },
+        fetch: runtime.fetch,
+        signal,
+      }) ?? fallbackGrokCatalog()
+      options?.adoptCatalog?.(models)
+      return { ok: true as const, value: { models } }
+    }
     if (endpoint === GROK_USAGE_ENDPOINT) {
       if (decodeGrokEmptyRequest(payload) === undefined) return internalError('invalid Grok usage request')
       const session = await ensureFreshSession(runtime)
@@ -233,11 +259,12 @@ export function apply(ctx: Context, config: Config): void {
   let current: () => Config = () => config
   let lastRaw: Config | undefined
   let lastGood: ResolvedGrokOptions | undefined
+  let catalog: readonly GrokCatalogModel[] = fallbackGrokCatalog()
   const options = (): ResolvedGrokOptions => {
     const raw = current()
-    if (raw === lastRaw && lastGood !== undefined) return lastGood
+    if (raw === lastRaw && lastGood !== undefined && lastGood.models === catalog) return lastGood
     try {
-      const next = resolveAdapterOptions(raw)
+      const next = { ...resolveAdapterOptions(raw), models: catalog }
       lastRaw = raw
       lastGood = next
       return next
@@ -254,10 +281,23 @@ export function apply(ctx: Context, config: Config): void {
   const runtime = createGrokAuthRuntime({
     resolveSessionPath: () => resolveGrokSessionPath(ctx),
   })
+  const adoptCatalog = (models: readonly GrokCatalogModel[]): void => {
+    catalog = models
+  }
+  const refreshCatalog = async (): Promise<void> => {
+    const session = await ensureFreshSession(runtime)
+    if (session === undefined) return
+    const models = await readGrokModels({
+      accessToken: session.accessToken,
+      fetch: runtime.fetch,
+    })
+    if (models !== undefined) catalog = models
+  }
   const adapter = new GrokAdapter({
     options,
     resolveApiKey: () => resolveGrokAccessToken(runtime),
     resolveAttachments: () => ctx.get('attachments'),
+    refreshCatalog,
   })
   ctx.llm.registerConfigurableProviders([
     { provider: GROK_PROVIDER, displayName: 'Grok', settingsNs: NS, settingsPath: [] },
@@ -274,7 +314,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.inject(['connection'], (connectionCtx) => {
     connectionCtx.connection.rpc.handle(
       GROK_RPC_CHANNEL,
-      createGrokRpcHandler(runtime),
+      createGrokRpcHandler(runtime, { adoptCatalog }),
       { authority: 'loopback' },
     )
   })

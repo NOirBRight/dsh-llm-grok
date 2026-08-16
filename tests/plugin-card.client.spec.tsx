@@ -17,6 +17,7 @@ function props(overrides: Partial<GrokPluginCardProps> = {}): GrokPluginCardProp
     readAuthStatus: vi.fn(() => Promise.resolve({ loggedIn: false } satisfies GrokAuthStatus)),
     logout: vi.fn(() => Promise.resolve()),
     fetchUsage: vi.fn(() => Promise.resolve({ status: 'unsupported' } satisfies GrokUsageReply)),
+    fetchModels: vi.fn(() => Promise.resolve([])),
     ...overrides,
   } as GrokPluginCardProps
 }
@@ -41,7 +42,7 @@ describe('GrokPluginCard', () => {
     await waitFor(() => { expect(screen.getByText(en.signedOut)).toBeTruthy() })
     const signIn = screen.getByRole<HTMLButtonElement>('button', { name: en.signIn })
     expect(signIn.disabled).toBe(false)
-    expect(screen.getByText('grok-4.6')).toBeTruthy()
+    expect(document.querySelector('[data-model-row="grok-4.6"]')).toBeTruthy()
     const row = document.querySelector('[data-model-row="grok-4.6"]')
     expect(row?.textContent).toContain(en.thinking)
     expect(row?.textContent).toContain(en.vision)

@@ -21,16 +21,20 @@ export declare const GROK_USAGE_ENDPOINT = "usage/read";
 export interface GrokCatalogModel {
     /** Wire model id accepted by the chat proxy. */
     id: string;
+    /** Selector label; omission uses {@link id}. */
+    name?: string;
     /** Whether the model supports native thinking. */
     thinking?: boolean;
     /** Whether the model accepts image input. */
     vision?: boolean;
 }
 /**
- * Source-frozen advisory catalog. V1 does not fetch an account directory;
- * later tickets may append ids to this constant only.
+ * Offline fallback when the account catalog cannot be read. Live ids come
+ * from GET /v1/models-v2 after sign-in.
  */
 export declare const GROK_CATALOG: readonly GrokCatalogModel[];
+/** Account model list inside {@link GROK_RPC_CHANNEL}. */
+export declare const GROK_MODELS_ENDPOINT = "models/list";
 /** Settings fields presented by the package's Web configuration card. No apiKeyEnv. */
 export interface GrokSettingsView {
     /** Stream idle timeout in milliseconds. */
@@ -76,6 +80,8 @@ export interface GrokUsageWindow {
     limit: number;
     /** Optional period label from the billing payload (`month`, `week`, …). */
     period?: string;
+    /** When `percent`, the card shows used as a 0–100 percentage. */
+    unit?: 'percent';
 }
 /** Secret-free usage snapshot the configuration card renders. */
 export interface GrokUsageView {
@@ -89,6 +95,10 @@ export interface GrokUsageView {
  * legitimate answers, not transport failures, so they ride the success
  * branch instead of an error code.
  */
+export interface GrokModelsReply {
+    /** Models the signed-in account can use, provider order. */
+    models: GrokCatalogModel[];
+}
 export type GrokUsageReply = {
     status: 'ok';
     usage: GrokUsageView;
@@ -145,5 +155,7 @@ export declare function decodeGrokUsageView(value: unknown): GrokUsageView | und
  * @param value - untrusted RPC result value.
  * @returns the validated reply, or undefined when it is malformed or carries secrets.
  */
+export declare function decodeGrokCatalogModel(value: unknown): GrokCatalogModel | undefined;
+export declare function decodeGrokModelsReply(value: unknown): GrokModelsReply | undefined;
 export declare function decodeGrokUsageReply(value: unknown): GrokUsageReply | undefined;
 //# sourceMappingURL=client-contract.d.ts.map

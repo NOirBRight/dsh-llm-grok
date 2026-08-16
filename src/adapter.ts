@@ -35,6 +35,8 @@ export interface GrokAdapterOptions {
   resolveApiKey: () => Promise<string>
   /** Resolve the optional durable attachment service at request time. */
   resolveAttachments?: () => AttachmentStore | undefined
+  /** Refresh the account catalog before listing models for the picker. */
+  refreshCatalog?: () => Promise<void>
 }
 
 /**
@@ -95,7 +97,9 @@ export class GrokAdapter extends LlmAdapter {
     return this.current().providerRetryPolicy(provider)
   }
 
-  override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
+  override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
+    await this.config.refreshCatalog?.()
+    this.snapshot = undefined
     return this.current().listModels(provider)
   }
 

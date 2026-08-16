@@ -11,11 +11,13 @@ import {
   GROK_AUTH_START_ENDPOINT,
   GROK_AUTH_STATUS_ENDPOINT,
   GROK_RPC_CHANNEL,
+  GROK_MODELS_ENDPOINT,
   GROK_USAGE_ENDPOINT,
   decodeGrokAuthLogoutReply,
   decodeGrokAuthStartReply,
   decodeGrokAuthStatus,
   decodeGrokUsageReply,
+  decodeGrokModelsReply,
 } from '../client-contract.ts'
 import { GrokPluginCard } from './GrokPluginCard.tsx'
 import type { GrokPluginCardFace } from './GrokPluginCard.tsx'
@@ -74,6 +76,14 @@ export function apply(ctx: ClientContext): void {
     if (decodeGrokAuthLogoutReply(result.value) === undefined) throw new Error(t('signOutFailed'))
   }
 
+  const fetchModels: GrokPluginCardFace['fetchModels'] = async () => {
+    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_MODELS_ENDPOINT, {})
+    if (!result.ok) throw new Error(result.error.message)
+    const decoded = decodeGrokModelsReply(result.value)
+    if (decoded === undefined) throw new Error(t('statusFailed'))
+    return decoded.models
+  }
+
   const fetchUsage: GrokPluginCardFace['fetchUsage'] = async () => {
     const result = await rpc.call(GROK_RPC_CHANNEL, GROK_USAGE_ENDPOINT, {})
     if (!result.ok) throw new Error(result.error.message)
@@ -87,6 +97,8 @@ export function apply(ctx: ClientContext): void {
     id: 'grok',
     order: 40,
     locale: localeNamespace,
-    inject: (): GrokPluginCardFace => ({ t, startAuth, completeAuth, readAuthStatus, logout, fetchUsage }),
+    inject: (): GrokPluginCardFace => ({
+      t, startAuth, completeAuth, readAuthStatus, logout, fetchUsage, fetchModels,
+    }),
   }, GrokPluginCard))
 }

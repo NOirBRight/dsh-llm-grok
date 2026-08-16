@@ -8,6 +8,7 @@ import { GROK_CATALOG } from '../client-contract.ts'
 import type {
   GrokAuthStartReply,
   GrokAuthStatus,
+  GrokCatalogModel,
   GrokUsageReply,
   GrokUsageView,
   GrokUsageWindow,
@@ -28,6 +29,8 @@ export interface GrokPluginCardFace {
   logout: () => Promise<void>
   /** Read the Host-decoded billing snapshot. Tokens never cross this call. */
   fetchUsage: () => Promise<GrokUsageReply>
+  /** Read the signed-in account catalog. */
+  fetchModels: () => Promise<readonly GrokCatalogModel[]>
 }
 
 /** Props delivered by the Plugin configuration item slot. */
@@ -158,7 +161,11 @@ function UsageBar({ usedText, window: quota }: {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
         <span style={labelStyle}>{label}</span>
-        <span style={hintStyle}>{usedText} {String(quota.used)} / {String(quota.limit)}</span>
+        <span style={hintStyle}>
+          {quota.unit === 'percent'
+            ? `${String(quota.used)}%`
+            : `${usedText} ${String(quota.used)} / ${String(quota.limit)}`}
+        </span>
       </div>
       <div
         style={barTrackStyle}
@@ -185,11 +192,12 @@ function UsageBar({ usedText, window: quota }: {
 
 /** Render the single-package Grok contribution under Plugin configuration. */
 export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
-  const { t, startAuth, completeAuth, readAuthStatus, logout, fetchUsage } = props
+  const { t, startAuth, completeAuth, readAuthStatus, logout, fetchUsage, fetchModels } = props
   const [open, setOpen] = useState(false)
   const [auth, setAuth] = useState<AuthUi>({ kind: 'signed-out' })
   const [pasteCode, setPasteCode] = useState('')
   const [usage, setUsage] = useState<UsageState>({ status: 'idle' })
+  const [models, setModels] = useState<readonly GrokCatalogModel[]>(GROK_CATALOG)
   const title = t('title')
   const busy = auth.kind === 'signing-in'
 
@@ -219,6 +227,9 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
       if (cancelled) return
       if (status.loggedIn) {
         setAuth({ kind: 'signed-in', ...status.email === undefined ? {} : { email: status.email } })
+        void fetchModels().then((next) => {
+          if (!cancelled && next.length > 0) setModels(next)
+        }).catch(() => undefined)
         return
       }
       setAuth({ kind: 'signed-out' })
@@ -382,9 +393,9 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
             <section style={sectionStyle} aria-label={t('models')}>
               <h3 style={sectionTitleStyle}>{t('models')}</h3>
               <ul style={catalogStyle}>
-                {GROK_CATALOG.map((model) => (
+                {models.map((model) => (
                   <li key={model.id} data-model-row={model.id} style={modelRowStyle}>
-                    <span>{model.id}</span>
+                    <span>{model.name ?? model.id}{model.name !== undefined && model.name !== model.id ? ` (${model.id})` : ''}</span>
                     <span style={flagsStyle}>
                       {model.thinking === true ? <span style={hintStyle}>{t('thinking')}</span> : null}
                       {model.vision === true ? <span style={hintStyle}>{t('vision')}</span> : null}

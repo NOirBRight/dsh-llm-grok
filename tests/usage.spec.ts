@@ -38,6 +38,29 @@ describe('parseGrokBilling', () => {
     })
   })
 
+  it('reads SuperGrok weekly credit usage', () => {
+    const usage = parseGrokBilling({
+      config: {
+        currentPeriod: {
+          type: 'USAGE_PERIOD_TYPE_WEEKLY',
+          start: '2026-08-16T16:26:18.098562+00:00',
+          end: '2026-08-23T16:26:18.098562+00:00',
+        },
+        creditUsagePercent: 1,
+        productUsage: [{ product: 'GrokBuild', usagePercent: 1 }],
+        billingPeriodStart: '2026-08-16T16:26:18.098562+00:00',
+        billingPeriodEnd: '2026-08-23T16:26:18.098562+00:00',
+      },
+    }, '2026-08-17T00:00:00.000Z')
+
+    expect(usage).toEqual({
+      fetchedAt: '2026-08-17T00:00:00.000Z',
+      windows: [
+        { id: 'GrokBuild', used: 100, limit: 100, unit: 'percent', period: '2026-08-16 – 2026-08-23' },
+      ],
+    })
+  })
+
   it('reads the cli-chat-proxy config envelope', () => {
     const usage = parseGrokBilling({
       config: {

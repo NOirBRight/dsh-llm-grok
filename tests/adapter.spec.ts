@@ -6,7 +6,7 @@ import { createUserMessage, LlmError, resolveRetryPolicy } from '@deepseek-ai/ds
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { GrokAdapter, resolveGrokAccessToken } from '../src/adapter.ts'
 import type { GrokAdapterOptions, GrokConnectionOptions } from '../src/adapter.ts'
-import { GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
+import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
 import { createGrokAuthRuntime } from '../src/oauth.ts'
 import { injectGrokServerSearchTools } from '../src/responses-tools.ts'
 import { writeSession } from '../src/session.ts'
@@ -24,6 +24,7 @@ const MODEL_ID = 'grok-4.6'
 function connection(overrides: Partial<GrokConnectionOptions> = {}): GrokConnectionOptions {
   return {
     baseURL: 'http://127.0.0.1/v1',
+    models: GROK_CATALOG,
     streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
     retryPolicy: FIXED_POLICY,
     ...overrides,
@@ -86,12 +87,13 @@ describe('injectGrokServerSearchTools', () => {
 })
 
 describe('GrokAdapter metadata', () => {
-  it('lists grok-4.6 with thinking and vision', async () => {
+  it('lists frozen catalog models with thinking and vision', async () => {
     const a = adapter({})
     expect(a.providerInfo('grok')).toEqual({ id: 'grok', name: 'Grok' })
     expect(a.providerRetryPolicy('grok')).toBe(FIXED_POLICY)
     await expect(a.listModels('grok')).resolves.toEqual([
-      { provider: 'grok', id: 'grok-4.6', name: 'grok-4.6', inputModalities: ['text', 'image'] },
+      { provider: 'grok', id: 'grok-4.6', name: 'Grok 4.6', inputModalities: ['text', 'image'] },
+      { provider: 'grok', id: 'grok-4.5', name: 'Grok 4.5', inputModalities: ['text', 'image'] },
     ])
     const info = await a.resolveModel('grok', 'grok-4.6')
     expect(info.reasoning?.efforts.map(effort => effort.id)).toEqual(['off', 'low', 'medium', 'high'])
@@ -109,6 +111,8 @@ describe('GrokAdapter.stream request shape', () => {
     expect(server.requests[0]?.method).toBe('POST')
     expect(server.requests[0]?.path).toBe('/v1/responses')
     expect(server.requests[0]?.headers.authorization).toBe('Bearer test-access')
+    expect(server.requests[0]?.headers['x-grok-client-version']).toBe('1.0.4')
+    expect(server.requests[0]?.headers['x-grok-client-identifier']).toBe('grok-shell')
     const body = server.requests[0]?.body as { model?: string, tools?: Array<{ type?: string, name?: string }> }
     expect(body.model).toBe(MODEL_ID)
     expect(body.tools).toEqual(expect.arrayContaining([
