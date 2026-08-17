@@ -10,6 +10,11 @@ describe('parseGrokModels', () => {
           id: 'grok-4.6',
           name: 'Grok 4.6',
           supports_reasoning_effort: true,
+          reasoning_effort: 'high',
+          reasoning_efforts: [
+            { id: 'xhigh', value: 'xhigh', label: 'Extra High Effort' },
+            { id: 'high', value: 'high', label: 'High Effort' },
+          ],
         },
         {
           id: 'grok-4.5',
@@ -19,7 +24,17 @@ describe('parseGrokModels', () => {
         { id: 'grok-4.6' },
       ],
     })).toEqual([
-      { id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true },
+      {
+        id: 'grok-4.6',
+        name: 'Grok 4.6',
+        thinking: true,
+        vision: true,
+        defaultReasoningEffort: 'high',
+        reasoningEfforts: [
+          { id: 'xhigh', value: 'xhigh', label: 'Extra High Effort' },
+          { id: 'high', value: 'high', label: 'High Effort' },
+        ],
+      },
       { id: 'grok-4.5', name: 'Grok 4.5', thinking: true, vision: true },
     ])
   })

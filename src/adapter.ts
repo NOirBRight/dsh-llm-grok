@@ -3,7 +3,7 @@
  * wire implementation is delegated to pi-ai's OpenAI Responses support.
  */
 
-import { LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
+import { LlmAdapter, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type {
   GenerateOptions,
   LlmModelInfo,
@@ -16,6 +16,8 @@ import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import { GROK_PROVIDER } from './client-contract.ts'
+import type { GrokCatalogModel } from './client-contract.ts'
+import { officialDefaultEffort, officialEffortsFor, isGrokReasoningWire } from './reasoning.ts'
 import { ensureFreshSession } from './oauth.ts'
 import type { GrokOAuthRuntime } from './oauth.ts'
 import { createGrokPiAiProfile } from './pi-ai-profile.ts'
@@ -35,8 +37,6 @@ export interface GrokAdapterOptions {
   resolveApiKey: () => Promise<string>
   /** Resolve the optional durable attachment service at request time. */
   resolveAttachments?: () => AttachmentStore | undefined
-  /** Refresh the account catalog before listing models for the picker. */
-  refreshCatalog?: () => Promise<void>
 }
 
 /**
@@ -62,6 +62,38 @@ export async function resolveGrokAccessToken(runtime: GrokOAuthRuntime): Promise
     )
   }
   return session.accessToken
+}
+
+/**
+ * Replace pi-ai's generated effort list with official models-v2 order, labels,
+ * and the documented default `reasoning.effort`.
+ */
+export function applyOfficialReasoningMetadata(
+  info: LlmResolvedModelInfo,
+  catalog: GrokCatalogModel | undefined,
+): LlmResolvedModelInfo {
+  if (info.reasoning === undefined || catalog === undefined || catalog.thinking !== true) {
+    return info
+  }
+  const supported = new Set(info.reasoning.efforts.map(effort => effort.id))
+  const efforts = officialEffortsFor(catalog).flatMap((effort) => {
+    if (!isGrokReasoningWire(effort.value) || !supported.has(ReasoningEffortId(effort.value))) return []
+    return [{
+      id: ReasoningEffortId(effort.value),
+      name: effort.label ?? effort.value,
+      ...effort.description === undefined ? {} : { description: effort.description },
+    }]
+  })
+  if (efforts.length === 0) return info
+  const preferred = ReasoningEffortId(officialDefaultEffort(catalog))
+  const defaultEffort = efforts.some(effort => effort.id === preferred) ? preferred : efforts[0]?.id
+  return {
+    ...info,
+    reasoning: {
+      efforts,
+      ...defaultEffort === undefined ? {} : { defaultEffort },
+    },
+  }
 }
 
 /** The Grok chat adapter backed by pi-ai OpenAI Responses. */
@@ -98,17 +130,18 @@ export class GrokAdapter extends LlmAdapter {
   }
 
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
-    await this.config.refreshCatalog?.()
     this.snapshot = undefined
     return this.current().listModels(provider)
   }
 
-  override resolveModel(
+  override async resolveModel(
     provider: string,
     model: string,
     signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo> {
-    return this.current().resolveModel(provider, model, signal)
+    const info = await this.current().resolveModel(provider, model, signal)
+    const catalog = this.config.options().models.find(entry => entry.id === model)
+    return applyOfficialReasoningMetadata(info, catalog)
   }
 
   override stream(options: GenerateOptions): AsyncIterable<StreamChunk> {

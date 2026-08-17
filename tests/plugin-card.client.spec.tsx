@@ -2,28 +2,60 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { GrokPluginCard } from '../src/client/GrokPluginCard.tsx'
 import type { GrokPluginCardProps } from '../src/client/GrokPluginCard.tsx'
 import { en } from '../src/client/locales.ts'
-import type { GrokAuthStartReply, GrokAuthStatus, GrokUsageReply } from '../src/client-contract.ts'
+import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
+import type { GrokAuthStartReply, GrokAuthStatus, GrokCatalogModel, GrokSettingsView, GrokUsageReply } from '../src/client-contract.ts'
 
 afterEach(() => { cleanup() })
 
+const settings: GrokSettingsView = {
+  streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+  models: GROK_CATALOG.map(model => ({ ...model })),
+}
+
+function snapshot(overrides: Partial<SettingsScopeSnapshot<GrokSettingsView>> = {}): SettingsScopeSnapshot<GrokSettingsView> {
+  return {
+    status: 'ready',
+    value: settings,
+    base: settings,
+    user: {},
+    revision: 1,
+    writable: true,
+    mode: 'host',
+    ...overrides,
+  }
+}
+
 function props(overrides: Partial<GrokPluginCardProps> = {}): GrokPluginCardProps {
+  const current = snapshot()
+  let adopt: ((models: readonly GrokCatalogModel[]) => void) | undefined
   return {
     t: key => en[key],
+    useGrokSettings: selector => selector(current),
     startAuth: vi.fn(() => Promise.resolve({ ok: true } satisfies GrokAuthStartReply)),
     completeAuth: vi.fn(() => Promise.resolve({ ok: true } satisfies GrokAuthStartReply)),
     readAuthStatus: vi.fn(() => Promise.resolve({ loggedIn: false } satisfies GrokAuthStatus)),
     logout: vi.fn(() => Promise.resolve()),
     fetchUsage: vi.fn(() => Promise.resolve({ status: 'unsupported' } satisfies GrokUsageReply)),
     fetchModels: vi.fn(() => Promise.resolve([])),
+    saveConfiguration: vi.fn(next => Promise.resolve({ settings: next, revision: 2 })),
+    beginModelPicker: vi.fn((_picked, onAdopt) => { adopt = onAdopt }),
+    completeModelPicker: vi.fn(candidates => { adopt?.(candidates) }),
+    failModelPicker: vi.fn(),
+    closeModelPicker: vi.fn(),
     ...overrides,
   } as GrokPluginCardProps
 }
 
 function expand(): void {
   fireEvent.click(screen.getByRole('button', { name: `${en.expand}: ${en.title}` }))
+}
+
+function openCatalog(): void {
+  fireEvent.click(screen.getByRole('button', { name: en.models }))
 }
 
 describe('GrokPluginCard', () => {
@@ -34,7 +66,7 @@ describe('GrokPluginCard', () => {
     expect(screen.getByRole('button', { name: `${en.expand}: ${en.title}` })).toBeTruthy()
   })
 
-  it('renders a logged-out state with an enabled sign-in control and grok-4.6 catalog flags', async () => {
+  it('renders a logged-out state with an enabled sign-in control and a collapsed catalog', async () => {
     const fetchUsage = vi.fn(() => Promise.resolve({ status: 'unsupported' } satisfies GrokUsageReply))
     render(<GrokPluginCard {...props({ fetchUsage })} />)
     expand()
@@ -42,15 +74,59 @@ describe('GrokPluginCard', () => {
     await waitFor(() => { expect(screen.getByText(en.signedOut)).toBeTruthy() })
     const signIn = screen.getByRole<HTMLButtonElement>('button', { name: en.signIn })
     expect(signIn.disabled).toBe(false)
+    expect(document.querySelector('[data-model-row="grok-4.6"]')).toBeNull()
+    openCatalog()
     expect(document.querySelector('[data-model-row="grok-4.6"]')).toBeTruthy()
-    const row = document.querySelector('[data-model-row="grok-4.6"]')
-    expect(row?.textContent).toContain(en.thinking)
-    expect(row?.textContent).toContain(en.vision)
+    fireEvent.click(screen.getByRole('button', { name: `${en.modelDetails}: grok-4.6` }))
+    expect(screen.getByLabelText(en.thinking)).toBeTruthy()
+    expect(screen.getByLabelText(en.vision)).toBeTruthy()
     expect(screen.queryByLabelText(/api key/i)).toBeNull()
     expect(screen.queryByText(en.usage)).toBeNull()
     expect(screen.queryByRole('progressbar')).toBeNull()
     expect(screen.queryByRole('button', { name: en.signOut })).toBeNull()
     expect(fetchUsage).not.toHaveBeenCalled()
+  })
+
+  it('saves a displayed subset without replacing it from the account list', async () => {
+    const saveConfiguration = vi.fn((next: GrokSettingsView) => Promise.resolve({ settings: next, revision: 2 }))
+    const fetchModels = vi.fn(() => Promise.resolve([
+      { id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true },
+      { id: 'grok-4.5', name: 'Grok 4.5', thinking: true, vision: true },
+    ]))
+    render(<GrokPluginCard {...props({ saveConfiguration, fetchModels })} />)
+    expand()
+    await waitFor(() => { expect(screen.getByText(en.signedOut)).toBeTruthy() })
+    openCatalog()
+    fireEvent.click(screen.getByRole('button', { name: `${en.remove} grok-4.5` }))
+    fireEvent.click(screen.getByRole('button', { name: en.save }))
+
+    await waitFor(() => { expect(saveConfiguration).toHaveBeenCalledTimes(1) })
+    expect(saveConfiguration.mock.calls[0]?.[0]?.models.map((model: GrokCatalogModel) => model.id)).toEqual(['grok-4.6'])
+    expect(fetchModels).not.toHaveBeenCalled()
+  })
+
+  it('adopts a subset from the account picker without adding the rest', async () => {
+    const fetchModels = vi.fn(() => Promise.resolve([
+      { id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true },
+      { id: 'grok-4.5', name: 'Grok 4.5', thinking: true, vision: true },
+    ]))
+    let adopt: ((models: readonly GrokCatalogModel[]) => void) | undefined
+    const beginModelPicker = vi.fn((_picked: ReadonlySet<string>, onAdopt: (models: readonly GrokCatalogModel[]) => void) => {
+      adopt = onAdopt
+    })
+    const completeModelPicker = vi.fn((candidates: readonly GrokCatalogModel[]) => {
+      adopt?.(candidates.filter(model => model.id === 'grok-4.6'))
+    })
+    const saveConfiguration = vi.fn((next: GrokSettingsView) => Promise.resolve({ settings: next, revision: 2 }))
+    render(<GrokPluginCard {...props({ fetchModels, beginModelPicker, completeModelPicker, saveConfiguration })} />)
+    expand()
+    await waitFor(() => { expect(screen.getByText(en.signedOut)).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: en.fetchModels }))
+    await waitFor(() => { expect(fetchModels).toHaveBeenCalledTimes(1) })
+    expect(completeModelPicker).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: en.save }))
+    await waitFor(() => { expect(saveConfiguration).toHaveBeenCalledTimes(1) })
+    expect(saveConfiguration.mock.calls[0]?.[0]?.models.map((model: GrokCatalogModel) => model.id)).toEqual(['grok-4.6'])
   })
 
   it('signs in through mock RPC and then shows the account identity', async () => {

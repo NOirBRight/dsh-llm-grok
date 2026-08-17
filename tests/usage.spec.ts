@@ -56,7 +56,7 @@ describe('parseGrokBilling', () => {
     expect(usage).toEqual({
       fetchedAt: '2026-08-17T00:00:00.000Z',
       windows: [
-        { id: 'GrokBuild', used: 100, limit: 100, unit: 'percent', period: '2026-08-16 – 2026-08-23' },
+        { id: 'GrokBuild', used: 1, limit: 100, unit: 'percent', period: '2026-08-16 – 2026-08-23' },
       ],
     })
   })

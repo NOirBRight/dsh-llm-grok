@@ -1,7 +1,7 @@
 # dsh-llm-grok 设计
 
 日期：2026-08-17  
-状态：已讨论通过，待按本文实现
+状态：已实现（含登录后补充的显示目录、CLI 头、credits 用量、官方 effort 线）
 
 第三方 DeepSeek Harness 插件：用 xAI 订阅 OAuth（SuperGrok / X Premium+）登录，经 Grok CLI 同款会话入口聊天。不做 console API key。不替代 DSH 内置的 `xai` 路由。
 
@@ -11,21 +11,23 @@
 
 - 本机浏览器 PKCE 登录 / 登出（`auth.x.ai`）
 - 插件自管会话与 refresh（不读、不写 `~/.grok/auth.json`）
-- 固定模型 catalog（源码常量，不拉账号目录）
+- 账户目录（models-v2）与显示目录（`settings.models`）分开；卡片可折叠编辑显示子集
 - Responses 聊天，打到 `https://cli-chat-proxy.grok.com/v1`
 - 每条聊天请求带上 xAI server-side `web_search` 与 `x_search`
-- Plugin 卡展示额度（Host 读 billing，浏览器不碰 token）
+- Plugin 卡展示额度（Host 读 `billing?format=credits`，浏览器不碰 token）
+- 官方 `reasoning.effort`：`low` / `medium` / `high`（默认）/ `xhigh`（仅 4.6）
+- proxy 要求的 CLI 版本头，避免 426
 
 ### V1 不做
 
 - API key 登录或回退
 - Device-code
-- 按账号拉取 / 编辑 catalog
 - `ctx.web` search / fetch 提供方（Fetch 继续用 DSH 内置 HTTP）
 - 双协议（Completions + Responses）
 - 复用或同步 Grok CLI 凭据
+- 聊天中途 401 后再 refresh 一次（只在请求前 `ensureFreshSession`）
 
-以后若加 device-code、账号 catalog、usage 字段细化，只动对应模块，不改 provider id 与 settings namespace。
+以后若加 device-code、usage 字段细化或 401 重试，只动对应模块，不改 provider id 与 settings namespace。
 
 ## 2. 身份与安装面
 
@@ -97,33 +99,35 @@ Client 只发起与展示状态。Token 不进浏览器、不进 settings、不�
 
 - `api`: OpenAI Responses
 - `baseURL`: `https://cli-chat-proxy.grok.com/v1`
-- 模型来自固定 catalog
+- 模型来自 `settings.models` 显示子集；未保存时用冻结默认 `grok-4.6` / `grok-4.5`
 - 每请求把当前 access token 交给 `resolveApiKey`（只传 access token，不传会话 JSON）
+- 出口把 `reasoning` 收成官方 `{ effort }`，不发 `none` / `summary`
 
 `PiAiAdapter` 只会把 DSH function tool 编成 `{ type: "function" }`。`responses-tools.ts` 在请求发出前把 `{ type: "web_search" }` 与 `{ type: "x_search" }` 追加进 `tools`。pi-ai 的 Responses 解析忽略不认识的 `web_search_call` / `x_search_call`；服务端搜完模型继续吐文本，DSH 不执行搜索、不把搜索伪造成 `ctx.web`。
 
 V1 这两项搜索始终开启，卡上不提供开关。
 
-Proxy 身份头：先用本插件自己的标识（名称 + 版本）。若 proxy 因缺 CLI 头返回 426，再用使请求成功的最小兼容头，并在 README 写明这是兼容约束、不是冒充官方 CLI 产品。
+Proxy 身份头：本插件 `X-Dsh-Plugin`，外加 proxy 要求的 `x-grok-client-version` / `x-grok-client-identifier`。缺版本会 426。这是兼容约束，不是冒充官方 CLI。
 
-## 7. 固定 catalog
+## 7. 两份 catalog
 
-源码里一份冻结列表，V1 不请求 models-v2。必有：
+账户列表：登录后 `GET /v1/models-v2`，只给卡片挑选器用。
+
+显示列表：`settings.models`，对话 picker 和聊天只认这份。卡片默认折叠，可拖动 / 改 / 删 / 从账户里勾选。尚未保存时默认：
 
 | id | thinking | vision |
 |---|---|---|
 | `grok-4.6` | 是 | 是 |
+| `grok-4.5` | 是 | 是 |
 
-实现时若核对 proxy / Grok CLI 还有当前订阅稳定在用的 id（例如同代非推理变体），只允许追加进同一常量，不允许改成在线发现。
-
-Plugin 卡只读展示该列表（id、能力旗标）。用户在对话 picker 里选模型。档位不够用某模型时，把提供方错误原样交给 DSH，卡上不预判档位。
+档位不够用某模型时，把提供方错误原样交给 DSH，卡上不预判档位。
 
 ## 8. 额度
 
 卡上独立一节，对标 `dsh-llm-ollama` 的 usage。
 
 - RPC `usage/read`。未登录不打网，回未登录。
-- Host 用当前会话请求 `GET https://cli-chat-proxy.grok.com/v1/billing`（实现时按真实 JSON 解码；字段对不上或 404 → `unsupported`）。
+- Host 用当前会话请求 `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits`（实现时按真实 JSON 解码；`usagePercent` / `creditUsagePercent` 的 `1.0` 是 1%，不是 100%；字段对不上或 404 → `unsupported`）。
 - 浏览器只收已解码视图（窗口：已用 / 上限 / 周期），永不收 token。
 - 有数据：用量条。无此面：一句「不支持」，不是错误。传输失败才是错误。
 
@@ -136,13 +140,16 @@ Channel：`/grok`，`authority: 'loopback'`。
 | `auth/start` | 开始 PKCE |
 | `auth/status` | 登录态，无密钥 |
 | `auth/logout` | 清会话 |
+| `auth/complete` | 粘贴 Grok Build 授权码 |
+| `models/list` | 账户目录，不改显示子集 |
+| `settings/save` | 原子写入显示目录 |
 | `usage/read` | 额度快照或 unsupported |
 
 载荷用 `client-contract.ts` 的解码函数校验。未知 endpoint 回内部错误。
 
 ## 10. Settings
 
-`installSettingsSection` 挂 `llm-grok`。V1 节里只有非密钥运行参数：`streamIdleTimeoutMs` 默认 300000，retry 用 DSH 普通默认。没有 `apiKeyEnv`，没有用户可改的 baseURL。
+`installSettingsSection` 挂 `llm-grok`。节里是非密钥运行参数：`streamIdleTimeoutMs` 默认 300000，retry 用 DSH 普通默认，以及 `models`（显示目录）。没有 `apiKeyEnv`，没有用户可改的 baseURL。
 
 ## 11. 错误
 
@@ -163,9 +170,10 @@ Channel：`/grok`，`authority: 'loopback'`。
 
 - PKCE：`state` 不匹配拒绝；成功换票后文件权限与字段
 - refresh：过期先刷；401 刷一次再重试；刷失败清会话
-- Responses：发出的 JSON 含 DSH function tools **以及** `web_search` / `x_search`
-- 额度：正常视图 / unsupported / 未登录不请求
-- Client：未登录 / 已登录 / 额度三种状态；catalog 只读
+- Responses：发出的 JSON 含 DSH function tools **以及** `web_search` / `x_search`；`reasoning` 只有官方 `effort`
+- 额度：正常视图 / unsupported / 未登录不请求；credits `1.0` → 1%
+- Client：未登录 / 已登录 / 额度；显示目录可折叠编辑；账户列表不覆盖显示子集
+- `settings/save`：只改 `models`，拒 token 字段
 
 `pnpm run check` = `build` + `test` + `pack:check`（pack 清单对齐 ollama：`lib/`、`cordis.patch.yml`、README）。
 

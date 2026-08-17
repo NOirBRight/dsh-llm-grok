@@ -14,6 +14,8 @@ import type {
   StreamOptions,
 } from '@earendil-works/pi-ai'
 import { openAIResponsesApi } from '@earendil-works/pi-ai/api/openai-responses.lazy'
+import type { GrokCatalogModel } from './client-contract.ts'
+import { applyGrokReasoningWire } from './reasoning.ts'
 
 /** Server-side search tools the Grok CLI chat proxy accepts on every request. */
 export const GROK_SERVER_SEARCH_TOOLS = [
@@ -45,8 +47,16 @@ export function injectGrokServerSearchTools(payload: unknown): unknown {
   return { ...payload, tools }
 }
 
-function withServerSearchTools<TOptions extends StreamOptions>(
+function catalogFor(model: Model<Api>, models: readonly GrokCatalogModel[]): GrokCatalogModel {
+  return models.find(entry => entry.id === model.id) ?? {
+    id: model.id,
+    thinking: model.reasoning,
+  }
+}
+
+function withGrokResponsesBody<TOptions extends StreamOptions>(
   streamFn: (model: Model<Api>, context: PiContext, options?: TOptions) => AssistantMessageEventStream,
+  models: readonly GrokCatalogModel[],
 ): (model: Model<Api>, context: PiContext, options?: TOptions) => AssistantMessageEventStream {
   return (model, context, options) => {
     const original = options?.onPayload
@@ -54,20 +64,22 @@ function withServerSearchTools<TOptions extends StreamOptions>(
       ...options,
       onPayload: async (payload, nextModel) => {
         const next = original === undefined ? payload : await original(payload, nextModel)
-        return injectGrokServerSearchTools(next === undefined ? payload : next)
+        const injected = injectGrokServerSearchTools(next === undefined ? payload : next)
+        return applyGrokReasoningWire(injected, catalogFor(nextModel, models))
       },
     } as TOptions)
   }
 }
 
 /**
- * OpenAI Responses streams with Grok server-side search tools patched in.
- * Wrapping `onPayload` is required because pi-ai's client has no custom fetch.
+ * OpenAI Responses streams with Grok server-side search tools and official
+ * `reasoning.effort` patched in. Wrapping `onPayload` is required because
+ * pi-ai's client has no custom fetch.
  */
-export function grokResponsesApi(): ProviderStreams {
+export function grokResponsesApi(models: readonly GrokCatalogModel[] = []): ProviderStreams {
   const base = openAIResponsesApi()
   return {
-    stream: withServerSearchTools<StreamOptions>(base.stream),
-    streamSimple: withServerSearchTools<SimpleStreamOptions>(base.streamSimple),
+    stream: withGrokResponsesBody<StreamOptions>(base.stream, models),
+    streamSimple: withGrokResponsesBody<SimpleStreamOptions>(base.streamSimple, models),
   }
 }

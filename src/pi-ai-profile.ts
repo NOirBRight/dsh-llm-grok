@@ -11,6 +11,7 @@ import type { ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 import { GROK_CATALOG, GROK_PROVIDER } from './client-contract.ts'
 import type { GrokCatalogModel } from './client-contract.ts'
 import { GROK_CLI_REQUEST_HEADERS } from './cli-identity.ts'
+import { grokThinkingLevelMap } from './reasoning.ts'
 import { grokResponsesApi } from './responses-tools.ts'
 
 /** Chat proxy base used by the Grok CLI (`POST {base}/responses`). */
@@ -37,16 +38,6 @@ function proxyHeaders(): Record<string, string> {
   }
 }
 
-const THINKING_LEVELS: ThinkingLevelMap = {
-  off: 'none',
-  minimal: null,
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  xhigh: null,
-  max: null,
-}
-
 /** Validated connection facts for one chat operation. */
 export interface GrokConnectionOptions {
   /** Responses API base, including `/v1`. */
@@ -61,7 +52,7 @@ export interface GrokConnectionOptions {
 
 function thinkingLevelMap(model: GrokCatalogModel): ThinkingLevelMap | undefined {
   if (model.thinking !== true) return undefined
-  return THINKING_LEVELS
+  return grokThinkingLevelMap(model)
 }
 
 function toPiAiModel(model: GrokCatalogModel, baseUrl: string): Model<'openai-responses'> {
@@ -115,7 +106,7 @@ export function createGrokPiAiProfile(connection: GrokConnectionOptions): Resolv
     baseUrl: baseURL,
     auth: grokAuth(),
     models,
-    api: grokResponsesApi(),
+    api: grokResponsesApi(source),
     headers,
   })
   return {

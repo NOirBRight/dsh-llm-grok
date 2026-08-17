@@ -92,7 +92,9 @@ function periodFromConfig(config: Record<string, unknown>): string | undefined {
 }
 
 function percentWindow(id: string, percent: number, period: string | undefined): GrokUsageWindow {
-  const used = Math.round(Math.min(1, Math.max(0, percent)) * 100)
+  // Official grok.com usage shows 1% when the wire value is 1.0 — the scale is
+  // already percent points, not a 0–1 fraction.
+  const used = Math.min(100, Math.max(0, Math.round(percent * 10) / 10))
   return {
     id,
     used,

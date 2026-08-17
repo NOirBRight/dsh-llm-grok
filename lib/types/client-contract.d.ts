@@ -17,28 +17,63 @@ export declare const GROK_AUTH_LOGOUT_ENDPOINT = "auth/logout";
 export declare const GROK_AUTH_COMPLETE_ENDPOINT = "auth/complete";
 /** Secret-free subscription-usage snapshot inside {@link GROK_RPC_CHANNEL}. */
 export declare const GROK_USAGE_ENDPOINT = "usage/read";
+/** One official models-v2 reasoning menu row (`id` → wire `value`). */
+export interface GrokReasoningEffort {
+    /** Menu option id accepted by `/effort` and `--effort`. */
+    id: string;
+    /** Value written to Responses `reasoning.effort`. */
+    value: string;
+    /** Official menu label (`Extra High Effort`, …). */
+    label?: string;
+    /** Official menu description. */
+    description?: string;
+}
 /** One model in the plugin's frozen catalog. */
 export interface GrokCatalogModel {
     /** Wire model id accepted by the chat proxy. */
     id: string;
     /** Selector label; omission uses {@link id}. */
     name?: string;
+    /** Optional selector detail. */
+    description?: string;
+    /** Known combined request and response context capacity. */
+    contextWindow?: number;
+    /** Per-request output cap for this model. */
+    maxTokens?: number;
     /** Whether the model supports native thinking. */
     thinking?: boolean;
+    /** Official advertised reasoning menu; omission uses the frozen per-id list. */
+    reasoningEfforts?: readonly GrokReasoningEffort[];
+    /** Official default `reasoning.effort` (`reasoning_effort` on models-v2). */
+    defaultReasoningEffort?: string;
     /** Whether the model accepts image input. */
     vision?: boolean;
+    /** Whether the model supports tool calls. */
+    tools?: boolean;
 }
-/**
- * Offline fallback when the account catalog cannot be read. Live ids come
- * from GET /v1/models-v2 after sign-in.
- */
 export declare const GROK_CATALOG: readonly GrokCatalogModel[];
 /** Account model list inside {@link GROK_RPC_CHANNEL}. */
 export declare const GROK_MODELS_ENDPOINT = "models/list";
+/** Atomic settings-save endpoint. */
+export declare const GROK_SAVE_ENDPOINT = "settings/save";
 /** Settings fields presented by the package's Web configuration card. No apiKeyEnv. */
 export interface GrokSettingsView {
     /** Stream idle timeout in milliseconds. */
     streamIdleTimeoutMs: number;
+    /** Displayed advisory catalog (a subset of the account catalog). */
+    models: GrokCatalogModel[];
+}
+/** Atomic editable-settings payload sent by the browser face. */
+export interface GrokSaveRequest {
+    /** Complete displayed catalog currently shown by the editor. */
+    models: GrokCatalogModel[];
+    /** Settings descriptor revision from which the editor began. */
+    expectedRevision: number;
+}
+/** Accepted settings snapshot after one Host mutation. */
+export interface GrokSaveResult {
+    settings: GrokSettingsView;
+    revision: number;
 }
 /** Secret-free login snapshot returned by {@link GROK_AUTH_STATUS_ENDPOINT}. */
 export interface GrokAuthStatus {
@@ -150,12 +185,17 @@ export declare function decodeGrokAuthLogoutReply(value: unknown): GrokAuthLogou
  * @returns the validated snapshot, or undefined when it is malformed or carries secrets.
  */
 export declare function decodeGrokUsageView(value: unknown): GrokUsageView | undefined;
-/**
- * Narrow the usage reply returned by the Host usage endpoint.
- * @param value - untrusted RPC result value.
- * @returns the validated reply, or undefined when it is malformed or carries secrets.
- */
 export declare function decodeGrokCatalogModel(value: unknown): GrokCatalogModel | undefined;
 export declare function decodeGrokModelsReply(value: unknown): GrokModelsReply | undefined;
+/**
+ * Narrow an atomic catalog-save request. Token-shaped fields fail closed.
+ * @param value - untrusted RPC request payload.
+ */
+export declare function decodeGrokSaveRequest(value: unknown): GrokSaveRequest | undefined;
+/**
+ * Narrow the Host save reply before the card updates.
+ * @param value - untrusted RPC result value.
+ */
+export declare function decodeGrokSaveResult(value: unknown): GrokSaveResult | undefined;
 export declare function decodeGrokUsageReply(value: unknown): GrokUsageReply | undefined;
 //# sourceMappingURL=client-contract.d.ts.map

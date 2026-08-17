@@ -3,7 +3,7 @@
  */
 
 import { GROK_CATALOG } from './client-contract.ts'
-import type { GrokCatalogModel } from './client-contract.ts'
+import type { GrokCatalogModel, GrokReasoningEffort } from './client-contract.ts'
 import { GROK_CLI_REQUEST_HEADERS } from './cli-identity.ts'
 
 /** Production models URL. */
@@ -13,6 +13,35 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function asEffort(value: unknown): GrokReasoningEffort | undefined {
+  if (!isRecord(value)) return undefined
+  const id = value['id']
+  const wire = value['value']
+  const label = value['label']
+  const description = value['description']
+  if (typeof id !== 'string' || id.length === 0) return undefined
+  if (typeof wire !== 'string' || wire.length === 0) return undefined
+  return {
+    id,
+    value: wire,
+    ...typeof label === 'string' && label.length > 0 ? { label } : {},
+    ...typeof description === 'string' && description.length > 0 ? { description } : {},
+  }
+}
+
+function asEfforts(value: unknown): GrokReasoningEffort[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const efforts: GrokReasoningEffort[] = []
+  const seen = new Set<string>()
+  for (const entry of value) {
+    const effort = asEffort(entry)
+    if (effort === undefined || seen.has(effort.value)) continue
+    seen.add(effort.value)
+    efforts.push(effort)
+  }
+  return efforts.length > 0 ? efforts : undefined
+}
+
 function asModel(value: unknown): GrokCatalogModel | undefined {
   if (!isRecord(value)) return undefined
   const id = value['id']
@@ -20,11 +49,17 @@ function asModel(value: unknown): GrokCatalogModel | undefined {
   const name = value['name']
   const thinking = value['supports_reasoning_effort'] === true
     || value['thinking'] === true
+  const defaultReasoningEffort = value['reasoning_effort']
+  const reasoningEfforts = asEfforts(value['reasoning_efforts'])
   return {
     id,
     ...typeof name === 'string' && name.length > 0 ? { name } : {},
     thinking,
     vision: true,
+    ...thinking && typeof defaultReasoningEffort === 'string' && defaultReasoningEffort.length > 0
+      ? { defaultReasoningEffort }
+      : {},
+    ...thinking && reasoningEfforts !== undefined ? { reasoningEfforts } : {},
   }
 }
 

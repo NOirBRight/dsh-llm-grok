@@ -9,9 +9,13 @@ import {
   GROK_AUTH_LOGOUT_ENDPOINT,
   GROK_AUTH_START_ENDPOINT,
   GROK_AUTH_STATUS_ENDPOINT,
+  GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   GROK_RPC_CHANNEL,
+  GROK_SAVE_ENDPOINT,
+  GROK_SETTINGS_NAMESPACE,
   GROK_USAGE_ENDPOINT,
   decodeGrokAuthStatus,
+  decodeGrokSaveResult,
   decodeGrokUsageReply,
 } from '../src/client-contract.ts'
 import { apply, Config, createGrokRpcHandler, inject } from '../src/index.ts'
@@ -309,5 +313,93 @@ describe('Grok loopback auth RPC', () => {
       createLaunchEnvironmentSnapshot([{ source: 'process', values: { DSH_HOME: root } }]),
     )
     expect(resolveGrokSessionPath(ctx)).toBe(join(root, 'grok-oauth.json'))
+  })
+})
+
+describe('Grok settings/save RPC', () => {
+  it('commits only the displayed catalog through one revision-fenced mutation', async () => {
+    const current = {
+      streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+      models: [
+        { id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true },
+        { id: 'grok-4.5', name: 'Grok 4.5', thinking: true, vision: true },
+      ],
+    }
+    let value = current
+    let revision = 1
+    const mutate = vi.fn(async (
+      _ns: string,
+      ops: readonly { op: string, path: readonly string[], value: unknown }[],
+      expected: number,
+    ) => {
+      expect(expected).toBe(revision)
+      const next = structuredClone(value) as Record<string, unknown>
+      for (const op of ops) next[op.path[0] as string] = structuredClone(op.value)
+      value = next as typeof current
+      revision += 1
+    })
+    const settings = {
+      register: () => ({
+        get: () => value,
+        watch: () => () => undefined,
+        update: () => Promise.resolve(),
+        replace: () => Promise.resolve(),
+      }),
+      describe: () => [{ ns: GROK_SETTINGS_NAMESPACE, value, revision }],
+      mutate,
+    }
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime).await()
+    const handle = vi.fn((_channel: string, _handler: Handler, _options: { authority: 'loopback' }) =>
+      () => Promise.resolve())
+    ctx.provide('connection', { rpc: { handle } } as never)
+    ctx.provide('settings', settings as never)
+    const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})
+    await fiber.await()
+    const handler = handle.mock.calls[0]?.[1]
+    if (handler === undefined) throw new Error('Grok RPC was not registered')
+
+    const result = await handler(GROK_SAVE_ENDPOINT, {
+      models: [{ id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true }],
+      expectedRevision: 1,
+    }, new AbortController().signal)
+
+    expect(decodeGrokSaveResult(result.ok ? result.value : undefined)).toEqual({
+      settings: {
+        streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+        models: [{ id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true }],
+      },
+      revision: 2,
+    })
+    expect(mutate).toHaveBeenCalledTimes(1)
+    expect(mutate.mock.calls[0]?.[1]).toEqual([
+      { op: 'set', path: ['models'], value: [{ id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true }] },
+    ])
+    expect(JSON.stringify(result)).not.toMatch(/accessToken|refreshToken|Bearer/u)
+
+    await fiber.dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('rejects a save payload that tries to send token fields', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime).await()
+    const handle = vi.fn((_channel: string, _handler: Handler, _options: { authority: 'loopback' }) =>
+      () => Promise.resolve())
+    ctx.provide('connection', { rpc: { handle } } as never)
+    const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})
+    await fiber.await()
+    const handler = handle.mock.calls[0]?.[1]
+    if (handler === undefined) throw new Error('Grok RPC was not registered')
+
+    const result = await handler(GROK_SAVE_ENDPOINT, {
+      models: [{ id: 'grok-4.6' }],
+      expectedRevision: 1,
+      accessToken: 'nope',
+    }, new AbortController().signal)
+    expect(result.ok).toBe(false)
+
+    await fiber.dispose()
+    await ctx.fiber.dispose()
   })
 })

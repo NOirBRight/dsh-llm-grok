@@ -5,6 +5,7 @@
 import { LlmAdapter } from '@deepseek-ai/dsh-llm';
 import type { GenerateOptions, LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo, ResolvedRetryPolicy, StreamChunk } from '@deepseek-ai/dsh-llm';
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment';
+import type { GrokCatalogModel } from './client-contract.ts';
 import type { GrokOAuthRuntime } from './oauth.ts';
 import type { GrokConnectionOptions } from './pi-ai-profile.ts';
 export type { GrokConnectionOptions } from './pi-ai-profile.ts';
@@ -19,8 +20,6 @@ export interface GrokAdapterOptions {
     resolveApiKey: () => Promise<string>;
     /** Resolve the optional durable attachment service at request time. */
     resolveAttachments?: () => AttachmentStore | undefined;
-    /** Refresh the account catalog before listing models for the picker. */
-    refreshCatalog?: () => Promise<void>;
 }
 /**
  * Return the current access token, refreshing when the session is near expiry.
@@ -29,6 +28,11 @@ export interface GrokAdapterOptions {
  * @param runtime - Host OAuth runtime.
  */
 export declare function resolveGrokAccessToken(runtime: GrokOAuthRuntime): Promise<string>;
+/**
+ * Replace pi-ai's generated effort list with official models-v2 order, labels,
+ * and the documented default `reasoning.effort`.
+ */
+export declare function applyOfficialReasoningMetadata(info: LlmResolvedModelInfo, catalog: GrokCatalogModel | undefined): LlmResolvedModelInfo;
 /** The Grok chat adapter backed by pi-ai OpenAI Responses. */
 export declare class GrokAdapter extends LlmAdapter {
     private readonly config;

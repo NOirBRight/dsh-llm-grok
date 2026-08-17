@@ -12,6 +12,7 @@ import type { ConnectionRpcHandler } from '@deepseek-ai/dsh-client-connection'
 import { resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
 import type { RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
 import { deepEqualJson, installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsPathOp } from '@deepseek-ai/dsh-settings'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { GrokAdapter, resolveGrokAccessToken } from './adapter.ts'
 import type { GrokConnectionOptions } from './adapter.ts'
@@ -25,10 +26,13 @@ import {
   GROK_MODELS_ENDPOINT,
   GROK_PROVIDER,
   GROK_RPC_CHANNEL,
+  GROK_SAVE_ENDPOINT,
   GROK_SETTINGS_NAMESPACE,
   GROK_USAGE_ENDPOINT,
   decodeGrokAuthCompleteRequest,
   decodeGrokEmptyRequest,
+  decodeGrokSaveRequest,
+  decodeGrokSettings,
 } from './client-contract.ts'
 import type { GrokCatalogModel } from './client-contract.ts'
 import { completePkceLogin, createGrokAuthRuntime, ensureFreshSession, startPkceLogin } from './oauth.ts'
@@ -51,8 +55,11 @@ export {
   GROK_AUTH_LOGOUT_ENDPOINT,
   GROK_AUTH_COMPLETE_ENDPOINT,
   GROK_MODELS_ENDPOINT,
+  GROK_SAVE_ENDPOINT,
   GROK_USAGE_ENDPOINT,
   decodeGrokSettings,
+  decodeGrokSaveRequest,
+  decodeGrokSaveResult,
   decodeGrokAuthStatus,
   decodeGrokAuthStartReply,
   decodeGrokAuthLogoutReply,
@@ -70,8 +77,22 @@ export {
   createGrokPiAiProfile,
 } from './pi-ai-profile.ts'
 export { GROK_SERVER_SEARCH_TOOLS, grokResponsesApi, injectGrokServerSearchTools } from './responses-tools.ts'
+export {
+  GROK_REASONING_WIRES,
+  GROK_DEFAULT_REASONING_WIRE,
+  GROK_4_6_REASONING_EFFORTS,
+  GROK_4_5_REASONING_EFFORTS,
+  applyGrokReasoningWire,
+  grokThinkingLevelMap,
+  officialDefaultEffort,
+  officialEffortsFor,
+  resolveGrokReasoningWire,
+} from './reasoning.ts'
 export type {
   GrokCatalogModel,
+  GrokReasoningEffort,
+  GrokSaveRequest,
+  GrokSaveResult,
   GrokSettingsView,
   GrokAuthStatus,
   GrokAuthStartReply,
@@ -124,6 +145,30 @@ export type ResolvedGrokOptions = GrokConnectionOptions
  * Catalog membership and the chat base URL are source constants.
  * @param config - raw plugin config or resolved settings snapshot.
  */
+function resolveModels(models: readonly GrokCatalogModel[] | undefined): GrokCatalogModel[] {
+  const seen = new Set<string>()
+  return (models ?? GROK_CATALOG).map((model) => {
+    if (model.id.length === 0) throw new Error('llm-grok: catalog model ids must be non-empty')
+    if (model.name !== undefined && model.name.length === 0) {
+      throw new Error(`llm-grok: catalog model "${model.id}" has an empty name`)
+    }
+    if (seen.has(model.id)) throw new Error(`llm-grok: duplicate catalog model "${model.id}"`)
+    seen.add(model.id)
+    return {
+      id: model.id,
+      ...model.name === undefined ? {} : { name: model.name },
+      ...model.description === undefined ? {} : { description: model.description },
+      ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
+      ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
+      ...model.thinking === undefined ? {} : { thinking: model.thinking },
+      ...model.vision === undefined ? {} : { vision: model.vision },
+      ...model.tools === undefined ? {} : { tools: model.tools },
+      ...model.defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort: model.defaultReasoningEffort },
+      ...model.reasoningEfforts === undefined ? {} : { reasoningEfforts: model.reasoningEfforts },
+    }
+  })
+}
+
 export function resolveAdapterOptions(config: Config): ResolvedGrokOptions {
   const streamIdleTimeoutMs = config.streamIdleTimeoutMs ?? GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS
   if (!Number.isFinite(streamIdleTimeoutMs)
@@ -135,7 +180,7 @@ export function resolveAdapterOptions(config: Config): ResolvedGrokOptions {
   }
   return {
     baseURL: GROK_CHAT_BASE_URL,
-    models: GROK_CATALOG,
+    models: resolveModels(config.models),
     streamIdleTimeoutMs,
     retryPolicy: resolveRetryPolicy(config.retryPolicy, 'llm-grok: retryPolicy'),
   }
@@ -149,14 +194,28 @@ export function resolveAdapterOptions(config: Config): ResolvedGrokOptions {
 export interface Config {
   /** Maximum provider idle time while one stream read is outstanding (default five minutes). */
   streamIdleTimeoutMs?: number
+  /** Displayed conversation-picker catalog; omission uses the frozen default. */
+  models?: GrokCatalogModel[]
   /** Provider-owned model-request retry policy; omission uses normal defaults. */
   retryPolicy?: RetryPolicyConfig
 }
+
+const catalogModel = z.object({
+  id: z.string().required(),
+  name: z.string(),
+  description: z.string(),
+  contextWindow: z.number().step(1).min(1),
+  maxTokens: z.number().step(1).min(1),
+  vision: z.boolean(),
+  thinking: z.boolean(),
+  tools: z.boolean(),
+})
 
 export const Config: z<Config> = z.object({
   streamIdleTimeoutMs: z.number().min(Number.MIN_VALUE).max(MAX_TIMER_DELAY_MS).default(
     GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   ),
+  models: z.array(catalogModel),
   retryPolicy: RetryPolicySchema,
 })
 
@@ -177,8 +236,6 @@ export interface GrokRpcHandlerOptions {
   billingURL?: string
   /** Override the production models-v2 URL for tests. */
   modelsURL?: string
-  /** Remember a discovered catalog for the chat adapter. */
-  adoptCatalog?: (models: readonly GrokCatalogModel[]) => void
 }
 
 function usageFailure(error: unknown, secrets: readonly string[]) {
@@ -231,7 +288,6 @@ export function createGrokRpcHandler(
         fetch: runtime.fetch,
         signal,
       }) ?? fallbackGrokCatalog()
-      options?.adoptCatalog?.(models)
       return { ok: true as const, value: { models } }
     }
     if (endpoint === GROK_USAGE_ENDPOINT) {
@@ -255,16 +311,44 @@ export function createGrokRpcHandler(
   }
 }
 
+async function saveDisplayedCatalog(ctx: Context, payload: unknown) {
+  const request = decodeGrokSaveRequest(payload)
+  if (request === undefined) return internalError('invalid Grok settings request')
+  const settings = ctx.get('settings')
+  if (settings === undefined) return internalError('Grok settings are unavailable')
+  try {
+    const before = settings.describe().find(descriptor => descriptor.ns === NS)
+    if (before === undefined) return internalError('Grok settings are unavailable')
+    const current = decodeGrokSettings(before.value)
+    if (current === undefined) return internalError('Grok settings are invalid')
+    const ops: SettingsPathOp[] = []
+    if (!deepEqualJson(current.models, request.models)) {
+      ops.push({ op: 'set', path: ['models'], value: request.models })
+    }
+    if (ops.length > 0) await settings.mutate(NS, ops, request.expectedRevision)
+    const accepted = settings.describe().find(descriptor => descriptor.ns === NS)
+    const acceptedSettings = decodeGrokSettings(accepted?.value)
+    if (accepted === undefined || acceptedSettings === undefined) {
+      return internalError('Grok settings could not be reloaded')
+    }
+    return { ok: true as const, value: { settings: acceptedSettings, revision: accepted.revision } }
+  } catch (error: unknown) {
+    const message = error instanceof Error && error.message.length > 0
+      ? error.message
+      : 'Grok settings save failed'
+    return internalError(message)
+  }
+}
+
 export function apply(ctx: Context, config: Config): void {
   let current: () => Config = () => config
   let lastRaw: Config | undefined
   let lastGood: ResolvedGrokOptions | undefined
-  let catalog: readonly GrokCatalogModel[] = fallbackGrokCatalog()
   const options = (): ResolvedGrokOptions => {
     const raw = current()
-    if (raw === lastRaw && lastGood !== undefined && lastGood.models === catalog) return lastGood
+    if (raw === lastRaw && lastGood !== undefined) return lastGood
     try {
-      const next = { ...resolveAdapterOptions(raw), models: catalog }
+      const next = resolveAdapterOptions(raw)
       lastRaw = raw
       lastGood = next
       return next
@@ -281,23 +365,10 @@ export function apply(ctx: Context, config: Config): void {
   const runtime = createGrokAuthRuntime({
     resolveSessionPath: () => resolveGrokSessionPath(ctx),
   })
-  const adoptCatalog = (models: readonly GrokCatalogModel[]): void => {
-    catalog = models
-  }
-  const refreshCatalog = async (): Promise<void> => {
-    const session = await ensureFreshSession(runtime)
-    if (session === undefined) return
-    const models = await readGrokModels({
-      accessToken: session.accessToken,
-      fetch: runtime.fetch,
-    })
-    if (models !== undefined) catalog = models
-  }
   const adapter = new GrokAdapter({
     options,
     resolveApiKey: () => resolveGrokAccessToken(runtime),
     resolveAttachments: () => ctx.get('attachments'),
-    refreshCatalog,
   })
   ctx.llm.registerConfigurableProviders([
     { provider: GROK_PROVIDER, displayName: 'Grok', settingsNs: NS, settingsPath: [] },
@@ -305,6 +376,7 @@ export function apply(ctx: Context, config: Config): void {
   const registration = ctx.llm.registerAdapter([GROK_PROVIDER], adapter)
   let registeredPolicy = options().retryPolicy
   const ensureRegistrationFacts = (): void => {
+    lastRaw = undefined
     const policy = options().retryPolicy
     if (deepEqualJson(policy, registeredPolicy)) return
     registration.replace([GROK_PROVIDER])
@@ -312,16 +384,20 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   ctx.inject(['connection'], (connectionCtx) => {
+    const inner = createGrokRpcHandler(runtime)
     connectionCtx.connection.rpc.handle(
       GROK_RPC_CHANNEL,
-      createGrokRpcHandler(runtime, { adoptCatalog }),
+      async (endpoint, payload, signal) => {
+        if (endpoint === GROK_SAVE_ENDPOINT) return saveDisplayedCatalog(ctx, payload)
+        return inner(endpoint, payload, signal)
+      },
       { authority: 'loopback' },
     )
   })
 
   installSettingsSection(ctx, NS, Config, config, {
     setSource: (source) => {
-      current = source
+      current = source as () => Config
     },
     onChange: ensureRegistrationFacts,
   })

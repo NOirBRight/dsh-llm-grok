@@ -1,8 +1,34 @@
 // @vitest-environment jsdom
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
+import type { GrokSettingsView } from '../src/client-contract.ts'
 import { apply, inject } from '../src/client/index.ts'
+
+const value: GrokSettingsView = {
+  streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+  models: GROK_CATALOG.map(model => ({ ...model })),
+}
+
+function scope(): SettingsScope<GrokSettingsView> {
+  const snapshot: SettingsScopeSnapshot<GrokSettingsView> = {
+    status: 'ready',
+    value,
+    base: value,
+    user: {},
+    revision: 1,
+    writable: true,
+    mode: 'host',
+  }
+  return {
+    getSnapshot: () => snapshot,
+    subscribe: () => () => undefined,
+    set: vi.fn(() => Promise.resolve()),
+    unset: vi.fn(() => Promise.resolve()),
+  }
+}
 
 interface SlotEntry {
   options: Record<string, unknown>
@@ -35,6 +61,7 @@ async function bench() {
     register: () => () => undefined,
     bind: () => (key: string) => key,
   } as never)
+  ctx.provide('settingsScope', { bind: () => scope() } as never)
   ctx.provide('connection', {
     rpc: {
       call: async () => ({ ok: true, value: { loggedIn: false } }),
@@ -45,7 +72,7 @@ async function bench() {
 
 describe('Grok client plugin registration', () => {
   it('declares only the client services it consumes', () => {
-    expect(inject).toEqual(['slots', 'locale', 'connection'])
+    expect(inject).toEqual(['slots', 'locale', 'connection', 'settingsScope'])
   })
 
   it('reads usage through the grok usage/read RPC without exposing tokens', async () => {
@@ -57,6 +84,7 @@ describe('Grok client plugin registration', () => {
       bind: () => (key: string) => key,
     } as never)
     const calls: Array<{ channel: string, endpoint: string, payload: unknown }> = []
+    ctx.provide('settingsScope', { bind: () => scope() } as never)
     ctx.provide('connection', {
       rpc: {
         call: async (channel: string, endpoint: string, payload: unknown) => {
@@ -105,7 +133,8 @@ describe('Grok client plugin registration', () => {
     expect(entries[0]?.options).toMatchObject({ id: 'grok', order: 40, locale: 'settings.grok' })
     const face = (entries[0] as { inject?: () => unknown }).inject?.() as { t: (key: string) => string }
     expect(typeof face.t).toBe('function')
-    expect(slots.entries('shell.overlay')).toHaveLength(0)
+    expect(slots.entries('shell.overlay')).toHaveLength(1)
+    expect(slots.entries('shell.overlay')[0]?.options).toMatchObject({ id: 'grok-model-picker' })
 
     await fiber.dispose()
 

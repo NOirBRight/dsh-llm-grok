@@ -2,11 +2,12 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createUserMessage, LlmError, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, LlmError, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { GrokAdapter, resolveGrokAccessToken } from '../src/adapter.ts'
 import type { GrokAdapterOptions, GrokConnectionOptions } from '../src/adapter.ts'
 import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
+import { resolveAdapterOptions } from '../src/index.ts'
 import { createGrokAuthRuntime } from '../src/oauth.ts'
 import { injectGrokServerSearchTools } from '../src/responses-tools.ts'
 import { writeSession } from '../src/session.ts'
@@ -86,6 +87,15 @@ describe('injectGrokServerSearchTools', () => {
   })
 })
 
+describe('resolveAdapterOptions', () => {
+  it('uses the saved displayed catalog, not the frozen account list', () => {
+    const options = resolveAdapterOptions({
+      models: [{ id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true }],
+    })
+    expect(options.models.map(model => model.id)).toEqual(['grok-4.6'])
+  })
+})
+
 describe('GrokAdapter metadata', () => {
   it('lists frozen catalog models with thinking and vision', async () => {
     const a = adapter({})
@@ -95,8 +105,20 @@ describe('GrokAdapter metadata', () => {
       { provider: 'grok', id: 'grok-4.6', name: 'Grok 4.6', inputModalities: ['text', 'image'] },
       { provider: 'grok', id: 'grok-4.5', name: 'Grok 4.5', inputModalities: ['text', 'image'] },
     ])
+    const displayed = adapter({
+      options: () => connection({
+        models: [{ id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true }],
+      }),
+    })
+    await expect(displayed.listModels('grok')).resolves.toEqual([
+      { provider: 'grok', id: 'grok-4.6', name: 'Grok 4.6', inputModalities: ['text', 'image'] },
+    ])
     const info = await a.resolveModel('grok', 'grok-4.6')
-    expect(info.reasoning?.efforts.map(effort => effort.id)).toEqual(['off', 'low', 'medium', 'high'])
+    expect(info.reasoning?.efforts.map(effort => effort.id)).toEqual(['xhigh', 'high', 'medium', 'low'])
+    expect(info.reasoning?.defaultEffort).toBe('high')
+    const older = await a.resolveModel('grok', 'grok-4.5')
+    expect(older.reasoning?.efforts.map(effort => effort.id)).toEqual(['high', 'medium', 'low'])
+    expect(older.reasoning?.defaultEffort).toBe('high')
   })
 })
 
@@ -130,6 +152,36 @@ describe('GrokAdapter.stream request shape', () => {
 
     const body = server.requests[0]?.body as { tools?: Array<{ type?: string }> }
     expect(body.tools).toEqual([{ type: 'web_search' }, { type: 'x_search' }])
+  })
+
+  it('sends official reasoning.effort and omits summary / none', async () => {
+    const server = await fakeChatProxy([{ kind: 'json', status: 400, body: { error: { message: 'captured' } } }])
+    const a = adapter({ options: () => connection({ baseURL: `${server.url}/v1` }) })
+
+    await collect(a.stream(request()))
+
+    const body = server.requests[0]?.body as { reasoning?: { effort?: string, summary?: string } }
+    expect(body.reasoning).toEqual({ effort: 'high' })
+  })
+
+  it('forwards Extra High as reasoning.effort xhigh', async () => {
+    const server = await fakeChatProxy([{ kind: 'json', status: 400, body: { error: { message: 'captured' } } }])
+    const a = adapter({ options: () => connection({ baseURL: `${server.url}/v1` }) })
+
+    await collect(a.stream(request({ reasoningEffort: ReasoningEffortId('xhigh') })))
+
+    const body = server.requests[0]?.body as { reasoning?: { effort?: string } }
+    expect(body.reasoning).toEqual({ effort: 'xhigh' })
+  })
+
+  it('sends grok-4.5 as official high without summary', async () => {
+    const server = await fakeChatProxy([{ kind: 'json', status: 400, body: { error: { message: 'captured' } } }])
+    const a = adapter({ options: () => connection({ baseURL: `${server.url}/v1` }) })
+
+    await collect(a.stream(request({ model: 'grok-4.5' })))
+
+    const body = server.requests[0]?.body as { reasoning?: { effort?: string, summary?: string } }
+    expect(body.reasoning).toEqual({ effort: 'high' })
   })
 
   it('throws MISSING_CREDENTIAL before any proxy request when resolveApiKey does', async () => {

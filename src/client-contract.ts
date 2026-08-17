@@ -19,33 +19,116 @@ export const GROK_AUTH_COMPLETE_ENDPOINT = 'auth/complete'
 /** Secret-free subscription-usage snapshot inside {@link GROK_RPC_CHANNEL}. */
 export const GROK_USAGE_ENDPOINT = 'usage/read'
 
+/** One official models-v2 reasoning menu row (`id` → wire `value`). */
+export interface GrokReasoningEffort {
+  /** Menu option id accepted by `/effort` and `--effort`. */
+  id: string
+  /** Value written to Responses `reasoning.effort`. */
+  value: string
+  /** Official menu label (`Extra High Effort`, …). */
+  label?: string
+  /** Official menu description. */
+  description?: string
+}
+
 /** One model in the plugin's frozen catalog. */
 export interface GrokCatalogModel {
   /** Wire model id accepted by the chat proxy. */
   id: string
   /** Selector label; omission uses {@link id}. */
   name?: string
+  /** Optional selector detail. */
+  description?: string
+  /** Known combined request and response context capacity. */
+  contextWindow?: number
+  /** Per-request output cap for this model. */
+  maxTokens?: number
   /** Whether the model supports native thinking. */
   thinking?: boolean
+  /** Official advertised reasoning menu; omission uses the frozen per-id list. */
+  reasoningEfforts?: readonly GrokReasoningEffort[]
+  /** Official default `reasoning.effort` (`reasoning_effort` on models-v2). */
+  defaultReasoningEffort?: string
   /** Whether the model accepts image input. */
   vision?: boolean
+  /** Whether the model supports tool calls. */
+  tools?: boolean
 }
 
 /**
  * Offline fallback when the account catalog cannot be read. Live ids come
  * from GET /v1/models-v2 after sign-in.
  */
+const GROK_4_6_EFFORTS: readonly GrokReasoningEffort[] = Object.freeze([
+  Object.freeze({
+    id: 'xhigh',
+    value: 'xhigh',
+    label: 'Extra High Effort',
+    description: 'Highest effort and reasoning level',
+  }),
+  Object.freeze({
+    id: 'high',
+    value: 'high',
+    label: 'High Effort',
+    description: 'Higher implementation quality with extensive reasoning',
+  }),
+  Object.freeze({
+    id: 'medium',
+    value: 'medium',
+    label: 'Medium Effort',
+    description: 'Balanced effort with standard implementation and testing',
+  }),
+  Object.freeze({
+    id: 'low',
+    value: 'low',
+    label: 'Low Effort',
+    description: 'Quick, fast implementations',
+  }),
+])
+
 export const GROK_CATALOG: readonly GrokCatalogModel[] = Object.freeze([
-  Object.freeze({ id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true }),
-  Object.freeze({ id: 'grok-4.5', name: 'Grok 4.5', thinking: true, vision: true }),
+  Object.freeze({
+    id: 'grok-4.6',
+    name: 'Grok 4.6',
+    thinking: true,
+    vision: true,
+    defaultReasoningEffort: 'high',
+    reasoningEfforts: GROK_4_6_EFFORTS,
+  }),
+  Object.freeze({
+    id: 'grok-4.5',
+    name: 'Grok 4.5',
+    thinking: true,
+    vision: true,
+    defaultReasoningEffort: 'high',
+    reasoningEfforts: Object.freeze(GROK_4_6_EFFORTS.filter(effort => effort.value !== 'xhigh')),
+  }),
 ])
 /** Account model list inside {@link GROK_RPC_CHANNEL}. */
 export const GROK_MODELS_ENDPOINT = 'models/list'
+/** Atomic settings-save endpoint. */
+export const GROK_SAVE_ENDPOINT = 'settings/save'
 
 /** Settings fields presented by the package's Web configuration card. No apiKeyEnv. */
 export interface GrokSettingsView {
   /** Stream idle timeout in milliseconds. */
   streamIdleTimeoutMs: number
+  /** Displayed advisory catalog (a subset of the account catalog). */
+  models: GrokCatalogModel[]
+}
+
+/** Atomic editable-settings payload sent by the browser face. */
+export interface GrokSaveRequest {
+  /** Complete displayed catalog currently shown by the editor. */
+  models: GrokCatalogModel[]
+  /** Settings descriptor revision from which the editor began. */
+  expectedRevision: number
+}
+
+/** Accepted settings snapshot after one Host mutation. */
+export interface GrokSaveResult {
+  settings: GrokSettingsView
+  revision: number
 }
 
 /** Secret-free login snapshot returned by {@link GROK_AUTH_STATUS_ENDPOINT}. */
@@ -140,7 +223,18 @@ export function decodeGrokSettings(value: unknown): GrokSettingsView | undefined
   if (typeof streamIdleTimeoutMs !== 'number' || !Number.isFinite(streamIdleTimeoutMs) || streamIdleTimeoutMs <= 0) {
     return undefined
   }
-  return { streamIdleTimeoutMs }
+  const modelsValue = value['models']
+  if (modelsValue === undefined) {
+    return { streamIdleTimeoutMs, models: GROK_CATALOG.map(model => ({ ...model })) }
+  }
+  if (!Array.isArray(modelsValue)) return undefined
+  const models: GrokCatalogModel[] = []
+  for (const entry of modelsValue) {
+    const model = decodeGrokCatalogModel(entry)
+    if (model === undefined) return undefined
+    models.push(model)
+  }
+  return { streamIdleTimeoutMs, models }
 }
 
 /**
@@ -252,21 +346,59 @@ export function decodeGrokUsageView(value: unknown): GrokUsageView | undefined {
  * @param value - untrusted RPC result value.
  * @returns the validated reply, or undefined when it is malformed or carries secrets.
  */
+function decodeGrokReasoningEffort(value: unknown): GrokReasoningEffort | undefined {
+  if (!isRecord(value) || hasTokenFields(value)) return undefined
+  const id = value['id']
+  const wire = value['value']
+  const label = value['label']
+  const description = value['description']
+  if (typeof id !== 'string' || id.length === 0) return undefined
+  if (typeof wire !== 'string' || wire.length === 0) return undefined
+  if (label !== undefined && (typeof label !== 'string' || label.length === 0)) return undefined
+  if (description !== undefined && (typeof description !== 'string' || description.length === 0)) {
+    return undefined
+  }
+  return {
+    id,
+    value: wire,
+    ...label === undefined ? {} : { label },
+    ...description === undefined ? {} : { description },
+  }
+}
+
 export function decodeGrokCatalogModel(value: unknown): GrokCatalogModel | undefined {
   if (!isRecord(value) || hasTokenFields(value)) return undefined
   const id = value['id']
   const name = value['name']
   const thinking = value['thinking']
   const vision = value['vision']
+  const defaultReasoningEffort = value['defaultReasoningEffort']
+  const reasoningEffortsValue = value['reasoningEfforts']
   if (typeof id !== 'string' || id.length === 0) return undefined
   if (name !== undefined && (typeof name !== 'string' || name.length === 0)) return undefined
   if (thinking !== undefined && typeof thinking !== 'boolean') return undefined
   if (vision !== undefined && typeof vision !== 'boolean') return undefined
+  if (defaultReasoningEffort !== undefined
+    && (typeof defaultReasoningEffort !== 'string' || defaultReasoningEffort.length === 0)) {
+    return undefined
+  }
+  let reasoningEfforts: GrokReasoningEffort[] | undefined
+  if (reasoningEffortsValue !== undefined) {
+    if (!Array.isArray(reasoningEffortsValue)) return undefined
+    reasoningEfforts = []
+    for (const entry of reasoningEffortsValue) {
+      const effort = decodeGrokReasoningEffort(entry)
+      if (effort === undefined) return undefined
+      reasoningEfforts.push(effort)
+    }
+  }
   return {
     id,
     ...name === undefined ? {} : { name },
     ...thinking === undefined ? {} : { thinking },
     ...vision === undefined ? {} : { vision },
+    ...defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort },
+    ...reasoningEfforts === undefined ? {} : { reasoningEfforts },
   }
 }
 
@@ -279,6 +411,37 @@ export function decodeGrokModelsReply(value: unknown): GrokModelsReply | undefin
     models.push(model)
   }
   return { models }
+}
+
+/**
+ * Narrow an atomic catalog-save request. Token-shaped fields fail closed.
+ * @param value - untrusted RPC request payload.
+ */
+export function decodeGrokSaveRequest(value: unknown): GrokSaveRequest | undefined {
+  if (!isRecord(value) || hasTokenFields(value)) return undefined
+  const expectedRevision = value['expectedRevision']
+  if (!Array.isArray(value['models']) || typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision)) {
+    return undefined
+  }
+  const models: GrokCatalogModel[] = []
+  for (const entry of value['models']) {
+    const model = decodeGrokCatalogModel(entry)
+    if (model === undefined) return undefined
+    models.push(model)
+  }
+  return { models, expectedRevision }
+}
+
+/**
+ * Narrow the Host save reply before the card updates.
+ * @param value - untrusted RPC result value.
+ */
+export function decodeGrokSaveResult(value: unknown): GrokSaveResult | undefined {
+  if (!isRecord(value) || hasTokenFields(value)) return undefined
+  const revision = value['revision']
+  if (typeof revision !== 'number' || !Number.isSafeInteger(revision)) return undefined
+  const settings = decodeGrokSettings(value['settings'])
+  return settings === undefined ? undefined : { settings, revision }
 }
 
 export function decodeGrokUsageReply(value: unknown): GrokUsageReply | undefined {
