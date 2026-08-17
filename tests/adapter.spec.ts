@@ -9,6 +9,7 @@ import type { GrokAdapterOptions, GrokConnectionOptions } from '../src/adapter.t
 import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
 import { resolveAdapterOptions } from '../src/index.ts'
 import { createGrokAuthRuntime } from '../src/oauth.ts'
+import { GROK_PACKED_REASONING_TYPE } from '../src/reasoning-display.ts'
 import { injectGrokServerSearchTools } from '../src/responses-tools.ts'
 import { writeSession } from '../src/session.ts'
 import { closeFakeAuthServers, fakeAuthServer } from './fake-auth-server.ts'
@@ -196,6 +197,142 @@ describe('GrokAdapter.stream request shape', () => {
 
     await expect(collect(a.stream(request()))).rejects.toMatchObject({ code: 'MISSING_CREDENTIAL' })
     expect(server.requests).toEqual([])
+  })
+
+  it('does not emit a Think block per empty tco_ search-reasoning item', async () => {
+    const visible = {
+      id: 'rs_resp',
+      type: 'reasoning',
+      status: 'completed',
+      summary: [{ type: 'summary_text', text: 'visible think' }],
+      encrypted_content: 'enc-rs',
+    }
+    const tco1 = {
+      id: 'tco_resp_call-11',
+      type: 'reasoning',
+      status: 'completed',
+      summary: [],
+      encrypted_content: 'enc-tco-11',
+    }
+    const tco2 = {
+      id: 'tco_resp_call-12',
+      type: 'reasoning',
+      status: 'completed',
+      summary: [],
+      encrypted_content: 'enc-tco-12',
+    }
+    const message = {
+      id: 'msg_resp',
+      type: 'message',
+      role: 'assistant',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'hello' }],
+    }
+    const response = {
+      id: 'resp_1',
+      status: 'completed',
+      output: [visible, message, tco1, tco2],
+      usage: { input_tokens: 10, output_tokens: 4, output_tokens_details: { reasoning_tokens: 3 } },
+    }
+    const server = await fakeChatProxy([{
+      kind: 'sse',
+      events: [
+        { type: 'response.created', response: { id: 'resp_1', status: 'in_progress', output: [] } },
+        { type: 'response.output_item.added', output_index: 0, item: { ...visible, status: 'in_progress', summary: [] } },
+        { type: 'response.reasoning_summary_text.delta', output_index: 0, delta: 'visible think' },
+        { type: 'response.output_item.done', output_index: 0, item: visible },
+        { type: 'response.output_item.added', output_index: 1, item: { ...message, status: 'in_progress', content: [] } },
+        { type: 'response.output_text.delta', output_index: 1, delta: 'hello' },
+        { type: 'response.output_item.done', output_index: 1, item: message },
+        { type: 'response.output_item.added', output_index: 2, item: { ...tco1, status: 'in_progress' } },
+        { type: 'response.output_item.done', output_index: 2, item: tco1 },
+        { type: 'response.output_item.added', output_index: 3, item: { ...tco2, status: 'in_progress' } },
+        { type: 'response.output_item.done', output_index: 3, item: tco2 },
+        { type: 'response.completed', response },
+      ],
+    }])
+    const a = adapter({ options: () => connection({ baseURL: `${server.url}/v1` }) })
+    const chunks = await collect(a.stream(request()))
+
+    const reasoningStarts = chunks.filter(chunk => (
+      chunk.type === 'block-start' && chunk.blockType === 'reasoning'
+    ))
+    const reasoningEnds = chunks.filter(chunk => (
+      chunk.type === 'block-end' && chunk.block.type === 'reasoning'
+    ))
+    expect(reasoningStarts).toHaveLength(1)
+    expect(reasoningEnds).toHaveLength(1)
+    expect(reasoningEnds[0]?.type === 'block-end' && reasoningEnds[0].block.type === 'reasoning'
+      ? reasoningEnds[0].block.text
+      : undefined).toBe('visible think')
+
+    const finish = chunks.find(chunk => chunk.type === 'finish')
+    expect(finish?.type).toBe('finish')
+    if (finish?.type !== 'finish') return
+    const replay = finish.replayState as { blocks?: Array<{ type?: string, thinkingSignature?: string }> } | undefined
+    const reasoning = replay?.blocks?.filter(block => block.type === 'reasoning') ?? []
+    expect(reasoning).toHaveLength(1)
+    expect(JSON.parse(reasoning[0]?.thinkingSignature ?? '')).toEqual({
+      type: GROK_PACKED_REASONING_TYPE,
+      items: [visible, tco1, tco2],
+    })
+  })
+
+  it('does not forward Grok xs_call search echoes as DSH tool-calls', async () => {
+    const message = {
+      id: 'msg_resp',
+      type: 'message',
+      role: 'assistant',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'hello' }],
+    }
+    const xs = {
+      id: 'ctc_abc_call-3',
+      type: 'custom_tool_call',
+      status: 'completed',
+      call_id: 'xs_call-abc-3',
+      name: 'x_keyword_search',
+      input: '{"query":"grok-4.6","limit":"10","mode":"Latest"}',
+    }
+    const run = {
+      id: 'fc_run',
+      type: 'function_call',
+      status: 'completed',
+      call_id: 'call_run',
+      name: 'run_code',
+      arguments: '{"code":"return 1","description":"noop"}',
+    }
+    const response = {
+      id: 'resp_1',
+      status: 'completed',
+      output: [message, xs, run],
+      usage: { input_tokens: 8, output_tokens: 3 },
+    }
+    const server = await fakeChatProxy([{
+      kind: 'sse',
+      events: [
+        { type: 'response.created', response: { id: 'resp_1', status: 'in_progress', output: [] } },
+        { type: 'response.output_item.added', output_index: 0, item: { ...message, status: 'in_progress', content: [] } },
+        { type: 'response.output_text.delta', output_index: 0, delta: 'hello' },
+        { type: 'response.output_item.done', output_index: 0, item: message },
+        { type: 'response.output_item.added', output_index: 1, item: xs },
+        { type: 'response.custom_tool_call_input.done', output_index: 1, input: xs.input },
+        { type: 'response.output_item.done', output_index: 1, item: xs },
+        { type: 'response.output_item.added', output_index: 2, item: run },
+        { type: 'response.function_call_arguments.done', output_index: 2, arguments: run.arguments },
+        { type: 'response.output_item.done', output_index: 2, item: run },
+        { type: 'response.completed', response },
+      ],
+    }])
+    const a = adapter({ options: () => connection({ baseURL: `${server.url}/v1` }) })
+    const chunks = await collect(a.stream(request()))
+    const starts = chunks.filter(chunk => chunk.type === 'block-start' && chunk.blockType === 'tool-call')
+    const ends = chunks.filter(chunk => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    expect(starts).toHaveLength(1)
+    expect(ends).toHaveLength(1)
+    expect(ends[0]?.type === 'block-end' && ends[0].block.type === 'tool-call'
+      ? ends[0].block.name
+      : undefined).toBe('run_code')
   })
 })
 

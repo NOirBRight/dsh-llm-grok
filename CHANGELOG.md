@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2
+
+- Drop Grok server-search echoes (`xs_call-*` / `ws_call-*` custom tool calls named like `x_keyword_search`) so DSH does not paint `unknown tool`. Search already ran on the proxy; results stay in packed `tco_*` replay.
+
+## 0.1.1
+
+- Hide empty Grok Think rows. Server-side `web_search` / `x_search` come back as encrypted `tco_*` reasoning items with no summary; those stay in replay but no longer each paint a Think block.
+
 ## 0.1.0
 
 First public release.

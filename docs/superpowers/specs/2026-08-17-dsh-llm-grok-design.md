@@ -103,7 +103,7 @@ Client 只发起与展示状态。Token 不进浏览器、不进 settings、不�
 - 每请求把当前 access token 交给 `resolveApiKey`（只传 access token，不传会话 JSON）
 - 出口把 `reasoning` 收成官方 `{ effort }`，不发 `none` / `summary`
 
-`PiAiAdapter` 只会把 DSH function tool 编成 `{ type: "function" }`。`responses-tools.ts` 在请求发出前把 `{ type: "web_search" }` 与 `{ type: "x_search" }` 追加进 `tools`。pi-ai 的 Responses 解析忽略不认识的 `web_search_call` / `x_search_call`；服务端搜完模型继续吐文本，DSH 不执行搜索、不把搜索伪造成 `ctx.web`。
+`PiAiAdapter` 只会把 DSH function tool 编成 `{ type: "function" }`。`responses-tools.ts` 在请求发出前把 `{ type: "web_search" }` 与 `{ type: "x_search" }` 追加进 `tools`。Grok 把服务端搜索结果编成 `type: reasoning` 且 `id` 为 `tco_*`、`summary: []` 的加密项；pi-ai 会把每一项都当成 Think 块。插件把没有可见 summary 的项从 Think UI 收走，签名打进可见思考块，下一轮 `input` 再展开，保证 `store: false` 回放不断。DSH 不执行搜索、不把搜索伪造成 `ctx.web`。Grok 有时会把已执行的 `x_search` 再回成 `xs_call-*` 客户端 custom_tool_call（名字可能抄成 DSH 提示里的 `x_keyword_search`）；插件从可见流里丢掉这些调用，避免 Agent 报 unknown tool。
 
 V1 这两项搜索始终开启，卡上不提供开关。
 

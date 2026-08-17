@@ -78,6 +78,18 @@ export {
 } from './pi-ai-profile.ts'
 export { GROK_SERVER_SEARCH_TOOLS, grokResponsesApi, injectGrokServerSearchTools } from './responses-tools.ts'
 export {
+  isGrokServerSearchToolCallId,
+  stripGrokServerSearchToolCalls,
+} from './server-search-calls.ts'
+export {
+  GROK_PACKED_REASONING_TYPE,
+  expandPackedGrokReasoningInput,
+  filterGrokThinkingStream,
+  isDisplayableThinking,
+  isGrokPackedReasoning,
+  packGrokThinkingBlocks,
+} from './reasoning-display.ts'
+export {
   GROK_REASONING_WIRES,
   GROK_DEFAULT_REASONING_WIRE,
   GROK_4_6_REASONING_EFFORTS,

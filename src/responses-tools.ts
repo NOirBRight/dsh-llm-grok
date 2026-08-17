@@ -1,7 +1,9 @@
 /**
  * Inject xAI server-side search tools into an outbound Responses body.
  * Pi-ai only emits `{ type: "function" }` tools; the proxy runs web_search
- * and x_search itself. This is not a `ctx.web` provider.
+ * and x_search itself. Search results come back as encrypted `type: reasoning`
+ * items (`tco_*`) with empty summaries — packed off the Think UI, replayed
+ * on the next request. This is not a `ctx.web` provider.
  */
 
 import type {
@@ -16,6 +18,10 @@ import type {
 import { openAIResponsesApi } from '@earendil-works/pi-ai/api/openai-responses.lazy'
 import type { GrokCatalogModel } from './client-contract.ts'
 import { applyGrokReasoningWire } from './reasoning.ts'
+import {
+  expandPackedGrokReasoningInput,
+  filterGrokThinkingStream,
+} from './reasoning-display.ts'
 
 /** Server-side search tools the Grok CLI chat proxy accepts on every request. */
 export const GROK_SERVER_SEARCH_TOOLS = [
@@ -65,7 +71,8 @@ function withGrokResponsesBody<TOptions extends StreamOptions>(
       onPayload: async (payload, nextModel) => {
         const next = original === undefined ? payload : await original(payload, nextModel)
         const injected = injectGrokServerSearchTools(next === undefined ? payload : next)
-        return applyGrokReasoningWire(injected, catalogFor(nextModel, models))
+        const wired = applyGrokReasoningWire(injected, catalogFor(nextModel, models))
+        return expandPackedGrokReasoningInput(wired)
       },
     } as TOptions)
   }
@@ -76,10 +83,18 @@ function withGrokResponsesBody<TOptions extends StreamOptions>(
  * `reasoning.effort` patched in. Wrapping `onPayload` is required because
  * pi-ai's client has no custom fetch.
  */
+function withHiddenOpaqueThinking<TOptions extends StreamOptions>(
+  streamFn: (model: Model<Api>, context: PiContext, options?: TOptions) => AssistantMessageEventStream,
+): (model: Model<Api>, context: PiContext, options?: TOptions) => AssistantMessageEventStream {
+  return (model, context, options) => filterGrokThinkingStream(streamFn(model, context, options))
+}
+
 export function grokResponsesApi(models: readonly GrokCatalogModel[] = []): ProviderStreams {
   const base = openAIResponsesApi()
   return {
-    stream: withGrokResponsesBody<StreamOptions>(base.stream, models),
-    streamSimple: withGrokResponsesBody<SimpleStreamOptions>(base.streamSimple, models),
+    stream: withHiddenOpaqueThinking(withGrokResponsesBody<StreamOptions>(base.stream, models)),
+    streamSimple: withHiddenOpaqueThinking(
+      withGrokResponsesBody<SimpleStreamOptions>(base.streamSimple, models),
+    ),
   }
 }
