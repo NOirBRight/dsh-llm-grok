@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.4
+
+- Official Grok 4.6 / 4.5 context window is 500000 (models-v2, Grok Build CLI, and xAI docs). Frozen catalog and the missing-row fallback no longer use 262144.
+
+## 0.1.3
+
+- Honor per-row `contextWindow` in chat/compaction instead of always using a hardcoded default
+- Per-row Default thinking and Context window; Tools checkbox removed (it never changed requests)
+
 ## 0.1.2
 
 - Drop Grok server-search echoes (`xs_call-*` / `ws_call-*` custom tool calls named like `x_keyword_search`) so DSH does not paint `unknown tool`. Search already ran on the proxy; results stay in packed `tco_*` replay.

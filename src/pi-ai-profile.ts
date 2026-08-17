@@ -16,8 +16,8 @@ import { grokResponsesApi } from './responses-tools.ts'
 
 /** Chat proxy base used by the Grok CLI (`POST {base}/responses`). */
 export const GROK_CHAT_BASE_URL = 'https://cli-chat-proxy.grok.com/v1'
-/** Context capacity used when the frozen catalog entry has none. */
-export const GROK_DEFAULT_CONTEXT_WINDOW = 262_144
+/** Official Grok 4.6 / 4.5 context window; used when a row has none. */
+export const GROK_DEFAULT_CONTEXT_WINDOW = 500_000
 /** Safe output capability used when the frozen catalog entry has none. */
 export const GROK_DEFAULT_MODEL_MAX_TOKENS = 32_768
 
@@ -67,8 +67,8 @@ function toPiAiModel(model: GrokCatalogModel, baseUrl: string): Model<'openai-re
     ...levels === undefined ? {} : { thinkingLevelMap: levels },
     input: model.vision === true ? ['text', 'image'] : ['text'],
     cost: NO_COST,
-    contextWindow: GROK_DEFAULT_CONTEXT_WINDOW,
-    maxTokens: GROK_DEFAULT_MODEL_MAX_TOKENS,
+    contextWindow: model.contextWindow ?? GROK_DEFAULT_CONTEXT_WINDOW,
+    maxTokens: model.maxTokens ?? GROK_DEFAULT_MODEL_MAX_TOKENS,
     compat: {
       supportsDeveloperRole: false,
       supportsLongCacheRetention: false,

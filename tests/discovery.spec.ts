@@ -11,6 +11,7 @@ describe('parseGrokModels', () => {
           name: 'Grok 4.6',
           supports_reasoning_effort: true,
           reasoning_effort: 'high',
+          context_window: 262144,
           reasoning_efforts: [
             { id: 'xhigh', value: 'xhigh', label: 'Extra High Effort' },
             { id: 'high', value: 'high', label: 'High Effort' },
@@ -29,6 +30,7 @@ describe('parseGrokModels', () => {
         name: 'Grok 4.6',
         thinking: true,
         vision: true,
+        contextWindow: 262144,
         defaultReasoningEffort: 'high',
         reasoningEfforts: [
           { id: 'xhigh', value: 'xhigh', label: 'Extra High Effort' },

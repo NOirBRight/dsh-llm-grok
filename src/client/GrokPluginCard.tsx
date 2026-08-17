@@ -15,6 +15,7 @@ import type {
   GrokUsageView,
   GrokUsageWindow,
 } from '../client-contract.ts'
+import { officialDefaultEffort, officialEffortsFor } from '../reasoning.ts'
 import type { GrokSettingsKey } from './locales.ts'
 import { SortableList } from './SortableList.tsx'
 
@@ -67,8 +68,8 @@ interface ModelDraft {
   name?: string
   thinking?: boolean
   vision?: boolean
-  tools?: boolean
   defaultReasoningEffort?: string
+  contextWindow: string
   reasoningEfforts?: GrokCatalogModel['reasoningEfforts']
 }
 
@@ -214,27 +215,35 @@ function newModelRowId(): string {
   return 'grok-model-row-' + String(nextModelRow)
 }
 
+function integerOf(text: string): number | undefined {
+  const trimmed = text.trim()
+  if (trimmed.length === 0) return undefined
+  if (!/^[1-9]\d*$/u.test(trimmed)) return Number.NaN
+  return Number(trimmed)
+}
+
 function modelDraftOf(model: GrokCatalogModel): ModelDraft {
   return {
     rowId: newModelRowId(),
     id: model.id,
+    contextWindow: model.contextWindow === undefined ? '' : String(model.contextWindow),
     ...model.name === undefined ? {} : { name: model.name },
     ...model.thinking === undefined ? {} : { thinking: model.thinking },
     ...model.vision === undefined ? {} : { vision: model.vision },
-    ...model.tools === undefined ? {} : { tools: model.tools },
     ...model.defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort: model.defaultReasoningEffort },
     ...model.reasoningEfforts === undefined ? {} : { reasoningEfforts: model.reasoningEfforts },
   }
 }
 
 function modelSettingsOf(draft: ModelDraft): GrokCatalogModel {
+  const contextWindow = integerOf(draft.contextWindow)
   return {
     id: draft.id.trim(),
     ...draft.name === undefined || draft.name.trim().length === 0 ? {} : { name: draft.name.trim() },
     ...draft.thinking === undefined ? {} : { thinking: draft.thinking },
     ...draft.vision === undefined ? {} : { vision: draft.vision },
-    ...draft.tools === undefined ? {} : { tools: draft.tools },
     ...draft.defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort: draft.defaultReasoningEffort },
+    ...contextWindow === undefined || Number.isNaN(contextWindow) ? {} : { contextWindow },
     ...draft.reasoningEfforts === undefined ? {} : { reasoningEfforts: draft.reasoningEfforts },
   }
 }
@@ -248,6 +257,7 @@ function modelFailure(models: readonly ModelDraft[]): boolean {
   for (const model of models) {
     const id = model.id.trim()
     if (id.length === 0 || ids.has(id)) return true
+    if (Number.isNaN(integerOf(model.contextWindow))) return true
     ids.add(id)
   }
   return false
@@ -453,10 +463,11 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
         if (patch.vision === undefined) delete next.vision
         else next.vision = patch.vision
       }
-      if ('tools' in patch) {
-        if (patch.tools === undefined) delete next.tools
-        else next.tools = patch.tools
+      if ('defaultReasoningEffort' in patch) {
+        if (patch.defaultReasoningEffort === undefined) delete next.defaultReasoningEffort
+        else next.defaultReasoningEffort = patch.defaultReasoningEffort
       }
+      if ('contextWindow' in patch) next.contextWindow = patch.contextWindow ?? ''
       return next
     }))
   }
@@ -822,14 +833,48 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                                     label={t('thinking')}
                                     checked={model.thinking === true}
                                     disabled={disabled}
-                                    onChange={(thinking) => { patchModel(index, { thinking }) }}
+                                    onChange={(thinking) => {
+                                      if (!thinking) patchModel(index, { thinking, defaultReasoningEffort: undefined })
+                                      else patchModel(index, { thinking })
+                                    }}
                                   />
-                                  <Capability
-                                    label={t('tools')}
-                                    checked={model.tools === true}
-                                    disabled={disabled}
-                                    onChange={(tools) => { patchModel(index, { tools }) }}
-                                  />
+                                  {(() => {
+                                    const settings = modelSettingsOf(model)
+                                    const efforts = settings.thinking === true ? officialEffortsFor(settings) : []
+                                    if (efforts.length === 0) return null
+                                    const suggested = officialDefaultEffort(settings)
+                                    return (
+                                      <label style={{ ...labelStyle, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                        {t('defaultEffort')}
+                                        <select
+                                          style={rowInputStyle}
+                                          value={model.defaultReasoningEffort ?? suggested}
+                                          disabled={disabled}
+                                          aria-label={t('defaultEffort')}
+                                          onChange={(event) => {
+                                            const effort = efforts.find(entry => entry.value === event.target.value)
+                                            patchModel(index, { defaultReasoningEffort: effort?.value })
+                                          }}
+                                        >
+                                          {efforts.map(effort => (
+                                            <option key={effort.value} value={effort.value}>{effort.label ?? effort.value}</option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                    )
+                                  })()}
+                                  <label style={{ ...labelStyle, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                    {t('contextWindow')}
+                                    <input
+                                      style={{ ...rowInputStyle, width: 110 }}
+                                      inputMode="numeric"
+                                      placeholder={t('contextWindowDefault')}
+                                      value={model.contextWindow}
+                                      disabled={disabled}
+                                      aria-label={t('contextWindow')}
+                                      onChange={(event) => { patchModel(index, { contextWindow: event.target.value }) }}
+                                    />
+                                  </label>
                                 </div>
                               )
                               : null}
@@ -842,7 +887,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                       style={{ ...buttonStyle, alignSelf: 'flex-start' }}
                       disabled={disabled}
                       onClick={() => {
-                        const model: ModelDraft = { rowId: newModelRowId(), id: '' }
+                        const model: ModelDraft = { rowId: newModelRowId(), id: '', contextWindow: '' }
                         patchDraft([...draft, model])
                         setExpandedModels(current => new Set(current).add(model.rowId))
                       }}

@@ -92,6 +92,7 @@ export const GROK_CATALOG: readonly GrokCatalogModel[] = Object.freeze([
     name: 'Grok 4.6',
     thinking: true,
     vision: true,
+    contextWindow: 500_000,
     defaultReasoningEffort: 'high',
     reasoningEfforts: GROK_4_6_EFFORTS,
   }),
@@ -100,6 +101,7 @@ export const GROK_CATALOG: readonly GrokCatalogModel[] = Object.freeze([
     name: 'Grok 4.5',
     thinking: true,
     vision: true,
+    contextWindow: 500_000,
     defaultReasoningEffort: 'high',
     reasoningEfforts: Object.freeze(GROK_4_6_EFFORTS.filter(effort => effort.value !== 'xhigh')),
   }),
@@ -372,12 +374,18 @@ export function decodeGrokCatalogModel(value: unknown): GrokCatalogModel | undef
   const name = value['name']
   const thinking = value['thinking']
   const vision = value['vision']
+  const contextWindow = value['contextWindow']
   const defaultReasoningEffort = value['defaultReasoningEffort']
   const reasoningEffortsValue = value['reasoningEfforts']
   if (typeof id !== 'string' || id.length === 0) return undefined
   if (name !== undefined && (typeof name !== 'string' || name.length === 0)) return undefined
   if (thinking !== undefined && typeof thinking !== 'boolean') return undefined
   if (vision !== undefined && typeof vision !== 'boolean') return undefined
+  if (contextWindow !== undefined && (
+    typeof contextWindow !== 'number'
+    || !Number.isInteger(contextWindow)
+    || contextWindow <= 0
+  )) return undefined
   if (defaultReasoningEffort !== undefined
     && (typeof defaultReasoningEffort !== 'string' || defaultReasoningEffort.length === 0)) {
     return undefined
@@ -397,6 +405,7 @@ export function decodeGrokCatalogModel(value: unknown): GrokCatalogModel | undef
     ...name === undefined ? {} : { name },
     ...thinking === undefined ? {} : { thinking },
     ...vision === undefined ? {} : { vision },
+    ...contextWindow === undefined ? {} : { contextWindow },
     ...defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort },
     ...reasoningEfforts === undefined ? {} : { reasoningEfforts },
   }

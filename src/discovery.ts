@@ -51,11 +51,15 @@ function asModel(value: unknown): GrokCatalogModel | undefined {
     || value['thinking'] === true
   const defaultReasoningEffort = value['reasoning_effort']
   const reasoningEfforts = asEfforts(value['reasoning_efforts'])
+  const contextWindow = value['context_window'] ?? value['contextWindow']
   return {
     id,
     ...typeof name === 'string' && name.length > 0 ? { name } : {},
     thinking,
     vision: true,
+    ...typeof contextWindow === 'number' && Number.isInteger(contextWindow) && contextWindow > 0
+      ? { contextWindow }
+      : {},
     ...thinking && typeof defaultReasoningEffort === 'string' && defaultReasoningEffort.length > 0
       ? { defaultReasoningEffort }
       : {},

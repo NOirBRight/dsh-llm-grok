@@ -32,6 +32,9 @@ export declare const en: {
     readonly thinking: "Reasoning";
     readonly vision: "Vision";
     readonly tools: "Tools";
+    readonly defaultEffort: "Default thinking";
+    readonly contextWindow: "Context window";
+    readonly contextWindowDefault: "500000";
     readonly remove: "Remove";
     readonly inherited: "Showing the default catalog";
     readonly customized: "Custom catalog";

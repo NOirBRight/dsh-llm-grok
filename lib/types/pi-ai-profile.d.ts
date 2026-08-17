@@ -7,8 +7,8 @@ import type { ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm';
 import type { GrokCatalogModel } from './client-contract.ts';
 /** Chat proxy base used by the Grok CLI (`POST {base}/responses`). */
 export declare const GROK_CHAT_BASE_URL = "https://cli-chat-proxy.grok.com/v1";
-/** Context capacity used when the frozen catalog entry has none. */
-export declare const GROK_DEFAULT_CONTEXT_WINDOW = 262144;
+/** Official Grok 4.6 / 4.5 context window; used when a row has none. */
+export declare const GROK_DEFAULT_CONTEXT_WINDOW = 500000;
 /** Safe output capability used when the frozen catalog entry has none. */
 export declare const GROK_DEFAULT_MODEL_MAX_TOKENS = 32768;
 /** Plugin identity sent beside the required CLI version headers. */

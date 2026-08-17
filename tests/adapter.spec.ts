@@ -114,7 +114,9 @@ describe('GrokAdapter metadata', () => {
     await expect(displayed.listModels('grok')).resolves.toEqual([
       { provider: 'grok', id: 'grok-4.6', name: 'Grok 4.6', inputModalities: ['text', 'image'] },
     ])
+    expect((await displayed.resolveModel('grok', 'grok-4.6')).context).toEqual({ contextWindow: 500_000 })
     const info = await a.resolveModel('grok', 'grok-4.6')
+    expect(info.context).toEqual({ contextWindow: 500_000 })
     expect(info.reasoning?.efforts.map(effort => effort.id)).toEqual(['xhigh', 'high', 'medium', 'low'])
     expect(info.reasoning?.defaultEffort).toBe('high')
     const older = await a.resolveModel('grok', 'grok-4.5')
