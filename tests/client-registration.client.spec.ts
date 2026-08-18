@@ -105,7 +105,7 @@ describe('Grok client plugin registration', () => {
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
 
-    const face = (slots.entries('settings.plugin.item')[0] as {
+    const face = (slots.entries('settings.provider.item')[0] as {
       inject?: () => { fetchUsage: () => Promise<unknown> }
     }).inject?.()
     const usage = await face?.fetchUsage()
@@ -128,9 +128,10 @@ describe('Grok client plugin registration', () => {
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
 
-    const entries = slots.entries('settings.plugin.item')
+    expect(slots.entries('settings.section').map(e => e.options.id)).toEqual(['providers'])
+    const entries = slots.entries('settings.provider.item')
     expect(entries).toHaveLength(1)
-    expect(entries[0]?.options).toMatchObject({ id: 'grok', order: 40, locale: 'settings.grok' })
+    expect(entries[0]?.options).toMatchObject({ key: 'llm-grok', locale: 'settings.grok' })
     const face = (entries[0] as { inject?: () => unknown }).inject?.() as { t: (key: string) => string }
     expect(typeof face.t).toBe('function')
     expect(slots.entries('shell.overlay')).toHaveLength(1)
@@ -138,6 +139,7 @@ describe('Grok client plugin registration', () => {
 
     await fiber.dispose()
 
-    expect(slots.entries('settings.plugin.item')).toHaveLength(0)
+    expect(slots.entries('settings.provider.item')).toHaveLength(0)
+    expect(slots.entries('settings.section')).toHaveLength(0)
   })
 })

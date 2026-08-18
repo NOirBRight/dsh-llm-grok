@@ -4,7 +4,7 @@
 
 DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由（`grok`）和设置命名空间（`llm-grok`）。它不替代内置的 `xai` console API key 路由，也不声明 `apiKeyEnv`。
 
-包根入口公开 Cordis plugin contract。同一 artifact 还导出 `./client`，在 Settings → Plugins → Plugin configuration 中提供 Grok 卡片。
+包根入口公开 Cordis plugin contract。同一 artifact 还导出 `./client`，在 Settings → Providers 中提供 Grok 卡片。
 
 ## 安装
 
@@ -19,7 +19,7 @@ dsh web
 
 ## Web 配置
 
-打开 Settings → Plugins → Plugin configuration → Grok。**用 xAI 登录**会在 Host 上对 `auth.x.ai` 走 PKCE（与 Grok CLI 同一公开 client），打开系统浏览器，并把会话只写在 Host 的 `$DSH_HOME/grok-oauth.json`（权限 `0600`）。卡片随后显示账号邮箱。退出登录会删除该文件。浏览器永远收不到 token。本插件不读、不写 `~/.grok/auth.json`。
+打开 Settings → Providers → Grok。**用 xAI 登录**会在 Host 上对 `auth.x.ai` 走 PKCE（与 Grok CLI 同一公开 client），打开系统浏览器，并把会话只写在 Host 的 `$DSH_HOME/grok-oauth.json`（权限 `0600`）。卡片随后显示账号邮箱。退出登录会删除该文件。浏览器永远收不到 token。本插件不读、不写 `~/.grok/auth.json`。
 
 ### 插件配置
 

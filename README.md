@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 xAI Grok integration for DeepSeek Harness. This plugin is a separate provider route (`grok`) and settings namespace (`llm-grok`). It does not replace the built-in `xai` console API-key route, and it does not declare `apiKeyEnv`.
 
-The package root exposes the Cordis plugin contract. The same artifact exports `./client`, which contributes the Grok card under Settings → Plugins → Plugin configuration.
+The package root exposes the Cordis plugin contract. The same artifact exports `./client`, which contributes the Grok card under Settings → Providers.
 
 ## Installation
 
@@ -19,7 +19,7 @@ The repository tracks release-ready lib artifacts, so GitHub installation needs 
 
 ## Web configuration
 
-Open Settings → Plugins → Plugin configuration → Grok. **Sign in with xAI** starts a Host-owned PKCE flow against `auth.x.ai` (the Grok CLI public client), opens the system browser, and stores the session only on the Host at `$DSH_HOME/grok-oauth.json` (mode `0600`). The card then shows the account email. Sign out deletes that file. The browser never receives tokens. This plugin does not read or write `~/.grok/auth.json`.
+Open Settings → Providers → Grok. **Sign in with xAI** starts a Host-owned PKCE flow against `auth.x.ai` (the Grok CLI public client), opens the system browser, and stores the session only on the Host at `$DSH_HOME/grok-oauth.json` (mode `0600`). The card then shows the account email. Sign out deletes that file. The browser never receives tokens. This plugin does not read or write `~/.grok/auth.json`.
 
 ### Plugin configuration
 

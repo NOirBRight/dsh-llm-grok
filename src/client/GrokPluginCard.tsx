@@ -17,6 +17,9 @@ import type {
 } from '../client-contract.ts'
 import { officialDefaultEffort, officialEffortsFor } from '../reasoning.ts'
 import type { GrokSettingsKey } from './locales.ts'
+import { BrandMark } from './BrandMark.tsx'
+import { AuthToolbar, ProviderCardHeader, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatProviderSummary, formatUsageClock, providerHeaderStyle } from './provider-chrome.tsx'
+import type {} from './provider-section.ts'
 import { SortableList } from './SortableList.tsx'
 
 /** Dependencies injected by the browser-plugin registration. */
@@ -53,7 +56,7 @@ export interface GrokPluginCardFace {
 
 /** Props delivered by the Plugin configuration item slot. */
 export type GrokPluginCardProps =
-  PropsRuntime<'settings.plugin.item'>
+  PropsRuntime<'settings.provider.item'>
   & InjectFace<GrokPluginCardFace>
 
 type AuthUi =
@@ -90,21 +93,7 @@ const cardStyle: CSSProperties = {
   borderRadius: 10,
   background: 'var(--dsw-alias-bg-module-platform)',
 }
-const headerStyle: CSSProperties = {
-  boxSizing: 'border-box',
-  width: '100%',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 16,
-  border: 0,
-  padding: '13px 14px',
-  background: 'transparent',
-  color: 'var(--dsw-alias-label-primary)',
-  font: 'inherit',
-  textAlign: 'left',
-  cursor: 'pointer',
-}
+const headerStyle = providerHeaderStyle
 const bodyStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
@@ -370,6 +359,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   const [auth, setAuth] = useState<AuthUi>({ kind: 'signed-out' })
   const [pasteCode, setPasteCode] = useState('')
   const [usage, setUsage] = useState<UsageState>({ status: 'idle' })
+  const [lastUsage, setLastUsage] = useState<GrokUsageView | undefined>(undefined)
+  const [usageUpdatedAt, setUsageUpdatedAt] = useState<Date | undefined>(undefined)
   const [catalogOpen, setCatalogOpen] = useState(false)
   const [expandedModels, setExpandedModels] = useState<ReadonlySet<string>>(new Set())
   const [busy, setBusy] = useState(false)
@@ -409,6 +400,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
         setUsage({ status: 'unsupported' })
         return
       }
+      setLastUsage(read.usage)
+      setUsageUpdatedAt(new Date())
       setUsage({ status: 'ready', usage: read.usage })
     } catch (error: unknown) {
       setUsage({ status: 'error', message: messageOf(error, t('usageFailed')) })
@@ -416,7 +409,6 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   }
 
   useEffect(() => {
-    if (!open) return
     let cancelled = false
     void readAuthStatus().then((status) => {
       if (cancelled) return
@@ -425,6 +417,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
         return
       }
       setAuth({ kind: 'signed-out' })
+      setLastUsage(undefined)
+      setUsageUpdatedAt(undefined)
       setUsage({ status: 'idle' })
     }).catch(() => {
       if (!cancelled) {
@@ -433,12 +427,13 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
       }
     })
     return () => { cancelled = true }
-  }, [open, readAuthStatus, t])
+  }, [readAuthStatus, t])
 
   useEffect(() => {
-    if (!open || auth.kind !== 'signed-in' || usage.status !== 'idle') return
+    if (!open || auth.kind !== 'signed-in') return
+    setUsage({ status: 'loading' })
     void loadUsage()
-  }, [open, auth.kind, usage.status])
+  }, [open, auth.kind])
 
   const patchDraft = (models: ModelDraft[]): void => {
     setDraft(models)
@@ -511,6 +506,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
     try {
       await logout()
       setAuth({ kind: 'signed-out' })
+      setLastUsage(undefined)
+      setUsageUpdatedAt(undefined)
       setUsage({ status: 'idle' })
     } catch {
       setAuth(current => current.kind === 'signed-in'
@@ -597,6 +594,11 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
     : auth.kind === 'signed-in'
       ? formatSignedIn(t, auth.email)
       : auth.message ?? t('signedOut')
+  const modelCount = draft?.length ?? 0
+  const headerSummary = formatProviderSummary(
+    auth.kind === 'signed-in' ? t('summaryOn') : t('summaryOff'),
+    t('summaryModels').replace('{count}', String(modelCount)),
+  )
 
   if (snapshot.status === 'unavailable') {
     return (
@@ -608,13 +610,12 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
           aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
           onClick={() => { setOpen(!open) }}
         >
-          <span style={{ display: 'flex', minWidth: 0, flexDirection: 'column', gap: 3 }}>
-            <span style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{title}</span>
-            <span style={{ fontSize: 13, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)' }}>
-              {t('description')}
-            </span>
-          </span>
-          <span aria-hidden="true" style={{ fontSize: 18, transform: open ? 'rotate(180deg)' : 'none' }}>⌄</span>
+          <ProviderCardHeader
+            title={title}
+            mark={<BrandMark />}
+            summary={headerSummary}
+            open={open}
+          />
         </button>
         {open
           ? (
@@ -637,13 +638,12 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
           aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
           onClick={() => { setOpen(!open) }}
         >
-          <span style={{ display: 'flex', minWidth: 0, flexDirection: 'column', gap: 3 }}>
-            <span style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{title}</span>
-            <span style={{ fontSize: 13, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)' }}>
-              {t('description')}
-            </span>
-          </span>
-          <span aria-hidden="true" style={{ fontSize: 18, transform: open ? 'rotate(180deg)' : 'none' }}>⌄</span>
+          <ProviderCardHeader
+            title={title}
+            mark={<BrandMark />}
+            summary={headerSummary}
+            open={open}
+          />
         </button>
         {open ? <div style={bodyStyle}><p style={statusStyle}>{t('loading')}</p></div> : null}
       </li>
@@ -659,30 +659,26 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
         aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
         onClick={() => { setOpen(!open) }}
       >
-        <span style={{ display: 'flex', minWidth: 0, flexDirection: 'column', gap: 3 }}>
-          <span style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{title}</span>
-          <span style={{ fontSize: 13, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)' }}>
-            {t('description')}
-          </span>
-        </span>
-        <span aria-hidden="true" style={{ fontSize: 18, transform: open ? 'rotate(180deg)' : 'none' }}>⌄</span>
+        <ProviderCardHeader
+          title={title}
+          mark={<BrandMark />}
+          summary={headerSummary}
+          open={open}
+          unsaved={dirty}
+          unsavedLabel={t('unsaved')}
+        />
       </button>
       {open
         ? (
           <div style={bodyStyle}>
+            <p style={hintStyle}>{t('description')}</p>
             <section style={sectionStyle} aria-label={statusLabel}>
-              <p style={statusStyle}>{statusLabel}</p>
-              {auth.kind === 'signed-in'
-                ? (
-                  <button type="button" style={buttonStyle} disabled={signingIn} onClick={() => { void onSignOut() }}>
-                    {t('signOut')}
-                  </button>
-                )
-                : (
-                  <>
-                    <button type="button" style={buttonStyle} disabled={signingIn} onClick={() => { void onSignIn() }}>
-                      {t('signIn')}
-                    </button>
+              <AuthToolbar
+                status={<p style={{ ...statusStyle, margin: 0 }}>{statusLabel}</p>}
+                action={auth.kind === 'signed-in'
+                  ? <button type="button" style={buttonStyle} disabled={signingIn} onClick={() => { void onSignOut() }}>{t('signOut')}</button>
+                  : <button type="button" style={buttonStyle} disabled={signingIn} onClick={() => { void onSignIn() }}>{t('signIn')}</button>}
+              />
                     {auth.kind === 'signing-in'
                       ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -708,34 +704,45 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                         </div>
                       )
                       : null}
-                  </>
-                )}
             </section>
             {auth.kind === 'signed-in'
               ? (
                 <section style={sectionStyle} aria-label={t('usage')}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                    <h3 style={sectionTitleStyle}>{t('usage')}</h3>
-                    <button
-                      type="button"
-                      style={buttonStyle}
-                      disabled={usage.status === 'loading'}
-                      onClick={() => { void loadUsage() }}
-                    >
-                      {t(usage.status === 'loading' ? 'usageLoading' : 'usageRefresh')}
-                    </button>
-                  </div>
-                  {usage.status === 'ready'
-                    ? usage.usage.windows.map((window, index) => (
-                      <UsageBar
-                        key={`${window.id}:${String(index)}`}
-                        usedText={t('usageUsed')}
-                        window={window}
-                      />
-                    ))
-                    : null}
-                  {usage.status === 'unsupported' ? <p style={hintStyle}>{t('usageUnsupported')}</p> : null}
-                  {usage.status === 'error' ? <p style={errorStyle}>{usage.message}</p> : null}
+                  <UsageHeader
+                    title={t('usage')}
+                    spinning={usage.status === 'loading' || usage.status === 'idle'}
+                    disabled={usage.status === 'loading'}
+                    refreshLabel={t('usageRefresh')}
+                    busyLabel={t('usageLoading')}
+                    {...usage.status === 'error' ? { error: t('usageRefreshFailed') } : {}}
+                    onRefresh={() => { void loadUsage() }}
+                  />
+                  {(() => {
+                    if (usage.status === 'loading' || usage.status === 'idle') {
+                      return <UsageSkeleton rows={lastUsage?.windows.length ?? 1} />
+                    }
+                    const bars = usage.status === 'ready' ? usage.usage : lastUsage
+                    if (bars !== undefined) {
+                      return (
+                        <>
+                          {bars.windows.map((window, index) => (
+                            <UsageBar
+                              key={window.id + ':' + String(index)}
+                              usedText={t('usageUsed')}
+                              window={window}
+                            />
+                          ))}
+                        </>
+                      )
+                    }
+                    if (usage.status === 'unsupported') return <p style={hintStyle}>{t('usageUnsupported')}</p>
+                    if (usage.status === 'error') return <p style={errorStyle}>{usage.message}</p>
+                    return <UsageSkeleton rows={1} />
+                  })()}
+                  <UsageUpdatedAt
+                    at={usageUpdatedAt}
+                    label={usageUpdatedAt === undefined ? '' : t('usageUpdatedAt').replace('{time}', formatUsageClock(usageUpdatedAt))}
+                  />
                 </section>
               )
               : null}

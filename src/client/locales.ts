@@ -22,6 +22,10 @@ export const en = {
   loading: 'Loading plugin settings…',
   remoteAccess: 'A remote browser cannot edit plugin settings. Open this page on the host, or forward the port.',
   models: 'Model catalog',
+  summaryModels: '{count} models',
+  summaryOn: 'Signed in',
+  summaryOff: 'Not signed in',
+  unsaved: 'Unsaved changes',
   modelDetails: 'Details',
   dragModel: 'Drag to reorder',
   fetchModels: 'Choose from account',
@@ -57,6 +61,8 @@ export const en = {
   usageUsed: 'Used',
   usageUnsupported: 'This subscription does not report usage.',
   usageFailed: 'Could not read usage.',
+  usageRefreshFailed: 'Refresh failed',
+  usageUpdatedAt: 'Updated {time}',
 } as const
 
 /** Locale keys owned by the Grok configuration card. */
@@ -84,6 +90,10 @@ export const zh: Record<GrokSettingsKey, string> = {
   loading: '正在加载插件设置…',
   remoteAccess: '远程浏览器无法编辑插件设置。请在主机本机打开页面，或先做端口转发。',
   models: '模型目录',
+  summaryModels: '{count} 个模型',
+  summaryOn: '已登录',
+  summaryOff: '未登录',
+  unsaved: '未保存的更改',
   modelDetails: '详细设置',
   dragModel: '拖动调整顺序',
   fetchModels: '从账户中选择',
@@ -119,4 +129,6 @@ export const zh: Record<GrokSettingsKey, string> = {
   usageUsed: '已用',
   usageUnsupported: '此订阅不提供额度信息。',
   usageFailed: '无法读取额度。',
+  usageRefreshFailed: '刷新失败',
+  usageUpdatedAt: '{time} 已更新',
 }

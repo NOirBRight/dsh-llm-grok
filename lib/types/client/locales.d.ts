@@ -21,6 +21,10 @@ export declare const en: {
     readonly loading: "Loading plugin settings…";
     readonly remoteAccess: "A remote browser cannot edit plugin settings. Open this page on the host, or forward the port.";
     readonly models: "Model catalog";
+    readonly summaryModels: "{count} models";
+    readonly summaryOn: "Signed in";
+    readonly summaryOff: "Not signed in";
+    readonly unsaved: "Unsaved changes";
     readonly modelDetails: "Details";
     readonly dragModel: "Drag to reorder";
     readonly fetchModels: "Choose from account";
@@ -56,6 +60,8 @@ export declare const en: {
     readonly usageUsed: "Used";
     readonly usageUnsupported: "This subscription does not report usage.";
     readonly usageFailed: "Could not read usage.";
+    readonly usageRefreshFailed: "Refresh failed";
+    readonly usageUpdatedAt: "Updated {time}";
 };
 /** Locale keys owned by the Grok configuration card. */
 export type GrokSettingsKey = keyof typeof en;

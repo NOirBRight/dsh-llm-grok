@@ -36,7 +36,7 @@ export interface GrokPluginCardFace {
     closeModelPicker: () => void;
 }
 /** Props delivered by the Plugin configuration item slot. */
-export type GrokPluginCardProps = PropsRuntime<'settings.plugin.item'> & InjectFace<GrokPluginCardFace>;
+export type GrokPluginCardProps = PropsRuntime<'settings.provider.item'> & InjectFace<GrokPluginCardFace>;
 /** Render the single-package Grok contribution under Plugin configuration. */
 export declare function GrokPluginCard(props: GrokPluginCardProps): ReactNode;
 //# sourceMappingURL=GrokPluginCard.d.ts.map
