@@ -56,7 +56,14 @@ describe('parseGrokBilling', () => {
     expect(usage).toEqual({
       fetchedAt: '2026-08-17T00:00:00.000Z',
       windows: [
-        { id: 'GrokBuild', used: 1, limit: 100, unit: 'percent', period: '2026-08-16 – 2026-08-23' },
+        {
+          id: 'GrokBuild',
+          used: 1,
+          limit: 100,
+          unit: 'percent',
+          period: 'week',
+          resetsAt: '2026-08-23T16:26:18.098Z',
+        },
       ],
     })
   })
@@ -75,7 +82,7 @@ describe('parseGrokBilling', () => {
     expect(usage).toEqual({
       fetchedAt: '2026-08-17T00:00:00.000Z',
       windows: [
-        { id: 'monthly', used: 4, limit: 20, period: '2026-08-01 – 2026-09-01' },
+        { id: 'monthly', used: 4, limit: 20, resetsAt: '2026-09-01T00:00:00.000Z' },
       ],
     })
   })

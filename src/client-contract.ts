@@ -175,6 +175,8 @@ export interface GrokUsageWindow {
   period?: string
   /** When `percent`, the card shows used as a 0–100 percentage. */
   unit?: 'percent'
+  /** ISO-8601 instant the official dashboard calls 重置时间 / reset time. */
+  resetsAt?: string
 }
 
 /** Secret-free usage snapshot the configuration card renders. */
@@ -311,17 +313,20 @@ function decodeGrokUsageWindow(value: unknown): GrokUsageWindow | undefined {
   const limit = value['limit']
   const period = value['period']
   const unit = value['unit']
+  const resetsAt = value['resetsAt']
   if (typeof id !== 'string' || id.length === 0) return undefined
   if (typeof used !== 'number' || !Number.isFinite(used) || used < 0) return undefined
   if (typeof limit !== 'number' || !Number.isFinite(limit) || limit < 0) return undefined
   if (!optionalNonEmptyString(period)) return undefined
   if (unit !== undefined && unit !== 'percent') return undefined
+  if (!optionalNonEmptyString(resetsAt)) return undefined
   return {
     id,
     used,
     limit,
     ...period === undefined ? {} : { period },
     ...unit === undefined ? {} : { unit },
+    ...resetsAt === undefined ? {} : { resetsAt },
   }
 }
 

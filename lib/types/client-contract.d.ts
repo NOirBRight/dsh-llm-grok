@@ -117,6 +117,8 @@ export interface GrokUsageWindow {
     period?: string;
     /** When `percent`, the card shows used as a 0–100 percentage. */
     unit?: 'percent';
+    /** ISO-8601 instant the official dashboard calls 重置时间 / reset time. */
+    resetsAt?: string;
 }
 /** Secret-free usage snapshot the configuration card renders. */
 export interface GrokUsageView {

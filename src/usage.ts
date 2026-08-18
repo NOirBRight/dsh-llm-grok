@@ -55,12 +55,26 @@ function redactSecrets(message: string, secrets: readonly string[]): string {
   return next
 }
 
+/** Normalize a billing instant to ISO-8601. Unix seconds and milliseconds are accepted. */
+function isoInstant(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.length > 0) {
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? new Date(parsed).toISOString() : undefined
+  }
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    const ms = value < 1e12 ? value * 1000 : value
+    const date = new Date(ms)
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
+  }
+}
+
 function parseWindow(value: unknown): GrokUsageWindow | undefined {
   if (!isRecord(value)) return undefined
   const id = value['id']
   const used = value['used']
   const limit = value['limit']
   const period = value['period']
+  const resetsAt = isoInstant(value['resetsAt'] ?? value['resetAt'] ?? value['reset_at'] ?? value['end'])
   if (typeof id !== 'string' || id.length === 0) return undefined
   if (typeof used !== 'number' || !Number.isFinite(used) || used < 0) return undefined
   if (typeof limit !== 'number' || !Number.isFinite(limit) || limit < 0) return undefined
@@ -70,6 +84,7 @@ function parseWindow(value: unknown): GrokUsageWindow | undefined {
     used,
     limit,
     ...period === undefined ? {} : { period },
+    ...resetsAt === undefined ? {} : { resetsAt },
   }
 }
 
@@ -84,14 +99,23 @@ function moneyVal(value: unknown): number | undefined {
 
 function periodFromConfig(config: Record<string, unknown>): string | undefined {
   const current = isRecord(config['currentPeriod']) ? config['currentPeriod'] : undefined
-  const start = (current?.['start'] ?? config['billingPeriodStart'])
-  const end = (current?.['end'] ?? config['billingPeriodEnd'])
-  if (typeof start !== 'string' || start.length === 0) return undefined
-  if (typeof end !== 'string' || end.length === 0) return start.slice(0, 10)
-  return `${start.slice(0, 10)} – ${end.slice(0, 10)}`
+  const type = current?.['type']
+  if (type === 'USAGE_PERIOD_TYPE_WEEKLY') return 'week'
+  if (type === 'USAGE_PERIOD_TYPE_MONTHLY') return 'month'
 }
 
-function percentWindow(id: string, percent: number, period: string | undefined): GrokUsageWindow {
+/** Official grok.com "重置时间" is the current period's end. */
+function resetFromConfig(config: Record<string, unknown>): string | undefined {
+  const current = isRecord(config['currentPeriod']) ? config['currentPeriod'] : undefined
+  return isoInstant(current?.['end'] ?? config['billingPeriodEnd'])
+}
+
+function percentWindow(
+  id: string,
+  percent: number,
+  period: string | undefined,
+  resetsAt: string | undefined,
+): GrokUsageWindow {
   // Official grok.com usage shows 1% when the wire value is 1.0 — the scale is
   // already percent points, not a 0–1 fraction.
   const used = Math.min(100, Math.max(0, Math.round(percent * 10) / 10))
@@ -101,12 +125,14 @@ function percentWindow(id: string, percent: number, period: string | undefined):
     limit: 100,
     unit: 'percent',
     ...period === undefined ? {} : { period },
+    ...resetsAt === undefined ? {} : { resetsAt },
   }
 }
 
 /** Credits flavor: weekly window + per-product usagePercent (0–1). */
 function parseCreditsConfig(config: Record<string, unknown>, fetchedAt: string): GrokUsageView | undefined {
   const period = periodFromConfig(config)
+  const resetsAt = resetFromConfig(config)
   const windows: GrokUsageWindow[] = []
   const products = config['productUsage']
   if (Array.isArray(products)) {
@@ -116,13 +142,13 @@ function parseCreditsConfig(config: Record<string, unknown>, fetchedAt: string):
       const percent = entry['usagePercent']
       if (typeof product !== 'string' || product.length === 0) continue
       if (typeof percent !== 'number' || !Number.isFinite(percent)) continue
-      windows.push(percentWindow(product, percent, period))
+      windows.push(percentWindow(product, percent, period, resetsAt))
     }
   }
   if (windows.length === 0) {
     const percent = config['creditUsagePercent']
     if (typeof percent === 'number' && Number.isFinite(percent)) {
-      windows.push(percentWindow('weekly', percent, period))
+      windows.push(percentWindow('weekly', percent, period, resetsAt))
     }
   }
   return windows.length === 0 ? undefined : { fetchedAt, windows }
@@ -135,6 +161,7 @@ function parsePrepaidConfig(config: Record<string, unknown>, fetchedAt: string):
   if (used === undefined || limit === undefined) return undefined
   if (used === 0 && limit === 0) return undefined
   const period = periodFromConfig(config)
+  const resetsAt = resetFromConfig(config)
   return {
     fetchedAt,
     windows: [{
@@ -142,6 +169,7 @@ function parsePrepaidConfig(config: Record<string, unknown>, fetchedAt: string):
       used,
       limit,
       ...period === undefined ? {} : { period },
+      ...resetsAt === undefined ? {} : { resetsAt },
     }],
   }
 }

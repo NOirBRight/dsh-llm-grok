@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Show official reset time under usage bars (period end from SuperGrok billing)
+- Rename Settings nav/title from Providers to LLM Providers / LLM 供应商
+
 ## 0.2.0
 
 - Move the settings card from Plugins to Settings → Providers

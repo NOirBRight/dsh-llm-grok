@@ -18,7 +18,7 @@ import type {
 import { officialDefaultEffort, officialEffortsFor } from '../reasoning.ts'
 import type { GrokSettingsKey } from './locales.ts'
 import { BrandMark } from './BrandMark.tsx'
-import { AuthToolbar, ProviderCardHeader, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatProviderSummary, formatUsageClock, providerHeaderStyle } from './provider-chrome.tsx'
+import { AuthToolbar, ProviderCardHeader, UsageHeader, UsageResetAt, UsageSkeleton, UsageUpdatedAt, formatProviderSummary, formatUsageClock, providerHeaderStyle, resetLabelOf } from './provider-chrome.tsx'
 import type {} from './provider-section.ts'
 import { SortableList } from './SortableList.tsx'
 
@@ -303,22 +303,25 @@ function IconTrash(): ReactNode {
 }
 
 /** One quota window: used/limit numbers and a solid meter. */
-function UsageBar({ usedText, window: quota }: {
+function UsageBar({ usedText, window: quota, t }: {
   usedText: string
   window: GrokUsageWindow
+  t: GrokPluginCardFace['t']
 }): ReactNode {
   const ratio = quota.limit > 0 ? quota.used / quota.limit : quota.used > 0 ? 1 : 0
   const percent = Math.round(ratio * 1000) / 10
   const fill = Math.min(100, Math.max(0, percent))
-  const label = quota.period === undefined ? quota.id : `${quota.id} (${quota.period})`
+  const label = quota.period === undefined || quota.resetsAt !== undefined
+    ? quota.id
+    : quota.id + ' (' + quota.period + ')'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
         <span style={labelStyle}>{label}</span>
         <span style={hintStyle}>
           {quota.unit === 'percent'
-            ? `${String(quota.used)}%`
-            : `${usedText} ${String(quota.used)} / ${String(quota.limit)}`}
+            ? String(quota.used) + '%'
+            : usedText + ' ' + String(quota.used) + ' / ' + String(quota.limit)}
         </span>
       </div>
       <div
@@ -340,8 +343,13 @@ function UsageBar({ usedText, window: quota }: {
           }}
         />
       </div>
+      <UsageResetAt label={resetLabelOf(quota.resetsAt, usageResetCopy(t))} />
     </div>
   )
+}
+
+function usageResetCopy(t: GrokPluginCardFace['t']): { at: string, atDays: string } {
+  return { at: t('usageResetAt'), atDays: t('usageResetAtDays') }
 }
 
 /** Render the single-package Grok contribution under Plugin configuration. */
@@ -730,6 +738,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                               key={window.id + ':' + String(index)}
                               usedText={t('usageUsed')}
                               window={window}
+                              t={t}
                             />
                           ))}
                         </>

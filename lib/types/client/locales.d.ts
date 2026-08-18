@@ -62,6 +62,8 @@ export declare const en: {
     readonly usageFailed: "Could not read usage.";
     readonly usageRefreshFailed: "Refresh failed";
     readonly usageUpdatedAt: "Updated {time}";
+    readonly usageResetAt: "Resets {time}";
+    readonly usageResetAtDays: "Usage limits reset on {date} ({count} days left)";
 };
 /** Locale keys owned by the Grok configuration card. */
 export type GrokSettingsKey = keyof typeof en;
