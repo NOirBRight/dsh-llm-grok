@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3
+
+- Match the complete observed xAI capacity response while leaving generic provider and quota failures non-retryable
+
 ## 0.2.2
 
 - Retry model requests up to eight times by default; provider configuration can override the budget

@@ -101,7 +101,7 @@ function classifyGrokTransientError(chunk: StreamChunk): StreamChunk {
     return chunk
   }
   const message = chunk.reason.failure.message
-  const code = /currently at capacity|high demand|priority processing/iu.test(message)
+  const code = /currently at capacity|high demand/iu.test(message)
     ? 'RATE_LIMIT'
     : /service temporarily unavailable|availability is currently degraded/iu.test(message)
       ? 'SERVER'

@@ -95,6 +95,13 @@ describe('resolveAdapterOptions', () => {
     })
     expect(options.models.map(model => model.id)).toEqual(['grok-4.6'])
   })
+
+  it('resolves the host default and an explicit eight-retry policy', () => {
+    expect(resolveAdapterOptions({}).retryPolicy).toMatchObject({ mode: 'normal', maxRetries: 2 })
+    expect(resolveAdapterOptions({
+      retryPolicy: { mode: 'normal', maxRetries: 8 },
+    }).retryPolicy).toMatchObject({ mode: 'normal', maxRetries: 8 })
+  })
 })
 
 describe('GrokAdapter metadata', () => {
@@ -205,13 +212,31 @@ describe('GrokAdapter.stream request shape', () => {
   it.each([
     [
       'RATE_LIMIT',
-      'The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing',
+      'The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing: https://docs.x.ai/developers/advanced-api-usage/priority-processing',
     ],
     [
       'SERVER',
       "Service temporarily unavailable. The model's availability is currently degraded.",
     ],
   ])('classifies Grok transient errors as %s', async (code, message) => {
+    const server = await fakeChatProxy([{
+      kind: 'sse',
+      events: [{ type: 'error', code: null, message }],
+    }])
+    const a = adapter({ options: () => connection({ baseURL: `${server.url}/v1` }) })
+
+    const finish = (await collect(a.stream(request()))).find(chunk => chunk.type === 'finish')
+
+    expect(finish).toMatchObject({
+      type: 'finish',
+      reason: { kind: 'error', failure: { code, message: `Error Code null: ${message}` } },
+    })
+  })
+
+  it.each([
+    ['PI_AI_ERROR', 'boom'],
+    ['QUOTA', 'You have run out of credits or need a Grok subscription'],
+  ])('leaves %s failures non-retryable', async (code, message) => {
     const server = await fakeChatProxy([{
       kind: 'sse',
       events: [{ type: 'error', code: null, message }],
