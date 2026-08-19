@@ -80,6 +80,19 @@ describe('injectGrokServerSearchTools', () => {
     })
   })
 
+  it('does not append a server web_search when a function tool already uses that name', () => {
+    expect(injectGrokServerSearchTools({
+      model: MODEL_ID,
+      tools: [{ type: 'function', name: 'web_search' }],
+    })).toEqual({
+      model: MODEL_ID,
+      tools: [
+        { type: 'function', name: 'web_search' },
+        { type: 'x_search' },
+      ],
+    })
+  })
+
   it('creates tools when the payload has none', () => {
     expect(injectGrokServerSearchTools({ model: MODEL_ID })).toEqual({
       model: MODEL_ID,

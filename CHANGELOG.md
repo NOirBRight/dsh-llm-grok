@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4
+
+- Skip injecting server-side `web_search` when a DSH function tool already uses that name (Grok 400 Duplicate tool names)
+
 ## 0.2.3
 
 - Match the complete observed xAI capacity response while leaving generic provider and quota failures non-retryable

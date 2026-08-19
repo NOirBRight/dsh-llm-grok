@@ -38,6 +38,15 @@ function toolType(tool: unknown): string | undefined {
   return typeof tool['type'] === 'string' ? tool['type'] : undefined
 }
 
+function toolName(tool: unknown): string | undefined {
+  if (!isRecord(tool)) return undefined
+  return typeof tool['name'] === 'string' ? tool['name'] : undefined
+}
+
+function occupiesServerTool(tool: unknown, type: string): boolean {
+  return toolType(tool) === type || toolName(tool) === type
+}
+
 /**
  * Append `{ type: "web_search" }` and `{ type: "x_search" }` when missing.
  * Leaves non-object payloads unchanged.
@@ -48,7 +57,7 @@ export function injectGrokServerSearchTools(payload: unknown): unknown {
   const existing = payload['tools']
   const tools = Array.isArray(existing) ? [...existing] : []
   for (const extra of GROK_SERVER_SEARCH_TOOLS) {
-    if (!tools.some(tool => toolType(tool) === extra.type)) tools.push({ type: extra.type })
+    if (!tools.some(tool => occupiesServerTool(tool, extra.type))) tools.push({ type: extra.type })
   }
   return { ...payload, tools }
 }
