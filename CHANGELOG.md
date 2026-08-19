@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- Retry model requests up to eight times by default; provider configuration can override the budget
+- Classify xAI capacity/high-demand failures as `RATE_LIMIT` and temporary availability degradation as `SERVER`
+
 ## 0.2.1
 
 - Show official reset time under usage bars (period end from SuperGrok billing)

@@ -11,7 +11,7 @@ DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由�
 要求 DeepSeek Harness 0.1.0-rc.6 或更高版本。直接从 GitHub 安装：
 
 ~~~sh
-dsh plugin --profile web add github:NOirBRight/dsh-llm-grok#v0.2.1
+dsh plugin --profile web add github:NOirBRight/dsh-llm-grok#v0.2.2
 dsh web
 ~~~
 
@@ -42,10 +42,13 @@ Models 页面如果列出 Grok，也只是 hint。因为本包不声明 `apiKeyE
     streamIdleTimeoutMs: 300000
     retryPolicy:
       mode: normal
+      maxRetries: 8
       backoff:
         initialDelayMs: 500
         maxDelayMs: 10000
         jitterRatio: 0.1
 ~~~
+
+bundle 默认对符合条件的模型请求失败最多重试八次。xAI 容量不足/高需求失败归类为 `RATE_LIMIT`；临时可用性下降归类为 `SERVER`。
 
 没有 `apiKeyEnv`，也没有用户可改的 base URL。`models` 是对话里显示的目录，是账户列表的一个子集。

@@ -96,6 +96,26 @@ export function applyOfficialReasoningMetadata(
   }
 }
 
+function classifyGrokTransientError(chunk: StreamChunk): StreamChunk {
+  if (chunk.type !== 'finish' || chunk.reason.kind !== 'error' || chunk.reason.failure.code !== 'PI_AI_ERROR') {
+    return chunk
+  }
+  const message = chunk.reason.failure.message
+  const code = /currently at capacity|high demand|priority processing/iu.test(message)
+    ? 'RATE_LIMIT'
+    : /service temporarily unavailable|availability is currently degraded/iu.test(message)
+      ? 'SERVER'
+      : undefined
+  if (code === undefined) return chunk
+  return {
+    ...chunk,
+    reason: {
+      ...chunk.reason,
+      failure: { ...chunk.reason.failure, code },
+    },
+  }
+}
+
 /** The Grok chat adapter backed by pi-ai OpenAI Responses. */
 export class GrokAdapter extends LlmAdapter {
   private snapshot: { options: GrokConnectionOptions, adapter: PiAiAdapter } | undefined
@@ -144,7 +164,9 @@ export class GrokAdapter extends LlmAdapter {
     return applyOfficialReasoningMetadata(info, catalog)
   }
 
-  override stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
-    return this.current().stream(options)
+  override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    for await (const chunk of this.current().stream(options)) {
+      yield classifyGrokTransientError(chunk)
+    }
   }
 }

@@ -20,7 +20,7 @@ afterEach(async () => {
   await closeFakeAuthServers()
 })
 
-const FIXED_POLICY = resolveRetryPolicy(undefined, 'test')
+const FIXED_POLICY = resolveRetryPolicy({ mode: 'normal', maxRetries: 8 }, 'test')
 const MODEL_ID = 'grok-4.6'
 
 function connection(overrides: Partial<GrokConnectionOptions> = {}): GrokConnectionOptions {
@@ -102,6 +102,7 @@ describe('GrokAdapter metadata', () => {
     const a = adapter({})
     expect(a.providerInfo('grok')).toEqual({ id: 'grok', name: 'Grok' })
     expect(a.providerRetryPolicy('grok')).toBe(FIXED_POLICY)
+    expect(a.providerRetryPolicy('grok')).toMatchObject({ mode: 'normal', maxRetries: 8 })
     await expect(a.listModels('grok')).resolves.toEqual([
       { provider: 'grok', id: 'grok-4.6', name: 'Grok 4.6', inputModalities: ['text', 'image'] },
       { provider: 'grok', id: 'grok-4.5', name: 'Grok 4.5', inputModalities: ['text', 'image'] },
@@ -199,6 +200,30 @@ describe('GrokAdapter.stream request shape', () => {
 
     await expect(collect(a.stream(request()))).rejects.toMatchObject({ code: 'MISSING_CREDENTIAL' })
     expect(server.requests).toEqual([])
+  })
+
+  it.each([
+    [
+      'RATE_LIMIT',
+      'The model is currently at capacity due to high demand. Please try again in a few minutes, or use a higher service tier for priority processing',
+    ],
+    [
+      'SERVER',
+      "Service temporarily unavailable. The model's availability is currently degraded.",
+    ],
+  ])('classifies Grok transient errors as %s', async (code, message) => {
+    const server = await fakeChatProxy([{
+      kind: 'sse',
+      events: [{ type: 'error', code: null, message }],
+    }])
+    const a = adapter({ options: () => connection({ baseURL: `${server.url}/v1` }) })
+
+    const finish = (await collect(a.stream(request()))).find(chunk => chunk.type === 'finish')
+
+    expect(finish).toMatchObject({
+      type: 'finish',
+      reason: { kind: 'error', failure: { code } },
+    })
   })
 
   it('does not emit a Think block per empty tco_ search-reasoning item', async () => {

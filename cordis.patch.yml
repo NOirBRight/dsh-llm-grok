@@ -4,3 +4,7 @@
 - insert:
     - id: llm-grok
       name: 'dsh-llm-grok'
+      config:
+        retryPolicy:
+          mode: normal
+          maxRetries: 8

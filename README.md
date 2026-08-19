@@ -11,7 +11,7 @@ The package root exposes the Cordis plugin contract. The same artifact exports `
 DeepSeek Harness 0.1.0-rc.6 or later is required. Install directly from GitHub:
 
 ~~~sh
-dsh plugin --profile web add github:NOirBRight/dsh-llm-grok#v0.2.1
+dsh plugin --profile web add github:NOirBRight/dsh-llm-grok#v0.2.2
 dsh web
 ~~~
 
@@ -42,10 +42,13 @@ The Models page, if it lists Grok at all, is hint-only. Because this package doe
     streamIdleTimeoutMs: 300000
     retryPolicy:
       mode: normal
+      maxRetries: 8
       backoff:
         initialDelayMs: 500
         maxDelayMs: 10000
         jitterRatio: 0.1
 ~~~
+
+The bundle retries eligible model-request failures up to eight times by default. xAI capacity/high-demand failures are classified as `RATE_LIMIT`; temporary availability degradation is classified as `SERVER`.
 
 There is no `apiKeyEnv` and no user-editable base URL. `models` is the displayed conversation catalog, a subset of the account list.
