@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.5
+
+- Optional `grok_image_gen` tool: SuperGrok session against Imagine REST (`POST /v1/images/generations`), default off. Distinct from Codex `codex_generate_image`.
+- Map undici `terminated` body drops to a readable Imagine error and retry the POST once
+
 ## 0.2.4
 
 - Skip injecting server-side `web_search` when a DSH function tool already uses that name (Grok 400 Duplicate tool names)

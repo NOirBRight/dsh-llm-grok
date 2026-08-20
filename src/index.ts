@@ -5,7 +5,7 @@
  * @module dsh-llm-grok
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Fiber } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { ConnectionRpcHandler } from '@deepseek-ai/dsh-client-connection'
@@ -14,7 +14,11 @@ import type { RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
 import { deepEqualJson, installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { SettingsPathOp } from '@deepseek-ai/dsh-settings'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
+import type {} from '@deepseek-ai/dsh-attachment'
+import type {} from '@deepseek-ai/dsh-fs'
+import type {} from '@deepseek-ai/dsh-tools'
 import { GrokAdapter, resolveGrokAccessToken } from './adapter.ts'
+import { grokImageGenTool } from './image-gen.ts'
 import type { GrokConnectionOptions } from './adapter.ts'
 import {
   GROK_AUTH_COMPLETE_ENDPOINT,
@@ -143,6 +147,13 @@ export {
 } from './usage.ts'
 export { GROK_MODELS_URL, parseGrokModels, readGrokModels, fallbackGrokCatalog } from './discovery.ts'
 export type { GrokUsageRequest } from './usage.ts'
+export { GROK_IMAGE_GEN_TOOL_NAME, grokImageGenTool } from './image-gen.ts'
+export {
+  GROK_IMAGINE_ASPECT_RATIOS,
+  GROK_IMAGINE_BASE_URL,
+  GROK_IMAGINE_MODEL,
+  generateGrokImage,
+} from './image-gen-client.ts'
 
 export const name = 'llm-grok'
 export const inject = ['llm']
@@ -208,6 +219,8 @@ export interface Config {
   streamIdleTimeoutMs?: number
   /** Displayed conversation-picker catalog; omission uses the frozen default. */
   models?: GrokCatalogModel[]
+  /** When true, register the `grok_image_gen` tool. Default off. */
+  enableImageGen?: boolean
   /** Provider-owned model-request retry policy; omission uses normal defaults. */
   retryPolicy?: RetryPolicyConfig
 }
@@ -228,6 +241,7 @@ export const Config: z<Config> = z.object({
     GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   ),
   models: z.array(catalogModel),
+  enableImageGen: z.boolean().default(false),
   retryPolicy: RetryPolicySchema,
 })
 
@@ -337,6 +351,9 @@ async function saveDisplayedCatalog(ctx: Context, payload: unknown) {
     if (!deepEqualJson(current.models, request.models)) {
       ops.push({ op: 'set', path: ['models'], value: request.models })
     }
+    if (request.enableImageGen !== undefined && current.enableImageGen !== request.enableImageGen) {
+      ops.push({ op: 'set', path: ['enableImageGen'], value: request.enableImageGen })
+    }
     if (ops.length > 0) await settings.mutate(NS, ops, request.expectedRevision)
     const accepted = settings.describe().find(descriptor => descriptor.ns === NS)
     const acceptedSettings = decodeGrokSettings(accepted?.value)
@@ -411,6 +428,49 @@ export function apply(ctx: Context, config: Config): void {
     setSource: (source) => {
       current = source as () => Config
     },
-    onChange: ensureRegistrationFacts,
+    onChange: scheduleCapabilities,
+  })
+
+  let stopped = false
+  let imageGenFiber: Fiber | undefined
+  let imageGenTail: Promise<void> = Promise.resolve()
+
+  const reconcileImageGen = async (): Promise<void> => {
+    if (stopped) return
+    const enabled = current().enableImageGen === true
+    if (enabled === (imageGenFiber !== undefined)) return
+    const previous = imageGenFiber
+    imageGenFiber = undefined
+    if (previous !== undefined) await previous.dispose()
+    if (stopped || !enabled) return
+    const fiber = ctx.inject(
+      ['tools', 'fs', 'attachments'],
+      toolCtx => toolCtx.tools.register(grokImageGenTool(toolCtx, {
+        resolveAccessToken: () => resolveGrokAccessToken(runtime),
+      })),
+    )
+    imageGenFiber = fiber
+    void Promise.resolve(fiber).catch((error: unknown) => {
+      if (imageGenFiber === fiber) imageGenFiber = undefined
+      ctx.logger.error('llm-grok: optional grok_image_gen tool failed to activate')
+      ctx.logger.error(error)
+    })
+  }
+
+  function scheduleCapabilities(): void {
+    ensureRegistrationFacts()
+    imageGenTail = imageGenTail.then(reconcileImageGen, reconcileImageGen).catch((error: unknown) => {
+      ctx.logger.error('llm-grok: could not apply the updated grok_image_gen configuration')
+      ctx.logger.error(error)
+    })
+  }
+
+  scheduleCapabilities()
+  ctx.effect(() => async () => {
+    stopped = true
+    await imageGenTail
+    const imageGen = imageGenFiber
+    imageGenFiber = undefined
+    await imageGen?.dispose()
   })
 }

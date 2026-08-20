@@ -181,5 +181,5 @@ Channel：`/grok`，`authority: 'loopback'`。
 
 - 不把搜索做成 `ctx.web` provider，即使以后有人用 Responses 包装一层「假搜索引擎」。
 - 不在 Models 页做 OAuth 或 catalog 编辑。
-- 不把订阅会话当 `XAI_API_KEY` 打 `api.x.ai`。
+- 不把订阅会话当 `XAI_API_KEY` 打 `api.x.ai` 的聊天接口。可选工具 `grok_image_gen` 是例外：只允许同一会话打 Imagine REST `POST /v1/images/generations`（对齐 Grok Build 本地 `image_gen`）。
 - 不在 V1 做 usage 的计费跳转或「管理订阅」外链，除非 billing 响应当场带了无密钥的官方 URL。

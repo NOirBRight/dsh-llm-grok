@@ -27,6 +27,8 @@ export type { GrokSession } from './session.ts';
 export { GROK_BILLING_URL, DEFAULT_USAGE_REQUEST_TIMEOUT_MS, parseGrokBilling, readGrokUsage, } from './usage.ts';
 export { GROK_MODELS_URL, parseGrokModels, readGrokModels, fallbackGrokCatalog } from './discovery.ts';
 export type { GrokUsageRequest } from './usage.ts';
+export { GROK_IMAGE_GEN_TOOL_NAME, grokImageGenTool } from './image-gen.ts';
+export { GROK_IMAGINE_ASPECT_RATIOS, GROK_IMAGINE_BASE_URL, GROK_IMAGINE_MODEL, generateGrokImage, } from './image-gen-client.ts';
 export declare const name = "llm-grok";
 export declare const inject: string[];
 /** One resolution's complete request facts. */
@@ -42,6 +44,8 @@ export interface Config {
     streamIdleTimeoutMs?: number;
     /** Displayed conversation-picker catalog; omission uses the frozen default. */
     models?: GrokCatalogModel[];
+    /** When true, register the `grok_image_gen` tool. Default off. */
+    enableImageGen?: boolean;
     /** Provider-owned model-request retry policy; omission uses normal defaults. */
     retryPolicy?: RetryPolicyConfig;
 }

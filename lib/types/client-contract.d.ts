@@ -62,11 +62,15 @@ export interface GrokSettingsView {
     streamIdleTimeoutMs: number;
     /** Displayed advisory catalog (a subset of the account catalog). */
     models: GrokCatalogModel[];
+    /** When true, register the `grok_image_gen` tool. */
+    enableImageGen: boolean;
 }
 /** Atomic editable-settings payload sent by the browser face. */
 export interface GrokSaveRequest {
     /** Complete displayed catalog currently shown by the editor. */
     models: GrokCatalogModel[];
+    /** Optional `grok_image_gen` enablement; omission leaves the current value. */
+    enableImageGen?: boolean;
     /** Settings descriptor revision from which the editor began. */
     expectedRevision: number;
 }

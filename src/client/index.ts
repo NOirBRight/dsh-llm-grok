@@ -112,6 +112,7 @@ export function apply(ctx: ClientContext): void {
     if (snapshot.revision === undefined) throw new Error(t('requestFailed'))
     const saved = await rpc.call(GROK_RPC_CHANNEL, GROK_SAVE_ENDPOINT, {
       models: settings.models,
+      enableImageGen: settings.enableImageGen,
       expectedRevision: snapshot.revision,
     })
     if (!saved.ok) throw new Error(saved.error.message)

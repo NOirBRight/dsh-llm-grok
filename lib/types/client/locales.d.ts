@@ -64,6 +64,9 @@ export declare const en: {
     readonly usageUpdatedAt: "Updated {time}";
     readonly usageResetAt: "Resets {time}";
     readonly usageResetAtDays: "Usage limits reset on {date} ({count} days left)";
+    readonly capabilities: "Capabilities";
+    readonly enableImageGen: "Enable grok_image_gen tool";
+    readonly enableImageGenHelp: "Lets any conversation model draw with Grok Imagine using this SuperGrok login. Distinct from Codex codex_generate_image.";
 };
 /** Locale keys owned by the Grok configuration card. */
 export type GrokSettingsKey = keyof typeof en;

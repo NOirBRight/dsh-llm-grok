@@ -65,6 +65,9 @@ export const en = {
   usageUpdatedAt: 'Updated {time}',
   usageResetAt: 'Resets {time}',
   usageResetAtDays: 'Usage limits reset on {date} ({count} days left)',
+  capabilities: 'Capabilities',
+  enableImageGen: 'Enable grok_image_gen tool',
+  enableImageGenHelp: 'Lets any conversation model draw with Grok Imagine using this SuperGrok login. Distinct from Codex codex_generate_image.',
 } as const
 
 /** Locale keys owned by the Grok configuration card. */
@@ -135,4 +138,7 @@ export const zh: Record<GrokSettingsKey, string> = {
   usageUpdatedAt: '{time} 已更新',
   usageResetAt: '重置时间：{time}',
   usageResetAtDays: '重置时间：{date}（还剩 {count} 天）',
+  capabilities: '能力',
+  enableImageGen: '启用 grok_image_gen 工具',
+  enableImageGenHelp: '让任意会话模型用本卡的 SuperGrok 登录调用 Grok Imagine 生图。与 Codex 的 codex_generate_image 不同名。',
 }

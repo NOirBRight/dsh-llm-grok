@@ -10,6 +10,7 @@ import { apply, inject } from '../src/client/index.ts'
 const value: GrokSettingsView = {
   streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   models: GROK_CATALOG.map(model => ({ ...model })),
+  enableImageGen: false,
 }
 
 function scope(): SettingsScope<GrokSettingsView> {

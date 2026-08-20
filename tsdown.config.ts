@@ -18,6 +18,8 @@ const host: UserConfig = {
       '@deepseek-ai/schemastery',
       '@deepseek-ai/dsh-client-connection',
       '@deepseek-ai/dsh-attachment',
+      '@deepseek-ai/dsh-fs',
+      '@deepseek-ai/dsh-tools',
       '@deepseek-ai/dsh-invariants',
       '@deepseek-ai/dsh-launch-environment',
       '@deepseek-ai/dsh-llm',

@@ -368,6 +368,7 @@ describe('Grok settings/save RPC', () => {
       settings: {
         streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
         models: [{ id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true }],
+        enableImageGen: false,
       },
       revision: 2,
     })

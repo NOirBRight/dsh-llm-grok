@@ -117,12 +117,16 @@ export interface GrokSettingsView {
   streamIdleTimeoutMs: number
   /** Displayed advisory catalog (a subset of the account catalog). */
   models: GrokCatalogModel[]
+  /** When true, register the `grok_image_gen` tool. */
+  enableImageGen: boolean
 }
 
 /** Atomic editable-settings payload sent by the browser face. */
 export interface GrokSaveRequest {
   /** Complete displayed catalog currently shown by the editor. */
   models: GrokCatalogModel[]
+  /** Optional `grok_image_gen` enablement; omission leaves the current value. */
+  enableImageGen?: boolean
   /** Settings descriptor revision from which the editor began. */
   expectedRevision: number
 }
@@ -228,8 +232,9 @@ export function decodeGrokSettings(value: unknown): GrokSettingsView | undefined
     return undefined
   }
   const modelsValue = value['models']
+  const enableImageGen = value['enableImageGen'] === true
   if (modelsValue === undefined) {
-    return { streamIdleTimeoutMs, models: GROK_CATALOG.map(model => ({ ...model })) }
+    return { streamIdleTimeoutMs, models: GROK_CATALOG.map(model => ({ ...model })), enableImageGen }
   }
   if (!Array.isArray(modelsValue)) return undefined
   const models: GrokCatalogModel[] = []
@@ -238,7 +243,7 @@ export function decodeGrokSettings(value: unknown): GrokSettingsView | undefined
     if (model === undefined) return undefined
     models.push(model)
   }
-  return { streamIdleTimeoutMs, models }
+  return { streamIdleTimeoutMs, models, enableImageGen }
 }
 
 /**
@@ -437,13 +442,18 @@ export function decodeGrokSaveRequest(value: unknown): GrokSaveRequest | undefin
   if (!Array.isArray(value['models']) || typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision)) {
     return undefined
   }
+  if (value['enableImageGen'] !== undefined && typeof value['enableImageGen'] !== 'boolean') return undefined
   const models: GrokCatalogModel[] = []
   for (const entry of value['models']) {
     const model = decodeGrokCatalogModel(entry)
     if (model === undefined) return undefined
     models.push(model)
   }
-  return { models, expectedRevision }
+  return {
+    models,
+    expectedRevision,
+    ...typeof value['enableImageGen'] === 'boolean' ? { enableImageGen: value['enableImageGen'] } : {},
+  }
 }
 
 /**

@@ -369,6 +369,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   const [usage, setUsage] = useState<UsageState>({ status: 'idle' })
   const [lastUsage, setLastUsage] = useState<GrokUsageView | undefined>(undefined)
   const [usageUpdatedAt, setUsageUpdatedAt] = useState<Date | undefined>(undefined)
+  const [enableImageGen, setEnableImageGen] = useState(snapshot.value?.enableImageGen === true)
+  const [sourceEnableImageGen, setSourceEnableImageGen] = useState(snapshot.value?.enableImageGen === true)
   const [catalogOpen, setCatalogOpen] = useState(false)
   const [expandedModels, setExpandedModels] = useState<ReadonlySet<string>>(new Set())
   const [busy, setBusy] = useState(false)
@@ -378,7 +380,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   const title = t('title')
   const signingIn = auth.kind === 'signing-in'
   const disabled = snapshot.status !== 'ready' || !snapshot.writable || busy
-  const dirty = source !== undefined && draft !== undefined && !sameDraft(source, draft)
+  const dirty = (source !== undefined && draft !== undefined && !sameDraft(source, draft))
+    || enableImageGen !== sourceEnableImageGen
   const invalid = draft !== undefined && modelFailure(draft)
   const customModels = snapshot.user !== undefined
     && Object.prototype.hasOwnProperty.call(snapshot.user, 'models')
@@ -390,6 +393,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
     const next = snapshot.value.models.map(modelDraftOf)
     setSource(next)
     setDraft(next)
+    setEnableImageGen(snapshot.value.enableImageGen)
+    setSourceEnableImageGen(snapshot.value.enableImageGen)
     setSourceRevision(snapshot.revision)
   }, [dirty, snapshot.revision, snapshot.status, snapshot.value, sourceRevision])
 
@@ -571,6 +576,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
 
   const discard = (): void => {
     if (source !== undefined) setDraft(source.map(model => ({ ...model })))
+    setEnableImageGen(sourceEnableImageGen)
     setFailure(undefined)
     setNotice(undefined)
   }
@@ -584,10 +590,13 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
       const accepted = await props.saveConfiguration({
         ...snapshot.value,
         models: draft.map(modelSettingsOf),
+        enableImageGen,
       })
       const next = accepted.settings.models.map(modelDraftOf)
       setSource(next)
       setDraft(next)
+      setEnableImageGen(accepted.settings.enableImageGen)
+      setSourceEnableImageGen(accepted.settings.enableImageGen)
       setSourceRevision(accepted.revision)
       setNotice(t('saved'))
     } catch (error: unknown) {
@@ -913,6 +922,20 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                   </>
                 )
                 : null}
+            </section>
+            <section style={sectionStyle} aria-label={t('capabilities')}>
+              <p style={sectionTitleStyle}>{t('capabilities')}</p>
+              <Capability
+                label={t('enableImageGen')}
+                checked={enableImageGen}
+                disabled={disabled}
+                onChange={(checked) => {
+                  setEnableImageGen(checked)
+                  setFailure(undefined)
+                  setNotice(undefined)
+                }}
+              />
+              <p style={hintStyle}>{t('enableImageGenHelp')}</p>
             </section>
             {invalid ? <p style={errorStyle}>{t('invalidModel')}</p> : null}
             {failure === undefined ? null : <p style={errorStyle}>{failure}</p>}

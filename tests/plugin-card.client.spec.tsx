@@ -14,6 +14,7 @@ afterEach(() => { cleanup() })
 const settings: GrokSettingsView = {
   streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   models: GROK_CATALOG.map(model => ({ ...model })),
+  enableImageGen: false,
 }
 
 function snapshot(overrides: Partial<SettingsScopeSnapshot<GrokSettingsView>> = {}): SettingsScopeSnapshot<GrokSettingsView> {
@@ -105,7 +106,20 @@ describe('GrokPluginCard', () => {
 
     await waitFor(() => { expect(saveConfiguration).toHaveBeenCalledTimes(1) })
     expect(saveConfiguration.mock.calls[0]?.[0]?.models.map((model: GrokCatalogModel) => model.id)).toEqual(['grok-4.6'])
+    expect(saveConfiguration.mock.calls[0]?.[0]?.enableImageGen).toBe(false)
     expect(fetchModels).not.toHaveBeenCalled()
+  })
+
+  it('saves grok_image_gen enablement independently of the catalog', async () => {
+    const saveConfiguration = vi.fn((next: GrokSettingsView) => Promise.resolve({ settings: next, revision: 2 }))
+    render(<GrokPluginCard {...props({ saveConfiguration })} />)
+    expand()
+    await waitFor(() => { expect(screen.getByText(en.signedOut)).toBeTruthy() })
+    fireEvent.click(screen.getByRole('checkbox', { name: en.enableImageGen }))
+    fireEvent.click(screen.getByRole('button', { name: en.save }))
+    await waitFor(() => { expect(saveConfiguration).toHaveBeenCalledTimes(1) })
+    expect(saveConfiguration.mock.calls[0]?.[0]?.enableImageGen).toBe(true)
+    expect(saveConfiguration.mock.calls[0]?.[0]?.models.map((model: GrokCatalogModel) => model.id)).toEqual(['grok-4.6', 'grok-4.5'])
   })
 
   it('adopts a subset from the account picker without adding the rest', async () => {
