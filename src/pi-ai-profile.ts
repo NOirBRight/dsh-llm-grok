@@ -109,17 +109,23 @@ export function createGrokPiAiProfile(connection: GrokConnectionOptions): Resolv
     api: grokResponsesApi(source),
     headers,
   })
-  return {
+  const profile = {
     provider: GROK_PROVIDER,
     displayName: 'Grok',
     baseURL,
     defaultContextWindow: GROK_DEFAULT_CONTEXT_WINDOW,
     defaultMaxTokens: GROK_DEFAULT_MODEL_MAX_TOKENS,
-    defaultInput: ['text'],
+    defaultInput: ['text'] as 'text'[],
     streamIdleTimeoutMs: connection.streamIdleTimeoutMs,
     retryPolicy: connection.retryPolicy,
+    /**
+     * Mirrors RC1's official 20 MiB default and satisfies its required profile
+     * field; RC8 hosts ignore this extra property at runtime.
+     */
+    maxRequestImageBytes: 20 * 1024 * 1024,
     piProvider,
     configuredMaxTokens,
     headers,
   }
+  return profile
 }

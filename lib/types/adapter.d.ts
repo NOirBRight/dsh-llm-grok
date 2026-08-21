@@ -36,6 +36,7 @@ export declare function applyOfficialReasoningMetadata(info: LlmResolvedModelInf
 /** The Grok chat adapter backed by pi-ai OpenAI Responses. */
 export declare class GrokAdapter extends LlmAdapter {
     private readonly config;
+    private readonly auth;
     private snapshot;
     constructor(config: GrokAdapterOptions);
     /** Rebuild the delegated adapter only when the plugin publishes a new options snapshot. */

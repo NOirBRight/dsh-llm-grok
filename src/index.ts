@@ -46,6 +46,9 @@ import { deleteSession, resolveGrokSessionPath, statusFromSession } from './sess
 import { fallbackGrokCatalog, readGrokModels } from './discovery.ts'
 import { readGrokUsage } from './usage.ts'
 
+/** Preserve Grok's historical normal retry count across host-line default changes. */
+const DEFAULT_MAX_RETRIES = 2
+
 export { GrokAdapter, resolveGrokAccessToken } from './adapter.ts'
 export type { GrokAdapterOptions, GrokConnectionOptions } from './adapter.ts'
 export {
@@ -205,7 +208,10 @@ export function resolveAdapterOptions(config: Config): ResolvedGrokOptions {
     baseURL: GROK_CHAT_BASE_URL,
     models: resolveModels(config.models),
     streamIdleTimeoutMs,
-    retryPolicy: resolveRetryPolicy(config.retryPolicy, 'llm-grok: retryPolicy'),
+    retryPolicy: resolveRetryPolicy(
+      config.retryPolicy ?? { mode: 'normal', maxRetries: DEFAULT_MAX_RETRIES },
+      'llm-grok: retryPolicy',
+    ),
   }
 }
 

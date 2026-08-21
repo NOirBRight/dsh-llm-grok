@@ -22,6 +22,7 @@ import { ensureFreshSession } from './oauth.ts'
 import type { GrokOAuthRuntime } from './oauth.ts'
 import { createGrokPiAiProfile } from './pi-ai-profile.ts'
 import type { GrokConnectionOptions } from './pi-ai-profile.ts'
+import { createGrokPiAiAuth } from './pi-ai-auth.ts'
 import { readSession } from './session.ts'
 
 export type { GrokConnectionOptions } from './pi-ai-profile.ts'
@@ -118,6 +119,7 @@ function classifyGrokTransientError(chunk: StreamChunk): StreamChunk {
 
 /** The Grok chat adapter backed by pi-ai OpenAI Responses. */
 export class GrokAdapter extends LlmAdapter {
+  private readonly auth = createGrokPiAiAuth()
   private snapshot: { options: GrokConnectionOptions, adapter: PiAiAdapter } | undefined
 
   constructor(private readonly config: GrokAdapterOptions) {
@@ -130,13 +132,15 @@ export class GrokAdapter extends LlmAdapter {
     if (this.snapshot?.options === options) return this.snapshot.adapter
     const profile = createGrokPiAiProfile(options)
     const profiles = new Map<string, ResolvedPiAiProviderProfile>([[GROK_PROVIDER, profile]])
-    const adapter = new PiAiAdapter({
+    const adapterOptions = {
       profiles: () => profiles,
       resolveApiKey: () => this.config.resolveApiKey(),
+      auth: this.auth,
       ...this.config.resolveAttachments === undefined
         ? {}
         : { resolveAttachments: this.config.resolveAttachments },
-    })
+    }
+    const adapter = new PiAiAdapter(adapterOptions)
     this.snapshot = { options, adapter }
     return adapter
   }
