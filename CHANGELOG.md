@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.7
+
+- Own `prepareCall` so dsh 0.1.1-rc.2 Host can snapshot provider options before streaming
+- Widen Host peer ranges to `>=0.1.0-rc.6 <0.1.1 || >=0.1.1-rc.1 <1.0.0`
+
+## 0.2.6
+
+- dsh RC1 compatibility
+
 ## 0.2.5
 
 - Optional `grok_image_gen` tool: SuperGrok session against Imagine REST (`POST /v1/images/generations`), default off. Distinct from Codex `codex_generate_image`.
