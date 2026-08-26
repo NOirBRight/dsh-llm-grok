@@ -19,6 +19,10 @@ const PNG_1X1 = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
   'base64',
 )
+const JPEG_1X1 = Buffer.from(
+  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDi6KKK+ZP3E//Z',
+  'base64',
+)
 const signal = new AbortController().signal
 
 let workspace: string
@@ -120,6 +124,16 @@ describe('grok_image_gen', () => {
       locations: [{ path: 'out/pixel.png' }],
     })
     expect(proxy.requests[0]?.body).toMatchObject({ prompt: 'a red pixel', model: GROK_IMAGINE_MODEL })
+  })
+
+  it('normalizes a custom path extension to the generated media type', async () => {
+    const proxy = await fakeChatProxy([{ kind: 'json', status: 200, body: { data: [{ b64_json: JPEG_1X1.toString('base64') }] } }])
+    const context = await bootRuntime()
+    context.tools.register(grokImageGenTool(context, { resolveAccessToken: async () => 'access-secret', imagesURL: proxy.url + '/images/generations' }))
+    const result = await generate(context, { prompt: 'a red pixel', path: 'out/pixel.png' })
+    expect(result.isError).toBe(false)
+    expect(result.content.find(block => block.type === 'text')?.text).toContain('out/pixel.jpg')
+    expect(await readFile(join(workspace, 'out/pixel.jpg'))).toEqual(JPEG_1X1)
   })
 
   it('fails unsigned-in plugin calls without leaking a network request', async () => {

@@ -1,7 +1,7 @@
 /** Model-invoked `grok_image_gen` tool over the Grok subscription session. */
 
 import { mkdir, writeFile } from 'node:fs/promises'
-import { basename, dirname } from 'node:path'
+import { basename, dirname, extname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
@@ -82,6 +82,14 @@ function sanitizeFilePart(value: string): string {
 function defaultRelativePath(prompt: string, mediaType: ImageMediaType): string {
   const stamp = new Date().toISOString().replace(/[:.]/gu, '-').replace(/T/u, '-').replace(/Z$/u, '')
   return 'generated/grok-' + stamp + '-' + sanitizeFilePart(prompt) + '.' + extensionOf(mediaType)
+}
+
+function pathForMediaType(path: string, mediaType: ImageMediaType): string {
+  const current = extname(path)
+  const currentExtension = current.slice(1).toLowerCase()
+  const expectedExtension = extensionOf(mediaType)
+  if (currentExtension === expectedExtension || (mediaType === 'image/jpeg' && currentExtension === 'jpeg')) return path
+  return (current === '' ? path : path.slice(0, -current.length)) + '.' + expectedExtension
 }
 
 async function writeGeneratedFile(
@@ -186,7 +194,7 @@ export function grokImageGenTool(ctx: Context, options: GrokImageGenToolOptions)
       }
       const relativePath = args.path === undefined || args.path.trim().length === 0
         ? defaultRelativePath(prompt, generated.mediaType)
-        : args.path.trim()
+        : pathForMediaType(args.path.trim(), generated.mediaType)
       const ref = await attachments.saveImage({
         data: generated.bytes,
         mediaType: generated.mediaType,

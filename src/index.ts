@@ -19,6 +19,7 @@ import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-tools'
 import { GrokAdapter, resolveGrokAccessToken } from './adapter.ts'
 import { grokImageGenTool } from './image-gen.ts'
+import { installGrokModelSwitchAdapter } from './model-switch-adapter.ts'
 import type { GrokConnectionOptions } from './adapter.ts'
 import {
   GROK_AUTH_COMPLETE_ENDPOINT,
@@ -405,6 +406,7 @@ export function apply(ctx: Context, config: Config): void {
     resolveApiKey: () => resolveGrokAccessToken(runtime),
     resolveAttachments: () => ctx.get('attachments'),
   })
+  installGrokModelSwitchAdapter(ctx, () => resolveGrokAccessToken(runtime))
   ctx.llm.registerConfigurableProviders([
     { provider: GROK_PROVIDER, displayName: 'Grok', settingsNs: NS, settingsPath: [] },
   ])
