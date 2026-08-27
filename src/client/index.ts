@@ -1,6 +1,6 @@
 /** Browser half: Grok setup inside Plugin configuration. */
 
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -9,20 +9,24 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import {
   GROK_AUTH_COMPLETE_ENDPOINT,
+  GROK_AUTH_CANCEL_ENDPOINT,
   GROK_AUTH_LOGOUT_ENDPOINT,
   GROK_AUTH_START_ENDPOINT,
   GROK_AUTH_STATUS_ENDPOINT,
+  GROK_AUTH_ATTEMPT_STATUS_ENDPOINT,
   GROK_RPC_CHANNEL,
   GROK_MODELS_ENDPOINT,
   GROK_SAVE_ENDPOINT,
+  GROK_SETTINGS_READ_ENDPOINT,
   GROK_SETTINGS_NAMESPACE,
   GROK_USAGE_ENDPOINT,
   decodeGrokAuthLogoutReply,
   decodeGrokAuthStartReply,
   decodeGrokAuthStatus,
+  decodeGrokAuthAttemptStatus,
   decodeGrokModelsReply,
   decodeGrokSaveResult,
-  decodeGrokSettings,
+  decodeGrokSettingsReadResult,
   decodeGrokUsageReply,
 } from '../client-contract.ts'
 import type { GrokSettingsView } from '../client-contract.ts'
@@ -44,7 +48,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Stable browser-plugin name. */
 export const name = 'dsh-llm-grok-client'
 /** Client services required by the Plugin configuration contribution. */
-export const inject = ['slots', 'locale', 'connection', 'settingsScope']
+export const inject = ['slots', 'locale', 'connection']
 
 /** Register localized Grok configuration under Plugin configuration. */
 export function apply(ctx: ClientContext): void {
@@ -54,27 +58,81 @@ export function apply(ctx: ClientContext): void {
     'dsh-llm-grok: Plugin configuration copy',
   )
   const t = ctx.locale.bind(localeNamespace) as GrokPluginCardFace['t']
-  const scope = ctx.settingsScope.bind<GrokSettingsView>({
-    namespace: GROK_SETTINGS_NAMESPACE,
-    decode: decodeGrokSettings,
-  })
   const picker = new GrokModelPickerController()
   const { rpc } = ctx.get('connection') as unknown as ConnectionHandle
+  let currentSnapshot: SettingsScopeSnapshot<GrokSettingsView> = {
+    status: 'loading', value: undefined, base: undefined, user: undefined, revision: undefined, writable: true, mode: 'host',
+  }
+  const listeners = new Set<() => void>()
+  const scope = {
+    getSnapshot: () => currentSnapshot,
+    subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener) },
+    set: async () => { throw new Error('Use Grok management settings/save') },
+    unset: async () => { throw new Error('Use Grok management settings/save') },
+  }
+  const publishSettings = (settings: GrokSettingsView, revision: number): void => {
+    currentSnapshot = { ...currentSnapshot, status: 'ready', value: settings, revision }
+    listeners.forEach(listener => listener())
+  }
+  const refreshSettings = async (): Promise<void> => {
+    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_SETTINGS_READ_ENDPOINT, {})
+    if (!result.ok) throw new Error(result.error.message)
+    const decoded = decodeGrokSettingsReadResult(result.value)
+    if (decoded === undefined) throw new Error('invalid Grok settings/read response')
+    publishSettings(decoded.settings, decoded.revision)
+  }
+  void refreshSettings().catch(() => {
+    currentSnapshot = { ...currentSnapshot, status: 'unavailable' }
+    listeners.forEach(listener => listener())
+  })
 
   const startAuth: GrokPluginCardFace['startAuth'] = async () => {
-    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_START_ENDPOINT, {})
+    const popup = typeof window === 'undefined' ? null : window.open('about:blank', '_blank')
+    if (popup !== null) popup.opener = null
+    const closePopup = (): void => {
+      if (popup !== null && !popup.closed) popup.close()
+    }
+    try {
+      const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_START_ENDPOINT, {})
+      if (!result.ok) {
+        closePopup()
+        return { ok: false, retryable: true, message: result.error.message }
+      }
+      const decoded = decodeGrokAuthStartReply(result.value)
+      if (decoded === undefined) {
+        closePopup()
+        return { ok: false, retryable: true, message: t('signInFailed') }
+      }
+      if (decoded.ok && decoded.authorizationUrl) {
+        if (popup !== null && !popup.closed) popup.location.href = decoded.authorizationUrl
+        else return { ...decoded, popupBlocked: true }
+      }
+      return decoded
+    } catch {
+      closePopup()
+      return { ok: false, retryable: true, message: t('signInFailed') }
+    }
+  }
+
+  const completeAuth: GrokPluginCardFace['completeAuth'] = async (code, attemptId) => {
+    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_COMPLETE_ENDPOINT, { code, ...attemptId === undefined ? {} : { attemptId } })
     if (!result.ok) return { ok: false, retryable: true, message: result.error.message }
     const decoded = decodeGrokAuthStartReply(result.value)
     if (decoded === undefined) return { ok: false, retryable: true, message: t('signInFailed') }
     return decoded
   }
 
-  const completeAuth: GrokPluginCardFace['completeAuth'] = async (code) => {
-    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_COMPLETE_ENDPOINT, { code })
-    if (!result.ok) return { ok: false, retryable: true, message: result.error.message }
-    const decoded = decodeGrokAuthStartReply(result.value)
-    if (decoded === undefined) return { ok: false, retryable: true, message: t('signInFailed') }
+  const readAuthAttemptStatus: GrokPluginCardFace['readAuthAttemptStatus'] = async (attemptId) => {
+    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_ATTEMPT_STATUS_ENDPOINT, { attemptId })
+    if (!result.ok) throw new Error(result.error.message)
+    const decoded = decodeGrokAuthAttemptStatus(result.value)
+    if (decoded === undefined) throw new Error(t('statusFailed'))
     return decoded
+  }
+
+  const cancelAuth: GrokPluginCardFace['cancelAuth'] = async (attemptId) => {
+    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_CANCEL_ENDPOINT, { attemptId })
+    if (!result.ok) throw new Error(result.error.message)
   }
 
   const readAuthStatus: GrokPluginCardFace['readAuthStatus'] = async () => {
@@ -118,6 +176,7 @@ export function apply(ctx: ClientContext): void {
     if (!saved.ok) throw new Error(saved.error.message)
     const accepted = decodeGrokSaveResult(saved.value)
     if (accepted === undefined) throw new Error(t('requestFailed'))
+    publishSettings(accepted.settings, accepted.revision)
     return accepted
   }
 
@@ -144,7 +203,9 @@ export function apply(ctx: ClientContext): void {
       hooks: { grokSettings: scope },
       startAuth,
       completeAuth,
+      cancelAuth,
       readAuthStatus,
+       readAuthAttemptStatus,
       logout,
       fetchUsage,
       fetchModels,

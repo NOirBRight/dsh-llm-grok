@@ -1,12 +1,15 @@
 import { mkdtemp, readFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  beginPkceLogin,
   completePkceLogin,
   createGrokAuthRuntime,
   ensureFreshSession,
   startPkceLogin,
+  cancelPkceLogin,
+  statusPkceLogin,
 } from '../src/oauth.ts'
 import { decodeGrokSession, readSession, writeSession } from '../src/session.ts'
 import { closeFakeAuthServers, fakeAuthServer } from './fake-auth-server.ts'
@@ -150,6 +153,23 @@ describe('Host-owned xAI PKCE', () => {
     })
     const exchange = auth.requests.find(request => request.body.get('grant_type') === 'authorization_code')
     expect(exchange?.body.get('code')).toBe(auth.nextCode)
+  })
+  it('allows a new remote attempt after success and cancellation', async () => {
+    const path = join(await home(), 'grok-oauth.json')
+    const auth = await fakeAuthServer({ authorizationCode: tokens })
+    const runtime = createGrokAuthRuntime({ resolveSessionPath: () => path, issuer: auth.issuer, timeoutMs: 2_000 })
+    const first = await beginPkceLogin(runtime)
+    if (!('attemptId' in first) || first === undefined) throw new Error('expected first attempt')
+    const parsed = new URL(first.authorizationUrl)
+    await fetch(`${parsed.searchParams.get('redirect_uri')}?code=${auth.nextCode}&state=${parsed.searchParams.get('state')}`)
+    await vi.waitFor(() => { expect(statusPkceLogin(runtime, first.attemptId)).toBe('succeeded') })
+    const second = await beginPkceLogin(runtime)
+    if (!('attemptId' in second) || second === undefined) throw new Error('expected second attempt')
+    expect(cancelPkceLogin(runtime, second.attemptId)).toBe(true)
+    expect(statusPkceLogin(runtime, second.attemptId)).toBe('cancelled')
+    const third = await beginPkceLogin(runtime)
+    expect('attemptId' in third).toBe(true)
+    if ('attemptId' in third) cancelPkceLogin(runtime, third.attemptId)
   })
 })
 

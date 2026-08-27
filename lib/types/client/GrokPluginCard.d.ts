@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react';
 import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client';
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
-import type { GrokAuthStartReply, GrokAuthStatus, GrokCatalogModel, GrokSaveResult, GrokSettingsView, GrokUsageReply } from '../client-contract.ts';
+import type { GrokAuthStartReply, GrokAuthAttemptStatus, GrokAuthStatus, GrokCatalogModel, GrokSaveResult, GrokSettingsView, GrokUsageReply } from '../client-contract.ts';
 import type { GrokSettingsKey } from './locales.ts';
 /** Dependencies injected by the browser-plugin registration. */
 export interface GrokPluginCardFace {
@@ -15,9 +15,13 @@ export interface GrokPluginCardFace {
     /** Begin Host PKCE; the browser never receives tokens. */
     startAuth: () => Promise<GrokAuthStartReply>;
     /** Deliver a Grok Build paste-code into the in-flight Host exchange. */
-    completeAuth: (code: string) => Promise<GrokAuthStartReply>;
+    completeAuth: (code: string, attemptId?: string) => Promise<GrokAuthStartReply>;
+    /** Cancel the current Host-owned sign-in attempt. */
+    cancelAuth: (attemptId: string) => Promise<void>;
     /** Read secret-free login status. */
     readAuthStatus: () => Promise<GrokAuthStatus>;
+    /** Read one secret-free attempt state. */
+    readAuthAttemptStatus: (attemptId: string) => Promise<GrokAuthAttemptStatus>;
     /** Delete the Host session. */
     logout: () => Promise<void>;
     /** Read the Host-decoded billing snapshot. Tokens never cross this call. */

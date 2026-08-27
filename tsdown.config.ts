@@ -27,6 +27,7 @@ const host: UserConfig = {
       '@deepseek-ai/dsh-settings',
       '@deepseek-ai/dsh-timeout',
       '@earendil-works/pi-ai',
+      'dsh-model-switch',
     ],
   },
 }

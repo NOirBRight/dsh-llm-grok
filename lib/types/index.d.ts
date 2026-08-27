@@ -13,14 +13,14 @@ import type { GrokCatalogModel } from './client-contract.ts';
 import type { GrokOAuthRuntime } from './oauth.ts';
 export { GrokAdapter, resolveGrokAccessToken } from './adapter.ts';
 export type { GrokAdapterOptions, GrokConnectionOptions } from './adapter.ts';
-export { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS, GROK_PROVIDER, GROK_SETTINGS_NAMESPACE, GROK_RPC_CHANNEL, GROK_AUTH_START_ENDPOINT, GROK_AUTH_STATUS_ENDPOINT, GROK_AUTH_LOGOUT_ENDPOINT, GROK_AUTH_COMPLETE_ENDPOINT, GROK_MODELS_ENDPOINT, GROK_SAVE_ENDPOINT, GROK_USAGE_ENDPOINT, decodeGrokSettings, decodeGrokSaveRequest, decodeGrokSaveResult, decodeGrokAuthStatus, decodeGrokAuthStartReply, decodeGrokAuthLogoutReply, decodeGrokAuthCompleteRequest, decodeGrokEmptyRequest, decodeGrokUsageView, decodeGrokUsageReply, decodeGrokModelsReply, } from './client-contract.ts';
+export { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS, GROK_PROVIDER, GROK_SETTINGS_NAMESPACE, GROK_RPC_CHANNEL, GROK_AUTH_START_ENDPOINT, GROK_AUTH_STATUS_ENDPOINT, GROK_AUTH_ATTEMPT_STATUS_ENDPOINT, GROK_AUTH_LOGOUT_ENDPOINT, GROK_AUTH_COMPLETE_ENDPOINT, GROK_AUTH_CANCEL_ENDPOINT, GROK_MODELS_ENDPOINT, GROK_SETTINGS_READ_ENDPOINT, GROK_SAVE_ENDPOINT, GROK_USAGE_ENDPOINT, decodeGrokSettings, decodeGrokSaveRequest, decodeGrokSaveResult, decodeGrokSettingsReadResult, decodeGrokAuthStatus, decodeGrokAuthAttemptStatus, decodeGrokAuthStartReply, decodeGrokAuthLogoutReply, decodeGrokAuthCompleteRequest, decodeGrokEmptyRequest, decodeGrokUsageView, decodeGrokUsageReply, decodeGrokModelsReply, } from './client-contract.ts';
 export { GROK_CHAT_BASE_URL, GROK_DEFAULT_CONTEXT_WINDOW, GROK_DEFAULT_MODEL_MAX_TOKENS, GROK_PLUGIN_IDENTITY_HEADER, createGrokPiAiProfile, } from './pi-ai-profile.ts';
 export { GROK_SERVER_SEARCH_TOOLS, grokResponsesApi, injectGrokServerSearchTools } from './responses-tools.ts';
 export { isGrokServerSearchToolCallId, stripGrokServerSearchToolCalls, } from './server-search-calls.ts';
 export { GROK_PACKED_REASONING_TYPE, expandPackedGrokReasoningInput, filterGrokThinkingStream, isDisplayableThinking, isGrokPackedReasoning, packGrokThinkingBlocks, } from './reasoning-display.ts';
 export { GROK_REASONING_WIRES, GROK_DEFAULT_REASONING_WIRE, GROK_4_6_REASONING_EFFORTS, GROK_4_5_REASONING_EFFORTS, applyGrokReasoningWire, grokThinkingLevelMap, officialDefaultEffort, officialEffortsFor, resolveGrokReasoningWire, } from './reasoning.ts';
-export type { GrokCatalogModel, GrokReasoningEffort, GrokSaveRequest, GrokSaveResult, GrokSettingsView, GrokAuthStatus, GrokAuthStartReply, GrokAuthLogoutReply, GrokUsageWindow, GrokUsageView, GrokUsageReply, GrokModelsReply, } from './client-contract.ts';
-export { GROK_OAUTH_ISSUER, GROK_OAUTH_CLIENT_ID, GROK_OAUTH_SCOPE, createGrokAuthRuntime, completePkceLogin, ensureFreshSession, refreshSession, startPkceLogin, } from './oauth.ts';
+export type { GrokCatalogModel, GrokReasoningEffort, GrokSaveRequest, GrokSaveResult, GrokSettingsReadResult, GrokSettingsView, GrokAuthStatus, GrokAuthStartReply, GrokAuthLogoutReply, GrokUsageWindow, GrokUsageView, GrokUsageReply, GrokModelsReply, } from './client-contract.ts';
+export { GROK_OAUTH_ISSUER, GROK_OAUTH_CLIENT_ID, GROK_OAUTH_SCOPE, createGrokAuthRuntime, beginPkceLogin, cancelAllPkceLogins, cancelPkceLogin, completePkceLogin, ensureFreshSession, refreshSession, startPkceLogin, } from './oauth.ts';
 export type { GrokOAuthRuntime, GrokOidcEndpoints } from './oauth.ts';
 export { GROK_SESSION_FILENAME, resolveGrokSessionPath, sessionPathForHome, readSession, writeSession, deleteSession, statusFromSession, } from './session.ts';
 export type { GrokSession } from './session.ts';
@@ -28,6 +28,7 @@ export { GROK_BILLING_URL, DEFAULT_USAGE_REQUEST_TIMEOUT_MS, parseGrokBilling, r
 export { GROK_MODELS_URL, parseGrokModels, readGrokModels, fallbackGrokCatalog } from './discovery.ts';
 export type { GrokUsageRequest } from './usage.ts';
 export { GROK_IMAGE_GEN_TOOL_NAME, grokImageGenTool } from './image-gen.ts';
+export { installGrokModelSwitchAdapters } from './model-switch-adapter.ts';
 export { GROK_IMAGINE_ASPECT_RATIOS, GROK_IMAGINE_BASE_URL, GROK_IMAGINE_MODEL, generateGrokImage, } from './image-gen-client.ts';
 export declare const name = "llm-grok";
 export declare const inject: string[];
@@ -48,6 +49,10 @@ export interface Config {
     enableImageGen?: boolean;
     /** Provider-owned model-request retry policy; omission uses normal defaults. */
     retryPolicy?: RetryPolicyConfig;
+    /** Set false when Model Switch owns stable tool names, preventing legacy duplicates. */
+    registerLegacyTools?: boolean;
+    /** Permit explicitly trusted-host management RPCs; default false. */
+    remoteManagement?: boolean;
 }
 export declare const Config: z<Config>;
 /** Optional Host overrides for the loopback handler (local billing in tests). */

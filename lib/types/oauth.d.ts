@@ -96,5 +96,14 @@ export declare function startPkceLogin(runtime: GrokOAuthRuntime, signal?: Abort
  * @param runtime - the same runtime `startPkceLogin` is waiting on.
  * @param code - trimmed authorization code from the IdP page.
  */
-export declare function completePkceLogin(runtime: GrokOAuthRuntime, code: string): Promise<GrokAuthStartReply>;
+/** Remote-safe OAuth transaction returned before any opener or callback wait. */
+export interface GrokAuthAttempt {
+    attemptId: string;
+    authorizationUrl: string;
+}
+export declare function beginPkceLogin(runtime: GrokOAuthRuntime): Promise<GrokAuthAttempt | GrokAuthStartReply>;
+export declare function cancelPkceLogin(runtime: GrokOAuthRuntime, attemptId: string): boolean;
+export declare function cancelAllPkceLogins(runtime: GrokOAuthRuntime): void;
+export declare function statusPkceLogin(runtime: GrokOAuthRuntime, attemptId: string): 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'expired' | 'missing';
+export declare function completePkceLogin(runtime: GrokOAuthRuntime, codeOrAttemptId: string, remoteCode?: string): Promise<GrokAuthStartReply>;
 //# sourceMappingURL=oauth.d.ts.map

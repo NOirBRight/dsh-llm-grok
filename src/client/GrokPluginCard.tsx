@@ -1,12 +1,13 @@
 /** Grok Plugin configuration card: Host-owned xAI login, usage, and an editable displayed catalog. */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {
   GrokAuthStartReply,
+  GrokAuthAttemptStatus,
   GrokAuthStatus,
   GrokCatalogModel,
   GrokSaveResult,
@@ -33,9 +34,13 @@ export interface GrokPluginCardFace {
   /** Begin Host PKCE; the browser never receives tokens. */
   startAuth: () => Promise<GrokAuthStartReply>
   /** Deliver a Grok Build paste-code into the in-flight Host exchange. */
-  completeAuth: (code: string) => Promise<GrokAuthStartReply>
+  completeAuth: (code: string, attemptId?: string) => Promise<GrokAuthStartReply>
+  /** Cancel the current Host-owned sign-in attempt. */
+  cancelAuth: (attemptId: string) => Promise<void>
   /** Read secret-free login status. */
   readAuthStatus: () => Promise<GrokAuthStatus>
+  /** Read one secret-free attempt state. */
+  readAuthAttemptStatus: (attemptId: string) => Promise<GrokAuthAttemptStatus>
   /** Delete the Host session. */
   logout: () => Promise<void>
   /** Read the Host-decoded billing snapshot. Tokens never cross this call. */
@@ -354,7 +359,7 @@ function usageResetCopy(t: GrokPluginCardFace['t']): { at: string, atDays: strin
 
 /** Render the single-package Grok contribution under Plugin configuration. */
 export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
-  const { t, startAuth, completeAuth, readAuthStatus, logout, fetchUsage, fetchModels } = props
+  const { t, startAuth, completeAuth, cancelAuth, readAuthStatus, readAuthAttemptStatus, logout, fetchUsage, fetchModels } = props
   const snapshot = props.useGrokSettings(value => value)
   const [open, setOpen] = useState(false)
   const initial = useMemo(
@@ -366,6 +371,10 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   const [sourceRevision, setSourceRevision] = useState<number | undefined>(snapshot.revision)
   const [auth, setAuth] = useState<AuthUi>({ kind: 'signed-out' })
   const [pasteCode, setPasteCode] = useState('')
+  const [authAttemptId, setAuthAttemptId] = useState<string | undefined>(undefined)
+  const [authorizationUrl, setAuthorizationUrl] = useState<string | undefined>(undefined)
+  const [popupBlocked, setPopupBlocked] = useState(false)
+  const authAttemptRef = useRef<string | undefined>(undefined)
   const [usage, setUsage] = useState<UsageState>({ status: 'idle' })
   const [lastUsage, setLastUsage] = useState<GrokUsageView | undefined>(undefined)
   const [usageUpdatedAt, setUsageUpdatedAt] = useState<Date | undefined>(undefined)
@@ -398,7 +407,36 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
     setSourceRevision(snapshot.revision)
   }, [dirty, snapshot.revision, snapshot.status, snapshot.value, sourceRevision])
 
-  useEffect(() => () => { props.closeModelPicker() }, [props.closeModelPicker])
+  useEffect(() => { authAttemptRef.current = authAttemptId }, [authAttemptId])
+  useEffect(() => () => {
+    const attemptId = authAttemptRef.current
+    if (attemptId !== undefined) void cancelAuth(attemptId).catch(() => undefined)
+    props.closeModelPicker()
+  }, [cancelAuth, props.closeModelPicker])
+
+  useEffect(() => {
+    if (authAttemptId === undefined || auth.kind !== 'signing-in') return
+    let stopped = false
+    const poll = async (): Promise<void> => {
+      try {
+        const status = await readAuthAttemptStatus(authAttemptId)
+        if (stopped) return
+        if (status.state === 'succeeded') {
+          const loggedIn = await readAuthStatus()
+          if (!stopped && loggedIn.loggedIn) {
+            setAuth({ kind: 'signed-in', ...loggedIn.email === undefined ? {} : { email: loggedIn.email } })
+            setAuthAttemptId(undefined); setAuthorizationUrl(undefined); setPopupBlocked(false)
+          }
+        } else if (status.state !== 'pending') {
+          setAuthAttemptId(undefined)
+          setAuth({ kind: 'signed-out', message: t('signInFailed') })
+        }
+      } catch { /* transient status failures are retried */ }
+    }
+    const timer = window.setInterval(() => { void poll() }, 750)
+    void poll()
+    return () => { stopped = true; window.clearInterval(timer) }
+  }, [auth.kind, authAttemptId, readAuthAttemptStatus, readAuthStatus, t])
 
   const loadUsage = async (): Promise<void> => {
     setUsage({ status: 'loading' })
@@ -483,6 +521,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   const onSignIn = async (): Promise<void> => {
     setAuth({ kind: 'signing-in' })
     setPasteCode('')
+    setAuthorizationUrl(undefined)
+    setPopupBlocked(false)
     setUsage({ status: 'idle' })
     try {
       const started = await startAuth()
@@ -490,6 +530,10 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
         setAuth({ kind: 'signed-out', message: started.message || t('signInFailed') })
         return
       }
+      setAuthAttemptId(started.attemptId)
+       setAuthorizationUrl(started.authorizationUrl)
+       setPopupBlocked(started.popupBlocked === true)
+      if (started.attemptId !== undefined) return
       const status = await readAuthStatus()
       setAuth(status.loggedIn
         ? { kind: 'signed-in', ...status.email === undefined ? {} : { email: status.email } }
@@ -506,13 +550,29 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
       return
     }
     try {
-      const completed = await completeAuth(code)
+      const completed = authAttemptId === undefined
+        ? await completeAuth(code)
+        : await completeAuth(code, authAttemptId)
       if (!completed.ok) {
         setAuth({ kind: 'signing-in' })
+        return
       }
+      const status = await readAuthStatus()
+      setAuthAttemptId(undefined)
+      setAuth(status.loggedIn
+        ? { kind: 'signed-in', ...status.email === undefined ? {} : { email: status.email } }
+        : { kind: 'signed-out', message: t('signInFailed') })
     } catch {
       setAuth({ kind: 'signing-in' })
     }
+  }
+
+  const onCancelSignIn = async (): Promise<void> => {
+    if (authAttemptId === undefined) return
+    try { await cancelAuth(authAttemptId) } catch { /* best-effort cancellation */ }
+    setAuthAttemptId(undefined)
+    setPasteCode('')
+    setAuth({ kind: 'signed-out' })
   }
 
   const onSignOut = async (): Promise<void> => {
@@ -693,13 +753,18 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
               <AuthToolbar
                 status={<p style={{ ...statusStyle, margin: 0 }}>{statusLabel}</p>}
                 action={auth.kind === 'signed-in'
-                  ? <button type="button" style={buttonStyle} disabled={signingIn} onClick={() => { void onSignOut() }}>{t('signOut')}</button>
-                  : <button type="button" style={buttonStyle} disabled={signingIn} onClick={() => { void onSignIn() }}>{t('signIn')}</button>}
+                  ? <button type="button" style={buttonStyle} onClick={() => { void onSignOut() }}>{t('signOut')}</button>
+                  : auth.kind === 'signing-in'
+                    ? <button type="button" style={buttonStyle} onClick={() => { void onCancelSignIn() }}>{t('cancel')}</button>
+                    : <button type="button" style={buttonStyle} onClick={() => { void onSignIn() }}>{t('signIn')}</button>}
               />
                     {auth.kind === 'signing-in'
                       ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          <p style={hintStyle}>{t('pasteCode')}</p>
+                          {authorizationUrl !== undefined && popupBlocked
+                             ? <a href={authorizationUrl} target="_blank" rel="noopener noreferrer" style={statusStyle}>Open xAI sign-in</a>
+                             : null}
+                           <p style={hintStyle}>{t('pasteCode')}</p>
                           <label style={labelStyle} htmlFor="grok-oauth-code">{t('pasteCodeLabel')}</label>
                           <input
                             id="grok-oauth-code"

@@ -19,18 +19,22 @@ import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-tools'
 import { GrokAdapter, resolveGrokAccessToken } from './adapter.ts'
 import { grokImageGenTool } from './image-gen.ts'
+import { installGrokModelSwitchAdapters } from './model-switch-adapter.ts'
 import type { GrokConnectionOptions } from './adapter.ts'
 import {
   GROK_AUTH_COMPLETE_ENDPOINT,
+  GROK_AUTH_CANCEL_ENDPOINT,
   GROK_AUTH_LOGOUT_ENDPOINT,
   GROK_AUTH_START_ENDPOINT,
   GROK_AUTH_STATUS_ENDPOINT,
+  GROK_AUTH_ATTEMPT_STATUS_ENDPOINT,
   GROK_CATALOG,
   GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   GROK_MODELS_ENDPOINT,
   GROK_PROVIDER,
   GROK_RPC_CHANNEL,
   GROK_SAVE_ENDPOINT,
+  GROK_SETTINGS_READ_ENDPOINT,
   GROK_SETTINGS_NAMESPACE,
   GROK_USAGE_ENDPOINT,
   decodeGrokAuthCompleteRequest,
@@ -39,7 +43,7 @@ import {
   decodeGrokSettings,
 } from './client-contract.ts'
 import type { GrokCatalogModel } from './client-contract.ts'
-import { completePkceLogin, createGrokAuthRuntime, ensureFreshSession, startPkceLogin } from './oauth.ts'
+import { beginPkceLogin, cancelAllPkceLogins, cancelPkceLogin, completePkceLogin, createGrokAuthRuntime, ensureFreshSession, statusPkceLogin } from './oauth.ts'
 import type { GrokOAuthRuntime } from './oauth.ts'
 import { GROK_CHAT_BASE_URL } from './pi-ai-profile.ts'
 import { deleteSession, resolveGrokSessionPath, statusFromSession } from './session.ts'
@@ -59,15 +63,20 @@ export {
   GROK_RPC_CHANNEL,
   GROK_AUTH_START_ENDPOINT,
   GROK_AUTH_STATUS_ENDPOINT,
+  GROK_AUTH_ATTEMPT_STATUS_ENDPOINT,
   GROK_AUTH_LOGOUT_ENDPOINT,
   GROK_AUTH_COMPLETE_ENDPOINT,
+  GROK_AUTH_CANCEL_ENDPOINT,
   GROK_MODELS_ENDPOINT,
+  GROK_SETTINGS_READ_ENDPOINT,
   GROK_SAVE_ENDPOINT,
   GROK_USAGE_ENDPOINT,
   decodeGrokSettings,
   decodeGrokSaveRequest,
   decodeGrokSaveResult,
+  decodeGrokSettingsReadResult,
   decodeGrokAuthStatus,
+  decodeGrokAuthAttemptStatus,
   decodeGrokAuthStartReply,
   decodeGrokAuthLogoutReply,
   decodeGrokAuthCompleteRequest,
@@ -112,6 +121,7 @@ export type {
   GrokReasoningEffort,
   GrokSaveRequest,
   GrokSaveResult,
+  GrokSettingsReadResult,
   GrokSettingsView,
   GrokAuthStatus,
   GrokAuthStartReply,
@@ -126,6 +136,9 @@ export {
   GROK_OAUTH_CLIENT_ID,
   GROK_OAUTH_SCOPE,
   createGrokAuthRuntime,
+  beginPkceLogin,
+  cancelAllPkceLogins,
+  cancelPkceLogin,
   completePkceLogin,
   ensureFreshSession,
   refreshSession,
@@ -151,6 +164,7 @@ export {
 export { GROK_MODELS_URL, parseGrokModels, readGrokModels, fallbackGrokCatalog } from './discovery.ts'
 export type { GrokUsageRequest } from './usage.ts'
 export { GROK_IMAGE_GEN_TOOL_NAME, grokImageGenTool } from './image-gen.ts'
+export { installGrokModelSwitchAdapters } from './model-switch-adapter.ts'
 export {
   GROK_IMAGINE_ASPECT_RATIOS,
   GROK_IMAGINE_BASE_URL,
@@ -229,6 +243,10 @@ export interface Config {
   enableImageGen?: boolean
   /** Provider-owned model-request retry policy; omission uses normal defaults. */
   retryPolicy?: RetryPolicyConfig
+  /** Set false when Model Switch owns stable tool names, preventing legacy duplicates. */
+  registerLegacyTools?: boolean
+  /** Permit explicitly trusted-host management RPCs; default false. */
+  remoteManagement?: boolean
 }
 
 const catalogModel = z.object({
@@ -249,6 +267,8 @@ export const Config: z<Config> = z.object({
   models: z.array(catalogModel),
   enableImageGen: z.boolean().default(false),
   retryPolicy: RetryPolicySchema,
+  registerLegacyTools: z.boolean().default(true),
+  remoteManagement: z.boolean().default(false),
 })
 
 function internalError(message: string) {
@@ -293,7 +313,12 @@ export function createGrokRpcHandler(
   return async (endpoint, payload, signal) => {
     if (endpoint === GROK_AUTH_START_ENDPOINT) {
       if (decodeGrokEmptyRequest(payload) === undefined) return internalError('invalid Grok auth start request')
-      return { ok: true as const, value: await startPkceLogin(runtime, signal) }
+      return { ok: true as const, value: await beginPkceLogin(runtime) }
+    }
+    if (endpoint === GROK_AUTH_ATTEMPT_STATUS_ENDPOINT) {
+      const attemptId = (payload as { attemptId?: unknown })?.attemptId
+      if (typeof attemptId !== 'string' || attemptId.length === 0) return internalError('invalid Grok auth attempt status request')
+      return { ok: true as const, value: { attemptId, state: statusPkceLogin(runtime, attemptId) } }
     }
     if (endpoint === GROK_AUTH_STATUS_ENDPOINT) {
       if (decodeGrokEmptyRequest(payload) === undefined) return internalError('invalid Grok auth status request')
@@ -302,12 +327,20 @@ export function createGrokRpcHandler(
     }
     if (endpoint === GROK_AUTH_LOGOUT_ENDPOINT) {
       if (decodeGrokEmptyRequest(payload) === undefined) return internalError('invalid Grok auth logout request')
+      cancelAllPkceLogins(runtime)
       await deleteSession(runtime.resolveSessionPath())
+      return { ok: true as const, value: { ok: true as const } }
+    }
+    if (endpoint === GROK_AUTH_CANCEL_ENDPOINT) {
+      const value = payload as { attemptId?: unknown }
+      if (typeof value?.attemptId !== 'string' || value.attemptId.length === 0) return internalError('invalid Grok auth cancel request')
+      if (!cancelPkceLogin(runtime, value.attemptId)) return internalError('stale Grok sign-in attempt')
       return { ok: true as const, value: { ok: true as const } }
     }
     if (endpoint === GROK_AUTH_COMPLETE_ENDPOINT) {
       const request = decodeGrokAuthCompleteRequest(payload)
       if (request === undefined) return internalError('invalid Grok auth complete request')
+      if (request.attemptId !== undefined) return { ok: true as const, value: await completePkceLogin(runtime, request.attemptId, request.code) }
       return { ok: true as const, value: await completePkceLogin(runtime, request.code) }
     }
     if (endpoint === GROK_MODELS_ENDPOINT) {
@@ -343,6 +376,15 @@ export function createGrokRpcHandler(
   }
 }
 
+/** Return the schema-decoded, secret-free settings snapshot and descriptor revision. */
+async function readDisplayedSettings(ctx: Context, payload: unknown) {
+  if (decodeGrokEmptyRequest(payload) === undefined) return internalError('invalid Grok settings read request')
+  const descriptor = ctx.get('settings')?.describe().find(entry => entry.ns === NS)
+  if (descriptor === undefined) return internalError('Grok settings are unavailable')
+  const settings = decodeGrokSettings(descriptor.value)
+  if (settings === undefined) return internalError('Grok settings are invalid')
+  return { ok: true as const, value: { settings, revision: descriptor.revision } }
+}
 async function saveDisplayedCatalog(ctx: Context, payload: unknown) {
   const request = decodeGrokSaveRequest(payload)
   if (request === undefined) return internalError('invalid Grok settings request')
@@ -400,6 +442,8 @@ export function apply(ctx: Context, config: Config): void {
   const runtime = createGrokAuthRuntime({
     resolveSessionPath: () => resolveGrokSessionPath(ctx),
   })
+  ctx.effect(() => () => { cancelAllPkceLogins(runtime) }, 'llm-grok: cancel OAuth attempts')
+  installGrokModelSwitchAdapters(ctx, runtime)
   const adapter = new GrokAdapter({
     options,
     resolveApiKey: () => resolveGrokAccessToken(runtime),
@@ -423,10 +467,11 @@ export function apply(ctx: Context, config: Config): void {
     connectionCtx.connection.rpc.handle(
       GROK_RPC_CHANNEL,
       async (endpoint, payload, signal) => {
+        if (endpoint === GROK_SETTINGS_READ_ENDPOINT) return readDisplayedSettings(ctx, payload)
         if (endpoint === GROK_SAVE_ENDPOINT) return saveDisplayedCatalog(ctx, payload)
         return inner(endpoint, payload, signal)
       },
-      { authority: 'loopback' },
+      { authority: current().remoteManagement === true ? 'trusted-host' : 'loopback' },
     )
   })
 
@@ -443,7 +488,7 @@ export function apply(ctx: Context, config: Config): void {
 
   const reconcileImageGen = async (): Promise<void> => {
     if (stopped) return
-    const enabled = current().enableImageGen === true
+    const enabled = current().registerLegacyTools !== false && current().enableImageGen === true
     if (enabled === (imageGenFiber !== undefined)) return
     const previous = imageGenFiber
     imageGenFiber = undefined

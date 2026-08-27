@@ -118,11 +118,11 @@ export function createGrokPiAiProfile(connection: GrokConnectionOptions): Resolv
     defaultInput: ['text'] as 'text'[],
     streamIdleTimeoutMs: connection.streamIdleTimeoutMs,
     retryPolicy: connection.retryPolicy,
-    /**
-     * Mirrors RC1's official 20 MiB default and satisfies its required profile
-     * field; RC8 hosts ignore this extra property at runtime.
-     */
+    /** Mirrors the official aggregate base64 image limit per request. */
     maxRequestImageBytes: 20 * 1024 * 1024,
+    /** Required by the rc.2 resolved-profile contract for deterministic request images. */
+    requestImagePixelBudget: 2048 * 2048,
+    requestImageMaxBytes: 1024 * 1024,
     piProvider,
     configuredMaxTokens,
     headers,

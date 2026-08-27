@@ -11,10 +11,14 @@ export declare const GROK_RPC_CHANNEL = "/grok";
 export declare const GROK_AUTH_START_ENDPOINT = "auth/start";
 /** Secret-free login snapshot. */
 export declare const GROK_AUTH_STATUS_ENDPOINT = "auth/status";
+/** Read one secret-free in-flight authorization attempt status. */
+export declare const GROK_AUTH_ATTEMPT_STATUS_ENDPOINT = "auth/attempt-status";
 /** Delete the Host session file. */
 export declare const GROK_AUTH_LOGOUT_ENDPOINT = "auth/logout";
 /** Deliver a Grok Build paste-code into the in-flight PKCE exchange. */
 export declare const GROK_AUTH_COMPLETE_ENDPOINT = "auth/complete";
+/** Cancel one pending Host-owned authorization attempt. */
+export declare const GROK_AUTH_CANCEL_ENDPOINT = "auth/cancel";
 /** Secret-free subscription-usage snapshot inside {@link GROK_RPC_CHANNEL}. */
 export declare const GROK_USAGE_ENDPOINT = "usage/read";
 /** One official models-v2 reasoning menu row (`id` → wire `value`). */
@@ -54,6 +58,8 @@ export interface GrokCatalogModel {
 export declare const GROK_CATALOG: readonly GrokCatalogModel[];
 /** Account model list inside {@link GROK_RPC_CHANNEL}. */
 export declare const GROK_MODELS_ENDPOINT = "models/list";
+/** Read the redacted Grok settings snapshot through the management RPC. */
+export declare const GROK_SETTINGS_READ_ENDPOINT = "settings/read";
 /** Atomic settings-save endpoint. */
 export declare const GROK_SAVE_ENDPOINT = "settings/save";
 /** Settings fields presented by the package's Web configuration card. No apiKeyEnv. */
@@ -79,7 +85,18 @@ export interface GrokSaveResult {
     settings: GrokSettingsView;
     revision: number;
 }
+/** Redacted settings snapshot returned by the management read endpoint. */
+export interface GrokSettingsReadResult {
+    settings: GrokSettingsView;
+    revision: number;
+}
 /** Secret-free login snapshot returned by {@link GROK_AUTH_STATUS_ENDPOINT}. */
+export type GrokAuthAttemptState = 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'expired';
+/** Secret-free terminal state for one authorization attempt. */
+export interface GrokAuthAttemptStatus {
+    attemptId: string;
+    state: GrokAuthAttemptState;
+}
 export interface GrokAuthStatus {
     /** Whether the Host currently holds a usable session file. */
     loggedIn: boolean;
@@ -94,15 +111,23 @@ export interface GrokAuthStatus {
  */
 export type GrokAuthStartReply = {
     ok: true;
+    attemptId?: string;
+    authorizationUrl?: string;
+    popupBlocked?: boolean;
 } | {
     ok: false;
     retryable: true;
     message: string;
 };
 /** Loopback payload for {@link GROK_AUTH_COMPLETE_ENDPOINT}. */
+export interface GrokAuthAttemptStatusRequest {
+    attemptId: string;
+}
 export interface GrokAuthCompleteRequest {
     /** Short-lived authorization code copied from the IdP page. Not a token. */
     code: string;
+    /** Opaque Host transaction id. */
+    attemptId?: string;
 }
 /** Result of {@link GROK_AUTH_LOGOUT_ENDPOINT}. */
 export interface GrokAuthLogoutReply {
@@ -178,6 +203,7 @@ export declare function decodeGrokAuthStartReply(value: unknown): GrokAuthStartR
  * @param value - untrusted RPC result value.
  * @returns the validated status, or undefined when it is malformed or carries secrets.
  */
+export declare function decodeGrokAuthAttemptStatus(value: unknown): GrokAuthAttemptStatus | undefined;
 export declare function decodeGrokAuthStatus(value: unknown): GrokAuthStatus | undefined;
 /**
  * Narrow the logout reply.
@@ -202,6 +228,8 @@ export declare function decodeGrokSaveRequest(value: unknown): GrokSaveRequest |
  * Narrow the Host save reply before the card updates.
  * @param value - untrusted RPC result value.
  */
+/** Decode a redacted settings snapshot and its revision. */
+export declare function decodeGrokSettingsReadResult(value: unknown): GrokSettingsReadResult | undefined;
 export declare function decodeGrokSaveResult(value: unknown): GrokSaveResult | undefined;
 export declare function decodeGrokUsageReply(value: unknown): GrokUsageReply | undefined;
 //# sourceMappingURL=client-contract.d.ts.map

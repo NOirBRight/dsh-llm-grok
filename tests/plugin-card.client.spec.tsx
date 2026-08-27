@@ -38,6 +38,8 @@ function props(overrides: Partial<GrokPluginCardProps> = {}): GrokPluginCardProp
     useGrokSettings: selector => selector(current),
     startAuth: vi.fn(() => Promise.resolve({ ok: true } satisfies GrokAuthStartReply)),
     completeAuth: vi.fn(() => Promise.resolve({ ok: true } satisfies GrokAuthStartReply)),
+    cancelAuth: vi.fn(() => Promise.resolve()),
+     readAuthAttemptStatus: vi.fn(() => Promise.resolve({ attemptId: 'unused', state: 'pending' as const })),
     readAuthStatus: vi.fn(() => Promise.resolve({ loggedIn: false } satisfies GrokAuthStatus)),
     logout: vi.fn(() => Promise.resolve()),
     fetchUsage: vi.fn(() => Promise.resolve({ status: 'unsupported' } satisfies GrokUsageReply)),
@@ -171,11 +173,12 @@ describe('GrokPluginCard', () => {
     expect(JSON.stringify(startAuth.mock.results)).not.toMatch(/accessToken|refreshToken/u)
   })
 
-  it('lets the user paste a Grok Build code while sign-in is waiting', async () => {
-    let finishStart: ((value: GrokAuthStartReply) => void) | undefined
-    const startAuth = vi.fn(() => new Promise<GrokAuthStartReply>(resolve => {
-      finishStart = resolve
-    }))
+  it('lets the user paste a Grok Build code into the returned remote attempt', async () => {
+    const startAuth = vi.fn(() => Promise.resolve({
+      ok: true,
+      attemptId: 'attempt-1',
+      authorizationUrl: 'https://auth.x.ai/oauth2/authorize',
+    } satisfies GrokAuthStartReply))
     const completeAuth = vi.fn(() => Promise.resolve({ ok: true } satisfies GrokAuthStartReply))
     const readAuthStatus = vi.fn()
       .mockResolvedValueOnce({ loggedIn: false } satisfies GrokAuthStatus)
@@ -192,8 +195,7 @@ describe('GrokPluginCard', () => {
     fireEvent.change(screen.getByLabelText(en.pasteCodeLabel), { target: { value: 'paste-code-1' } })
     fireEvent.click(screen.getByRole('button', { name: en.pasteCodeSubmit }))
 
-    await waitFor(() => { expect(completeAuth).toHaveBeenCalledWith('paste-code-1') })
-    finishStart?.({ ok: true })
+    await waitFor(() => { expect(completeAuth).toHaveBeenCalledWith('paste-code-1', 'attempt-1') })
     await waitFor(() => {
       expect(screen.getByText('Signed in as user@example.test.')).toBeTruthy()
     })
@@ -280,5 +282,23 @@ describe('GrokPluginCard', () => {
     fireEvent.click(screen.getByRole('button', { name: en.usageRefresh }))
     await waitFor(() => { expect(screen.getByText(`${en.usageUsed} 1 / 10`)).toBeTruthy() })
     expect(fetchUsage).toHaveBeenCalledTimes(2)
-  })
+   })
+
+   it('reflects callback completion through attempt polling without paste or refresh', async () => {
+     const readAuthStatus = vi.fn()
+       .mockResolvedValueOnce({ loggedIn: false } satisfies GrokAuthStatus)
+       .mockResolvedValueOnce({ loggedIn: true, email: 'callback@example.test' } satisfies GrokAuthStatus)
+     const readAuthAttemptStatus = vi.fn()
+       .mockResolvedValueOnce({ attemptId: 'attempt-1', state: 'pending' as const })
+       .mockResolvedValueOnce({ attemptId: 'attempt-1', state: 'succeeded' as const })
+     render(<GrokPluginCard {...props({
+       startAuth: vi.fn(() => Promise.resolve({ ok: true, attemptId: 'attempt-1', authorizationUrl: 'https://auth.x.ai/example' } satisfies GrokAuthStartReply)),
+       readAuthStatus, readAuthAttemptStatus,
+     })} />)
+     expand()
+     await waitFor(() => { expect(screen.getByRole('button', { name: en.signIn })).toBeTruthy() })
+     fireEvent.click(screen.getByRole('button', { name: en.signIn }))
+     await waitFor(() => { expect(screen.getByText('Signed in as callback@example.test.')).toBeTruthy() })
+     expect(readAuthAttemptStatus).toHaveBeenCalled()
+   })
 })

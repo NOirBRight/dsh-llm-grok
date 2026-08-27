@@ -170,17 +170,21 @@ describe('Grok loopback auth RPC', () => {
       resolveSessionPath: () => path,
       issuer: auth.issuer,
       timeoutMs: 2_000,
-      openBrowser: async (url) => {
-        const parsed = new URL(url)
-        auth.expectedChallenge = parsed.searchParams.get('code_challenge') ?? undefined
-        await fetch(`${parsed.searchParams.get('redirect_uri')}?code=${auth.nextCode}&state=${parsed.searchParams.get('state')}`)
-      },
     })
     const handler = createGrokRpcHandler(runtime)
 
     const started = await handler(GROK_AUTH_START_ENDPOINT, {}, new AbortController().signal)
-    expect(started).toEqual({ ok: true, value: { ok: true } })
+    expect(started).toMatchObject({
+      ok: true,
+      value: { attemptId: expect.any(String), authorizationUrl: expect.any(String) },
+    })
     expect(JSON.stringify(started)).not.toMatch(/access-secret|refresh-secret/u)
+    if (!started.ok) throw new Error('expected auth attempt')
+    const challenge = started.value as { authorizationUrl: string }
+    const parsed = new URL(challenge.authorizationUrl)
+    auth.expectedChallenge = parsed.searchParams.get('code_challenge') ?? undefined
+    await fetch(`${parsed.searchParams.get('redirect_uri')}?code=${auth.nextCode}&state=${parsed.searchParams.get('state')}`)
+    await vi.waitFor(async () => { expect(await readSession(path)).toBeDefined() })
 
     const status = await handler(GROK_AUTH_STATUS_ENDPOINT, {}, new AbortController().signal)
     expect(status).toEqual({

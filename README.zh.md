@@ -54,3 +54,9 @@ Models 页面如果列出 Grok，也只是 hint。因为本包不声明 `apiKeyE
 bundle 默认对符合条件的模型请求失败最多重试八次。xAI 容量不足/高需求失败归类为 `RATE_LIMIT`；临时可用性下降归类为 `SERVER`。
 
 没有 `apiKeyEnv`，也没有用户可改的 base URL。`models` 是对话里显示的目录，是账户列表的一个子集。
+
+Composer picker 会按剥掉 Fast 后缀（`-fast`）和通用上下文后缀（`-<n>k` / `-<n>m`）后的 base 把兄弟行收成一个家族。`kimi-k3-max` 这类产品名不算档位。本包目录来自 discovery；若要让 DSH 按更小预算压缩，自行加带后缀的行。本插件不会在发请求前剥这些后缀。
+
+### 远程管理
+
+默认 `remoteManagement: false`，管理操作仅限 loopback。请先用你自己的反向代理、VPN、SSO 或 mTLS 保护 DSH，再设置为 `true`、重启 Host，并显式信任外部 authority（例如 `dsh web --trusted-host dsh.example.com`）。`trusted-host` 不是认证。OAuth 会返回短期 `authorizationUrl` 与不透明的 `attemptId`；浏览器打开 URL 后，把一次性 authorization code 连同 attemptId 交回 Host。本机 callback 仍是可选快速路径，token 始终只留在 Host。

@@ -2,7 +2,6 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
 import type { GrokSettingsView } from '../src/client-contract.ts'
 import { apply, inject } from '../src/client/index.ts'
@@ -11,24 +10,6 @@ const value: GrokSettingsView = {
   streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   models: GROK_CATALOG.map(model => ({ ...model })),
   enableImageGen: false,
-}
-
-function scope(): SettingsScope<GrokSettingsView> {
-  const snapshot: SettingsScopeSnapshot<GrokSettingsView> = {
-    status: 'ready',
-    value,
-    base: value,
-    user: {},
-    revision: 1,
-    writable: true,
-    mode: 'host',
-  }
-  return {
-    getSnapshot: () => snapshot,
-    subscribe: () => () => undefined,
-    set: vi.fn(() => Promise.resolve()),
-    unset: vi.fn(() => Promise.resolve()),
-  }
 }
 
 interface SlotEntry {
@@ -62,7 +43,6 @@ async function bench() {
     register: () => () => undefined,
     bind: () => (key: string) => key,
   } as never)
-  ctx.provide('settingsScope', { bind: () => scope() } as never)
   ctx.provide('connection', {
     rpc: {
       call: async () => ({ ok: true, value: { loggedIn: false } }),
@@ -73,7 +53,7 @@ async function bench() {
 
 describe('Grok client plugin registration', () => {
   it('declares only the client services it consumes', () => {
-    expect(inject).toEqual(['slots', 'locale', 'connection', 'settingsScope'])
+    expect(inject).toEqual(['slots', 'locale', 'connection'])
   })
 
   it('reads usage through the grok usage/read RPC without exposing tokens', async () => {
@@ -85,11 +65,11 @@ describe('Grok client plugin registration', () => {
       bind: () => (key: string) => key,
     } as never)
     const calls: Array<{ channel: string, endpoint: string, payload: unknown }> = []
-    ctx.provide('settingsScope', { bind: () => scope() } as never)
-    ctx.provide('connection', {
+      ctx.provide('connection', {
       rpc: {
         call: async (channel: string, endpoint: string, payload: unknown) => {
           calls.push({ channel, endpoint, payload })
+          if (endpoint === 'settings/read') return { ok: true, value: { settings: value, revision: 1 } }
           return {
             ok: true,
             value: {
@@ -110,7 +90,8 @@ describe('Grok client plugin registration', () => {
       inject?: () => { fetchUsage: () => Promise<unknown> }
     }).inject?.()
     const usage = await face?.fetchUsage()
-    expect(calls).toEqual([{ channel: '/grok', endpoint: 'usage/read', payload: {} }])
+    expect(calls).toContainEqual({ channel: '/grok', endpoint: 'settings/read', payload: {} })
+    expect(calls).toContainEqual({ channel: '/grok', endpoint: 'usage/read', payload: {} })
     expect(usage).toEqual({
       status: 'ok',
       usage: {
@@ -142,5 +123,26 @@ describe('Grok client plugin registration', () => {
 
     expect(slots.entries('settings.provider.item')).toHaveLength(0)
     expect(slots.entries('settings.section')).toHaveLength(0)
+  })
+
+  it('closes a pre-opened popup when auth/start is malformed', async () => {
+    const ctx = new Context()
+    await ctx.plugin(FakeSlots).await()
+    const slots = ctx.get('slots') as FakeSlots
+    ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
+    const popup = { closed: false, opener: null as Window | null, close: vi.fn(), location: { href: 'about:blank' } }
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup as never)
+    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => endpoint === 'settings/read'
+      ? { ok: true, value: { settings: value, revision: 1 } }
+      : { ok: true, value: { ok: true, authorizationUrl: 7 } } } } as never)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    const face = (slots.entries('settings.provider.item')[0] as { inject?: () => { startAuth: () => Promise<unknown> } }).inject?.()
+    await face?.startAuth()
+    expect(open).toHaveBeenCalledWith('about:blank', '_blank')
+    expect(popup.close).toHaveBeenCalledTimes(1)
+    open.mockRestore()
+    await fiber.dispose()
+    await ctx.fiber.dispose()
   })
 })

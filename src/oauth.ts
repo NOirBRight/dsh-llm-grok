@@ -518,10 +518,126 @@ export async function startPkceLogin(
  * @param runtime - the same runtime `startPkceLogin` is waiting on.
  * @param code - trimmed authorization code from the IdP page.
  */
+
+/** Remote-safe OAuth transaction returned before any opener or callback wait. */
+export interface GrokAuthAttempt { attemptId: string; authorizationUrl: string }
+interface RemoteAttempt {
+  verifier: string
+  redirectUri: string
+  endpoints: GrokOidcEndpoints
+  expiresAt: number
+  server: Server
+  cancellation: AbortController
+  status: 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'expired'
+  completing: boolean
+}
+
+const remoteAttempts = new Map<GrokOAuthRuntime, Map<string, RemoteAttempt>>()
+
+export async function beginPkceLogin(runtime: GrokOAuthRuntime): Promise<GrokAuthAttempt | GrokAuthStartReply> {
+  let attempts = remoteAttempts.get(runtime)
+  if (attempts === undefined) {
+    attempts = new Map()
+    remoteAttempts.set(runtime, attempts)
+  }
+  for (const [id, attempt] of attempts) {
+    if (attempt.status !== 'pending' || attempt.expiresAt <= runtime.now()) {
+      if (attempt.status === 'pending') statusPkceLogin(runtime, id)
+      if (attempt.status !== 'pending') attempts.delete(id)
+    }
+  }
+  if (attempts.size > 0) return retryable('Sign-in is already in progress.')
+
+  const endpoints = await discoverOidcEndpoints(runtime.issuer, runtime.fetch)
+  const pkce = createPkcePair()
+  const attemptId = randomUrlSafe(18)
+  const listener = await listenLoopback()
+  const redirectUri = `http://127.0.0.1:${String(listener.port)}/callback`
+  const cancellation = new AbortController()
+  const url = new URL(endpoints.authorizationEndpoint)
+  url.searchParams.set('response_type', 'code')
+  url.searchParams.set('client_id', runtime.clientId)
+  url.searchParams.set('redirect_uri', redirectUri)
+  url.searchParams.set('scope', runtime.scope)
+  url.searchParams.set('state', pkce.state)
+  url.searchParams.set('code_challenge', pkce.challenge)
+  url.searchParams.set('code_challenge_method', 'S256')
+  attempts.set(attemptId, {
+    verifier: pkce.verifier, redirectUri, endpoints,
+    expiresAt: runtime.now() + runtime.timeoutMs,
+    server: listener.server, cancellation, status: 'pending', completing: false,
+  })
+  void waitForCallback(listener.server, pkce.state, runtime.timeoutMs, cancellation.signal).then(async (result) => {
+    if (result.kind === 'code') await completePkceLogin(runtime, attemptId, result.code)
+    else cancelPkceLogin(runtime, attemptId)
+  }).catch(() => { cancelPkceLogin(runtime, attemptId) })
+  return { attemptId, authorizationUrl: url.toString() }
+}
+
+export function cancelPkceLogin(runtime: GrokOAuthRuntime, attemptId: string): boolean {
+  const attempt = remoteAttempts.get(runtime)?.get(attemptId)
+  if (attempt === undefined || attempt.status !== 'pending') return false
+  attempt.status = 'cancelled'
+  attempt.cancellation.abort()
+  void closeServer(attempt.server)
+  return true
+}
+
+export function cancelAllPkceLogins(runtime: GrokOAuthRuntime): void {
+  const attempts = remoteAttempts.get(runtime)
+  if (attempts === undefined) return
+  for (const id of [...attempts.keys()]) cancelPkceLogin(runtime, id)
+  attempts.clear()
+  remoteAttempts.delete(runtime)
+}
+
+export function statusPkceLogin(runtime: GrokOAuthRuntime, attemptId: string): 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'expired' | 'missing' {
+  const attempt = remoteAttempts.get(runtime)?.get(attemptId)
+  if (attempt === undefined) return 'missing'
+  if (attempt.status === 'pending' && attempt.expiresAt <= runtime.now()) {
+    attempt.status = 'expired'
+    attempt.cancellation.abort()
+    void closeServer(attempt.server)
+  }
+  return attempt.status
+}
 export async function completePkceLogin(
   runtime: GrokOAuthRuntime,
-  code: string,
+  codeOrAttemptId: string,
+  remoteCode?: string,
 ): Promise<GrokAuthStartReply> {
+  if (remoteCode !== undefined) {
+    const attemptId = codeOrAttemptId
+    const code = remoteCode.trim()
+    const attempt = remoteAttempts.get(runtime)?.get(attemptId)
+    if (attempt === undefined) return retryable('Sign-in attempt is missing or expired.')
+    if (attempt.status !== 'pending') return retryable('Sign-in attempt is no longer active.')
+    if (attempt.expiresAt <= runtime.now()) { statusPkceLogin(runtime, attemptId); return retryable('Sign-in attempt expired.') }
+    if (code.length === 0) return retryable('Paste the sign-in code from the browser page.')
+    if (attempt.completing) return retryable('Sign-in is already completing.')
+    attempt.completing = true
+    try {
+    const response = await runtime.fetch(attempt.endpoints.tokenEndpoint, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: attempt.redirectUri, client_id: runtime.clientId, code_verifier: attempt.verifier }) })
+    const session = await parseTokenResponse(response, runtime.now(), attempt.endpoints.userinfoEndpoint, runtime.fetch)
+    if (session === undefined) {
+        attempt.status = 'failed'
+        attempt.cancellation.abort()
+        void closeServer(attempt.server)
+        return retryable('Sign-in could not be completed.')
+      }
+    await writeSession(runtime.resolveSessionPath(), session)
+    attempt.status = 'succeeded'
+    attempt.cancellation.abort()
+    void closeServer(attempt.server)
+      return { ok: true }
+    } catch {
+      attempt.status = 'failed'
+      attempt.cancellation.abort()
+      void closeServer(attempt.server)
+      return retryable('Sign-in could not be completed.')
+    }
+  }
+  const code = codeOrAttemptId
   const trimmed = code.trim()
   if (trimmed.length === 0) return retryable('Paste the sign-in code from the browser page.')
   const pending = pendingPaste.get(runtime)

@@ -54,3 +54,8 @@ The Models page, if it lists Grok at all, is hint-only. Because this package doe
 The bundle retries eligible model-request failures up to eight times by default. xAI capacity/high-demand failures are classified as `RATE_LIMIT`; temporary availability degradation is classified as `SERVER`.
 
 There is no `apiKeyEnv` and no user-editable base URL. `models` is the displayed conversation catalog, a subset of the account list.
+
+The composer picker groups sibling catalog rows that share a base id after peeling a Fast suffix (`-fast`) and a generic context suffix (`-<n>k` / `-<n>m`). Product names such as `kimi-k3-max` are not treated as a context tier. This package's catalog comes from discovery; add extra suffix rows yourself if you want DSH to compact against a smaller budget. This plugin does not peel those suffixes on the wire.
+
+### Remote management
+Keep `remoteManagement: false` for loopback-only administration. Behind authentication you control, set it to `true`, restart the Host, and start DSH with the external authority explicitly trusted (for example, `dsh web --trusted-host dsh.example.com`). `trusted-host` is not authentication. OAuth returns a short-lived `authorizationUrl` and opaque `attemptId`; the browser opens the URL and submits the one-time authorization code with that attempt ID. A local callback remains an optional fast path. Tokens remain Host-side.

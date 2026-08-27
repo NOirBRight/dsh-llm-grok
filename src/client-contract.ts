@@ -12,10 +12,14 @@ export const GROK_RPC_CHANNEL = '/grok'
 export const GROK_AUTH_START_ENDPOINT = 'auth/start'
 /** Secret-free login snapshot. */
 export const GROK_AUTH_STATUS_ENDPOINT = 'auth/status'
+/** Read one secret-free in-flight authorization attempt status. */
+export const GROK_AUTH_ATTEMPT_STATUS_ENDPOINT = 'auth/attempt-status'
 /** Delete the Host session file. */
 export const GROK_AUTH_LOGOUT_ENDPOINT = 'auth/logout'
 /** Deliver a Grok Build paste-code into the in-flight PKCE exchange. */
 export const GROK_AUTH_COMPLETE_ENDPOINT = 'auth/complete'
+/** Cancel one pending Host-owned authorization attempt. */
+export const GROK_AUTH_CANCEL_ENDPOINT = 'auth/cancel'
 /** Secret-free subscription-usage snapshot inside {@link GROK_RPC_CHANNEL}. */
 export const GROK_USAGE_ENDPOINT = 'usage/read'
 
@@ -108,6 +112,8 @@ export const GROK_CATALOG: readonly GrokCatalogModel[] = Object.freeze([
 ])
 /** Account model list inside {@link GROK_RPC_CHANNEL}. */
 export const GROK_MODELS_ENDPOINT = 'models/list'
+/** Read the redacted Grok settings snapshot through the management RPC. */
+export const GROK_SETTINGS_READ_ENDPOINT = 'settings/read'
 /** Atomic settings-save endpoint. */
 export const GROK_SAVE_ENDPOINT = 'settings/save'
 
@@ -137,7 +143,21 @@ export interface GrokSaveResult {
   revision: number
 }
 
+/** Redacted settings snapshot returned by the management read endpoint. */
+export interface GrokSettingsReadResult {
+  settings: GrokSettingsView
+  revision: number
+}
+
 /** Secret-free login snapshot returned by {@link GROK_AUTH_STATUS_ENDPOINT}. */
+export type GrokAuthAttemptState = 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'expired'
+
+/** Secret-free terminal state for one authorization attempt. */
+export interface GrokAuthAttemptStatus {
+  attemptId: string
+  state: GrokAuthAttemptState
+}
+
 export interface GrokAuthStatus {
   /** Whether the Host currently holds a usable session file. */
   loggedIn: boolean
@@ -152,13 +172,19 @@ export interface GrokAuthStatus {
  * mismatch are retryable failures, not internal errors.
  */
 export type GrokAuthStartReply =
-  | { ok: true }
+  | { ok: true, attemptId?: string, authorizationUrl?: string, popupBlocked?: boolean }
   | { ok: false, retryable: true, message: string }
 
 /** Loopback payload for {@link GROK_AUTH_COMPLETE_ENDPOINT}. */
+export interface GrokAuthAttemptStatusRequest {
+  attemptId: string
+}
+
 export interface GrokAuthCompleteRequest {
   /** Short-lived authorization code copied from the IdP page. Not a token. */
   code: string
+  /** Opaque Host transaction id. */
+  attemptId?: string
 }
 
 /** Result of {@link GROK_AUTH_LOGOUT_ENDPOINT}. */
@@ -260,8 +286,10 @@ export function decodeGrokSettings(value: unknown): GrokSettingsView | undefined
 export function decodeGrokAuthCompleteRequest(value: unknown): GrokAuthCompleteRequest | undefined {
   if (!isRecord(value) || hasTokenFields(value)) return undefined
   const code = value['code']
+  const attemptId = value['attemptId']
   if (typeof code !== 'string' || code.trim().length === 0) return undefined
-  return { code: code.trim() }
+  if (attemptId !== undefined && (typeof attemptId !== 'string' || attemptId.trim().length === 0)) return undefined
+  return { code: code.trim(), ...attemptId === undefined ? {} : { attemptId: attemptId.trim() } }
 }
 
 export function decodeGrokEmptyRequest(value: unknown): Record<string, never> | undefined {
@@ -277,7 +305,15 @@ export function decodeGrokEmptyRequest(value: unknown): Record<string, never> | 
  */
 export function decodeGrokAuthStartReply(value: unknown): GrokAuthStartReply | undefined {
   if (!isRecord(value) || hasTokenFields(value) || typeof value['ok'] !== 'boolean') return undefined
-  if (value['ok'] === true) return { ok: true }
+  if (value['ok'] === true) {
+    const attemptId = value['attemptId']
+    const authorizationUrl = value['authorizationUrl']
+    if (attemptId !== undefined && (typeof attemptId !== 'string' || attemptId.length === 0)) return undefined
+    if (authorizationUrl !== undefined && (typeof authorizationUrl !== 'string' || !authorizationUrl.startsWith('https://'))) return undefined
+    const popupBlocked = value['popupBlocked']
+    if (popupBlocked !== undefined && typeof popupBlocked !== 'boolean') return undefined
+    return { ok: true, ...attemptId === undefined ? {} : { attemptId }, ...authorizationUrl === undefined ? {} : { authorizationUrl }, ...popupBlocked === undefined ? {} : { popupBlocked } }
+  }
   if (value['retryable'] !== true || typeof value['message'] !== 'string' || value['message'].length === 0) {
     return undefined
   }
@@ -289,6 +325,15 @@ export function decodeGrokAuthStartReply(value: unknown): GrokAuthStartReply | u
  * @param value - untrusted RPC result value.
  * @returns the validated status, or undefined when it is malformed or carries secrets.
  */
+export function decodeGrokAuthAttemptStatus(value: unknown): GrokAuthAttemptStatus | undefined {
+  if (!isRecord(value) || hasTokenFields(value)) return undefined
+  const attemptId = value['attemptId']
+  const state = value['state']
+  if (typeof attemptId !== 'string' || attemptId.length === 0) return undefined
+  if (state !== 'pending' && state !== 'succeeded' && state !== 'failed' && state !== 'cancelled' && state !== 'expired') return undefined
+  return { attemptId, state }
+}
+
 export function decodeGrokAuthStatus(value: unknown): GrokAuthStatus | undefined {
   if (!isRecord(value) || hasTokenFields(value) || typeof value['loggedIn'] !== 'boolean') return undefined
   const email = value['email']
@@ -460,6 +505,15 @@ export function decodeGrokSaveRequest(value: unknown): GrokSaveRequest | undefin
  * Narrow the Host save reply before the card updates.
  * @param value - untrusted RPC result value.
  */
+/** Decode a redacted settings snapshot and its revision. */
+export function decodeGrokSettingsReadResult(value: unknown): GrokSettingsReadResult | undefined {
+  if (!isRecord(value) || hasTokenFields(value)) return undefined
+  const revision = value['revision']
+  if (typeof revision !== 'number' || !Number.isSafeInteger(revision)) return undefined
+  const settings = decodeGrokSettings(value['settings'])
+  return settings === undefined ? undefined : { settings, revision }
+}
+
 export function decodeGrokSaveResult(value: unknown): GrokSaveResult | undefined {
   if (!isRecord(value) || hasTokenFields(value)) return undefined
   const revision = value['revision']

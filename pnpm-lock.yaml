@@ -11,6 +11,9 @@ importers:
       '@earendil-works/pi-ai':
         specifier: ^0.82.1
         version: 0.82.1(ws@8.21.3)(zod@4.4.3)
+      dsh-model-switch:
+        specifier: ^0.1.0
+        version: link:../dsh-model-switch
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
