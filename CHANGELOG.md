@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.1
+
+- Render Command Code and other new keyed providers in the shared LLM Providers section instead of a fixed four-plugin list.
+
+## 0.3.0
+
+- Register an optional Model Switch v0.2 Image adapter through the existing authenticated Grok Imagine tool.
+- Preserve standalone Grok chat and `grok_image_gen`; register no Search or Vision adapter.
+- Normalize custom output-path extensions to the image media type returned by Grok Imagine.
+
+
+## 0.2.8
+
+- Preserve ordinary chat image attachments on DSH 0.1.1-rc.2 by declaring its resolved request-image budgets
+- Add a regression test for the rc.2 image-budget contract
+
 ## 0.2.7
 
 - Own `prepareCall` so dsh 0.1.1-rc.2 Host can snapshot provider options before streaming
