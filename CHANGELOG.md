@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- Render Command Code and other new keyed providers in the shared LLM Providers section instead of a fixed four-plugin list.
+
 ## 0.3.0
 
 - Register an optional Model Switch v0.2 Image adapter through the existing authenticated Grok Imagine tool.
