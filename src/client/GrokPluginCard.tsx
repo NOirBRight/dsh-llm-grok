@@ -19,6 +19,16 @@ import type {
 import { officialDefaultEffort, officialEffortsFor } from '../reasoning.ts'
 import type { GrokSettingsKey } from './locales.ts'
 import { BrandMark } from './BrandMark.tsx'
+import {
+  inputStyle,
+  rowInputStyle,
+  selectStyle,
+  rowStyle,
+  capabilitiesStyle,
+  modelContentStyle,
+  modelDetailStyle,
+  fieldStyle,
+} from './model-catalog-ui.tsx'
 import { AuthToolbar, ProviderCardHeader, UsageHeader, UsageResetAt, UsageSkeleton, UsageUpdatedAt, formatProviderSummary, formatUsageClock, providerHeaderStyle, resetLabelOf } from './provider-chrome.tsx'
 import type {} from './provider-section.ts'
 import { SortableList } from './SortableList.tsx'
@@ -143,18 +153,6 @@ const primaryButtonStyle: CSSProperties = {
   background: 'var(--dsw-alias-button-primary-fill)',
   color: 'var(--dsw-alias-label-primary-foreground)',
 }
-const inputStyle: CSSProperties = {
-  boxSizing: 'border-box',
-  width: '100%',
-  minHeight: 36,
-  border: '1px solid var(--dsw-alias-border-l2)',
-  borderRadius: 8,
-  padding: '7px 10px',
-  background: 'var(--dsw-alias-bg-layer-1)',
-  color: 'var(--dsw-alias-label-primary)',
-  font: 'inherit',
-}
-const rowInputStyle: CSSProperties = { ...inputStyle, minHeight: 32, padding: '4px 10px' }
 const actionsStyle: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }
 const iconButtonStyle: CSSProperties = {
   boxSizing: 'border-box',
@@ -185,21 +183,7 @@ const disclosureStyle: CSSProperties = {
   textAlign: 'left',
   cursor: 'pointer',
 }
-const modelContentStyle: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr) auto auto',
-  alignItems: 'center',
-  gap: 6,
-  padding: '6px 8px',
-}
-const modelDetailStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  flexWrap: 'wrap',
-  gap: 14,
-  borderTop: '1px solid var(--dsw-alias-border-l2)',
-  padding: '10px 4px 4px',
-}
+
 
 let nextModelRow = 0
 
@@ -913,58 +897,62 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                             {expanded
                               ? (
                                 <div style={{ ...modelDetailStyle, gridColumn: '1 / -1' }}>
-                                  <Capability
-                                    label={t('vision')}
-                                    checked={model.vision === true}
-                                    disabled={disabled}
-                                    onChange={(vision) => { patchModel(index, { vision }) }}
-                                  />
-                                  <Capability
-                                    label={t('thinking')}
-                                    checked={model.thinking === true}
-                                    disabled={disabled}
-                                    onChange={(thinking) => {
-                                      if (!thinking) patchModel(index, { thinking, defaultReasoningEffort: undefined })
-                                      else patchModel(index, { thinking })
-                                    }}
-                                  />
-                                  {(() => {
-                                    const settings = modelSettingsOf(model)
-                                    const efforts = settings.thinking === true ? officialEffortsFor(settings) : []
-                                    if (efforts.length === 0) return null
-                                    const suggested = officialDefaultEffort(settings)
-                                    return (
-                                      <label style={{ ...labelStyle, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                        {t('defaultEffort')}
-                                        <select
-                                          style={rowInputStyle}
-                                          value={model.defaultReasoningEffort ?? suggested}
-                                          disabled={disabled}
-                                          aria-label={t('defaultEffort')}
-                                          onChange={(event) => {
-                                            const effort = efforts.find(entry => entry.value === event.target.value)
-                                            patchModel(index, { defaultReasoningEffort: effort?.value })
-                                          }}
-                                        >
-                                          {efforts.map(effort => (
-                                            <option key={effort.value} value={effort.value}>{effort.label ?? effort.value}</option>
-                                          ))}
-                                        </select>
-                                      </label>
-                                    )
-                                  })()}
-                                  <label style={{ ...labelStyle, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                    {t('contextWindow')}
-                                    <input
-                                      style={{ ...rowInputStyle, width: 110 }}
-                                      inputMode="numeric"
-                                      placeholder={t('contextWindowDefault')}
-                                      value={model.contextWindow}
+                                  <div style={rowStyle}>
+                                    <label style={fieldStyle}>
+                                      <span style={labelStyle}>{t('contextWindow')}</span>
+                                      <input
+                                        style={inputStyle}
+                                        inputMode="numeric"
+                                        placeholder={t('contextWindowDefault')}
+                                        value={model.contextWindow}
+                                        disabled={disabled}
+                                        aria-label={t('contextWindow')}
+                                        onChange={(event) => { patchModel(index, { contextWindow: event.target.value }) }}
+                                      />
+                                    </label>
+                                  </div>
+                                  <div style={capabilitiesStyle}>
+                                    <Capability
+                                      label={t('vision')}
+                                      checked={model.vision === true}
                                       disabled={disabled}
-                                      aria-label={t('contextWindow')}
-                                      onChange={(event) => { patchModel(index, { contextWindow: event.target.value }) }}
+                                      onChange={(vision) => { patchModel(index, { vision }) }}
                                     />
-                                  </label>
+                                    <Capability
+                                      label={t('thinking')}
+                                      checked={model.thinking === true}
+                                      disabled={disabled}
+                                      onChange={(thinking) => {
+                                        if (!thinking) patchModel(index, { thinking, defaultReasoningEffort: undefined })
+                                        else patchModel(index, { thinking })
+                                      }}
+                                    />
+                                    {(() => {
+                                      const settings = modelSettingsOf(model)
+                                      const efforts = settings.thinking === true ? officialEffortsFor(settings) : []
+                                      if (efforts.length === 0) return null
+                                      const suggested = officialDefaultEffort(settings)
+                                      return (
+                                        <label style={{ ...labelStyle, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                          {t('defaultEffort')}
+                                          <select
+                                            style={selectStyle}
+                                            value={model.defaultReasoningEffort ?? suggested}
+                                            disabled={disabled}
+                                            aria-label={t('defaultEffort')}
+                                            onChange={(event) => {
+                                              const effort = efforts.find(entry => entry.value === event.target.value)
+                                              patchModel(index, { defaultReasoningEffort: effort?.value })
+                                            }}
+                                          >
+                                            {efforts.map(effort => (
+                                              <option key={effort.value} value={effort.value}>{effort.label ?? effort.value}</option>
+                                            ))}
+                                          </select>
+                                        </label>
+                                      )
+                                    })()}
+                                  </div>
                                 </div>
                               )
                               : null}
