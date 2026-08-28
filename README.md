@@ -17,6 +17,27 @@ dsh web
 
 The repository tracks release-ready lib artifacts, so GitHub installation needs no build-script allowlist. A source checkout can use a link installation after running `pnpm run build`.
 
+## Remote management
+
+By default the plugin's settings RPC is loopback-only. When you open DSH from a non-loopback host (e.g. https://dsh.noirbright.top or http://192.168.50.75:3080), the card shows “A remote browser cannot edit plugin settings”.
+
+To allow editing from a trusted host:
+
+1. Add to your profile patch (`~/.dsh/profiles/web/cordis.patch.yml` for production, `~/.dsh-lab/profiles/web/cordis.patch.yml` for lab):
+   ```yaml
+   - id: llm-grok
+     config:
+       remoteManagement: true
+   ```
+2. Restart DSH with the host allowlisted:
+   ```sh
+   dsh web --trusted-host 192.168.50.75 --trusted-host dsh.noirbright.top
+   ```
+   The current production launch already uses `--trusted-host 192.168.50.75 --trusted-host dsh.noirbright.top`; add any additional host you use.
+3. Refresh the browser. Settings saved on the host keep working for remote sessions.
+
+Without `remoteManagement: true`, use `ssh -L 3080:127.0.0.1:3080 user@host` and open `http://127.0.0.1:3080`.
+
 ## Web configuration
 
 Open Settings → LLM Providers → Grok. **Sign in with xAI** starts a Host-owned PKCE flow against `auth.x.ai` (the Grok CLI public client), opens the system browser, and stores the session only on the Host at `$DSH_HOME/grok-oauth.json` (mode `0600`). The card then shows the account email. Sign out deletes that file. The browser never receives tokens. This plugin does not read or write `~/.grok/auth.json`.
@@ -58,6 +79,3 @@ The bundle retries eligible model-request failures up to eight times by default.
 There is no `apiKeyEnv` and no user-editable base URL. `models` is the displayed conversation catalog, a subset of the account list.
 
 The composer picker groups sibling catalog rows that share a base id after peeling a Fast suffix (`-fast`) and a generic context suffix (`-<n>k` / `-<n>m`). Product names such as `kimi-k3-max` are not treated as a context tier. This package's catalog comes from discovery; add extra suffix rows yourself if you want DSH to compact against a smaller budget. This plugin does not peel those suffixes on the wire.
-
-### Remote management
-Keep `remoteManagement: false` for loopback-only administration. Behind authentication you control, set it to `true`, restart the Host, and start DSH with the external authority explicitly trusted (for example, `dsh web --trusted-host dsh.example.com`). `trusted-host` is not authentication. OAuth returns a short-lived `authorizationUrl` and opaque `attemptId`; the browser opens the URL and submits the one-time authorization code with that attempt ID. A local callback remains an optional fast path. Tokens remain Host-side.

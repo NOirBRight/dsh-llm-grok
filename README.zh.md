@@ -17,6 +17,27 @@ dsh web
 
 仓库跟踪可直接发布的 lib artifacts，因此 GitHub 安装不需要 build-script allowlist。源码 checkout 可在执行 `pnpm run build` 后使用 link 安装。
 
+## 远程管理
+
+默认插件设置 RPC 仅允许 loopback。通过非回环地址打开 DSH（如 https://dsh.noirbright.top 或 http://192.168.50.75:3080）时会显示“远程浏览器无法编辑插件设置”。
+
+如需在可信主机上远程编辑：
+
+1. 在 profile patch（生产 `~/.dsh/profiles/web/cordis.patch.yml`，lab `~/.dsh-lab/profiles/web/cordis.patch.yml`）中加入：
+   ```yaml
+   - id: llm-grok
+     config:
+       remoteManagement: true
+   ```
+2. 以可信主机重启 DSH：
+   ```sh
+   dsh web --trusted-host 192.168.50.75 --trusted-host dsh.noirbright.top
+   ```
+   当前生产已使用 `--trusted-host 192.168.50.75 --trusted-host dsh.noirbright.top`，新增主机需一并加入。
+3. 刷新浏览器。主机上保存的设置对远程会话依然有效。
+
+未启用 `remoteManagement: true` 时，请使用 `ssh -L 3080:127.0.0.1:3080 user@host` 后打开 `http://127.0.0.1:3080`。
+
 ## Web 配置
 
 打开 Settings → LLM Providers → Grok。**用 xAI 登录**会在 Host 上对 `auth.x.ai` 走 PKCE（与 Grok CLI 同一公开 client），打开系统浏览器，并把会话只写在 Host 的 `$DSH_HOME/grok-oauth.json`（权限 `0600`）。卡片随后显示账号邮箱。退出登录会删除该文件。浏览器永远收不到 token。本插件不读、不写 `~/.grok/auth.json`。
@@ -58,7 +79,3 @@ bundle 默认对符合条件的模型请求失败最多重试八次。xAI 容量
 没有 `apiKeyEnv`，也没有用户可改的 base URL。`models` 是对话里显示的目录，是账户列表的一个子集。
 
 Composer picker 会按剥掉 Fast 后缀（`-fast`）和通用上下文后缀（`-<n>k` / `-<n>m`）后的 base 把兄弟行收成一个家族。`kimi-k3-max` 这类产品名不算档位。本包目录来自 discovery；若要让 DSH 按更小预算压缩，自行加带后缀的行。本插件不会在发请求前剥这些后缀。
-
-### 远程管理
-
-默认 `remoteManagement: false`，管理操作仅限 loopback。请先用你自己的反向代理、VPN、SSO 或 mTLS 保护 DSH，再设置为 `true`、重启 Host，并显式信任外部 authority（例如 `dsh web --trusted-host dsh.example.com`）。`trusted-host` 不是认证。OAuth 会返回短期 `authorizationUrl` 与不透明的 `attemptId`；浏览器打开 URL 后，把一次性 authorization code 连同 attemptId 交回 Host。本机 callback 仍是可选快速路径，token 始终只留在 Host。
