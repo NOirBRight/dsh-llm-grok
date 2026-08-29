@@ -33,6 +33,13 @@ export declare function resolveGrokAccessToken(runtime: GrokOAuthRuntime): Promi
  * and the documented default `reasoning.effort`.
  */
 export declare function applyOfficialReasoningMetadata(info: LlmResolvedModelInfo, catalog: GrokCatalogModel | undefined): LlmResolvedModelInfo;
+/**
+ * Remove sandbox escalation choices that cannot be strictly wider than the
+ * current DSH policy. Core still validates every retained request; this only
+ * prevents Grok from selecting an impossible optional enum value.
+ * Scans both options.system and DSH context-injection messages.
+ */
+export declare function narrowGrokEscalationSchemas(options: GenerateOptions): GenerateOptions;
 /** The Grok chat adapter backed by pi-ai OpenAI Responses. */
 export declare class GrokAdapter extends LlmAdapter {
     private readonly config;

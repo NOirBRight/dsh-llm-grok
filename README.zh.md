@@ -11,7 +11,7 @@ DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由�
 要求 DeepSeek Harness 0.1.0-rc.6 或更高版本。直接从 GitHub 安装：
 
 ~~~sh
-dsh plugin --profile web add github:NOirBRight/dsh-llm-grok#v0.3.0
+dsh plugin --profile web add github:NOirBRight/dsh-llm-grok#v0.3.5
 dsh web
 ~~~
 
