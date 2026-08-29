@@ -18,6 +18,7 @@ import {
   GROK_MODELS_ENDPOINT,
   GROK_SAVE_ENDPOINT,
   GROK_SETTINGS_READ_ENDPOINT,
+  GROK_PROVIDER,
   GROK_SETTINGS_NAMESPACE,
   GROK_USAGE_ENDPOINT,
   decodeGrokAuthLogoutReply,
@@ -30,7 +31,7 @@ import {
   decodeGrokUsageReply,
 } from '../client-contract.ts'
 import type { GrokSettingsView } from '../client-contract.ts'
-import { ensureProviderSection } from './provider-section.ts'
+import { ensureProviderSection } from 'dsh-llm-providers-ui/client'
 import { GrokPluginCard } from './GrokPluginCard.tsx'
 import type { GrokPluginCardFace } from './GrokPluginCard.tsx'
 import { GrokModelPicker, GrokModelPickerController } from './GrokModelPicker.tsx'
@@ -198,6 +199,7 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('settings.provider.item', () => ctx.slots.register({
     name: 'settings.provider.item',
     key: GROK_SETTINGS_NAMESPACE,
+    provider: GROK_PROVIDER,
     locale: localeNamespace,
     inject: (): GrokPluginCardFace => ({
       t,

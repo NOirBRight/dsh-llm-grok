@@ -30,8 +30,8 @@ import {
   fieldStyle,
 } from './model-catalog-ui.tsx'
 import { AuthToolbar, ProviderCardHeader, UsageHeader, UsageResetAt, UsageSkeleton, UsageUpdatedAt, formatProviderSummary, formatUsageClock, providerHeaderStyle, resetLabelOf } from './provider-chrome.tsx'
-import type {} from './provider-section.ts'
-import { SortableList } from './SortableList.tsx'
+import type {} from 'dsh-llm-providers-ui/client'
+import { SortableList } from 'dsh-llm-providers-ui/client'
 
 /** Dependencies injected by the browser-plugin registration. */
 export interface GrokPluginCardFace {
