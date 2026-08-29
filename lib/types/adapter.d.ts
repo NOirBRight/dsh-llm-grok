@@ -51,5 +51,12 @@ export declare class GrokAdapter extends LlmAdapter {
         model: LlmResolvedModelInfo;
         stream: (options: GenerateOptions) => AsyncGenerator<StreamChunk, void, unknown>;
     }>;
+    /**
+     * Declare neutral request-image pricing when a newer Host calls an adapter built against an older peer instance.
+     * @param _provider - provider route.
+     * @param _model - model id.
+     * @returns `undefined` so the Host uses heuristic image pricing.
+     */
+    imageRequestPricing(_provider: string, _model: string): undefined;
 }
 //# sourceMappingURL=adapter.d.ts.map

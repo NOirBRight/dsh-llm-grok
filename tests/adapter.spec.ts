@@ -144,6 +144,12 @@ describe('GrokAdapter metadata', () => {
     expect(older.reasoning?.efforts.map(effort => effort.id)).toEqual(['high', 'medium', 'low'])
     expect(older.reasoning?.defaultEffort).toBe('high')
   })
+
+  it('exposes neutral image pricing (alpha Host calls adapter method directly)', () => {
+    expect(Object.hasOwn(GrokAdapter.prototype, 'imageRequestPricing')).toBe(true)
+    const a = adapter({})
+    expect(a.imageRequestPricing('grok', 'grok-4.6')).toBeUndefined()
+  })
 })
 
 describe('GrokAdapter.stream request shape', () => {

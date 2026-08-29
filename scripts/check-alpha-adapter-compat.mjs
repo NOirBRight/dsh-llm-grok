@@ -1,0 +1,13 @@
+#!/usr/bin/env node
+
+/** Verify the built adapter provides the method called directly by an alpha1 Host. */
+const module = await import(new URL('../lib/index.js', import.meta.url).href)
+const Adapter = module.GrokAdapter
+if (typeof Adapter !== 'function') throw new Error('GrokAdapter is not exported from lib/index.js')
+if (!Object.hasOwn(Adapter.prototype, 'imageRequestPricing')) {
+  throw new Error('GrokAdapter must own imageRequestPricing')
+}
+const adapter = Object.create(Adapter.prototype)
+const pricing = adapter.imageRequestPricing('grok', 'grok-4.6')
+if (pricing !== undefined) throw new Error('neutral imageRequestPricing must return undefined')
+console.log('GrokAdapter alpha1 adapter compatibility passed')
