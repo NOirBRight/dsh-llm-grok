@@ -43,7 +43,9 @@ describe('Host-owned xAI PKCE', () => {
         const parsed = new URL(url)
         expect(parsed.searchParams.get('code_challenge_method')).toBe('S256')
         expect(parsed.searchParams.get('client_id')).toBe('b1a00492-073a-47ea-816f-4c329264a828')
-        expect(parsed.searchParams.get('scope') ?? '').toContain('grok-cli:access')
+        expect(parsed.searchParams.get('scope')).toBe('openid profile email offline_access grok-cli:access api:access')
+        expect(parsed.searchParams.get('nonce')).toBeTruthy()
+        expect(parsed.searchParams.get('referrer')).toBe('grok-build')
         auth.expectedChallenge = parsed.searchParams.get('code_challenge') ?? undefined
         const redirect = parsed.searchParams.get('redirect_uri')
         const state = parsed.searchParams.get('state')
@@ -170,6 +172,18 @@ describe('Host-owned xAI PKCE', () => {
     const third = await beginPkceLogin(runtime)
     expect('attemptId' in third).toBe(true)
     if ('attemptId' in third) cancelPkceLogin(runtime, third.attemptId)
+  })
+
+  it('replaces a still-pending remote attempt when the user retries', async () => {
+    const path = join(await home(), 'grok-oauth.json')
+    const auth = await fakeAuthServer({ authorizationCode: tokens })
+    const runtime = createGrokAuthRuntime({ resolveSessionPath: () => path, issuer: auth.issuer, timeoutMs: 2_000 })
+    const first = await beginPkceLogin(runtime)
+    if (!('attemptId' in first)) throw new Error('expected first attempt')
+    const second = await beginPkceLogin(runtime)
+    expect('attemptId' in second).toBe(true)
+    expect(statusPkceLogin(runtime, first.attemptId)).toBe('cancelled')
+    if ('attemptId' in second) cancelPkceLogin(runtime, second.attemptId)
   })
 })
 

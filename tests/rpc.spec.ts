@@ -14,6 +14,7 @@ import {
   GROK_SAVE_ENDPOINT,
   GROK_SETTINGS_NAMESPACE,
   GROK_USAGE_ENDPOINT,
+  decodeGrokAuthStartReply,
   decodeGrokAuthStatus,
   decodeGrokSaveResult,
   decodeGrokUsageReply,
@@ -176,12 +177,14 @@ describe('Grok loopback auth RPC', () => {
     const started = await handler(GROK_AUTH_START_ENDPOINT, {}, new AbortController().signal)
     expect(started).toMatchObject({
       ok: true,
-      value: { attemptId: expect.any(String), authorizationUrl: expect.any(String) },
+      value: { ok: true, attemptId: expect.any(String), authorizationUrl: expect.any(String) },
     })
     expect(JSON.stringify(started)).not.toMatch(/access-secret|refresh-secret/u)
     if (!started.ok) throw new Error('expected auth attempt')
-    const challenge = started.value as { authorizationUrl: string }
-    const parsed = new URL(challenge.authorizationUrl)
+    const rawChallenge = started.value as { ok: true, attemptId: string, authorizationUrl: string }
+    const decoded = decodeGrokAuthStartReply({ ...rawChallenge, authorizationUrl: 'https://auth.x.ai/oauth2/authorize' })
+    expect(decoded).toMatchObject({ ok: true, attemptId: rawChallenge.attemptId })
+    const parsed = new URL(rawChallenge.authorizationUrl)
     auth.expectedChallenge = parsed.searchParams.get('code_challenge') ?? undefined
     await fetch(`${parsed.searchParams.get('redirect_uri')}?code=${auth.nextCode}&state=${parsed.searchParams.get('state')}`)
     await vi.waitFor(async () => { expect(await readSession(path)).toBeDefined() })

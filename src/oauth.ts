@@ -31,10 +31,6 @@ export const GROK_OAUTH_SCOPE = [
   'offline_access',
   'grok-cli:access',
   'api:access',
-  'conversations:read',
-  'conversations:write',
-  'workspaces:read',
-  'workspaces:write',
 ].join(' ')
 /** Pinned authorize path when OIDC discovery is unavailable. */
 export const GROK_OAUTH_AUTHORIZE_PATH = '/oauth2/authorize'
@@ -460,6 +456,8 @@ export async function startPkceLogin(
     authorize.searchParams.set('redirect_uri', redirectUri)
     authorize.searchParams.set('scope', runtime.scope)
     authorize.searchParams.set('state', pkce.state)
+    authorize.searchParams.set('nonce', randomUrlSafe(18))
+    authorize.searchParams.set('referrer', 'grok-build')
     authorize.searchParams.set('code_challenge', pkce.challenge)
     authorize.searchParams.set('code_challenge_method', 'S256')
     const paste = createPendingPaste()
@@ -546,7 +544,10 @@ export async function beginPkceLogin(runtime: GrokOAuthRuntime): Promise<GrokAut
       if (attempt.status !== 'pending') attempts.delete(id)
     }
   }
-  if (attempts.size > 0) return retryable('Sign-in is already in progress.')
+  if ([...attempts.values()].some(attempt => attempt.completing)) {
+    return retryable('Sign-in is already completing.')
+  }
+  for (const id of [...attempts.keys()]) cancelPkceLogin(runtime, id)
 
   const endpoints = await discoverOidcEndpoints(runtime.issuer, runtime.fetch)
   const pkce = createPkcePair()
@@ -560,6 +561,8 @@ export async function beginPkceLogin(runtime: GrokOAuthRuntime): Promise<GrokAut
   url.searchParams.set('redirect_uri', redirectUri)
   url.searchParams.set('scope', runtime.scope)
   url.searchParams.set('state', pkce.state)
+  url.searchParams.set('nonce', randomUrlSafe(18))
+  url.searchParams.set('referrer', 'grok-build')
   url.searchParams.set('code_challenge', pkce.challenge)
   url.searchParams.set('code_challenge_method', 'S256')
   attempts.set(attemptId, {
@@ -568,8 +571,11 @@ export async function beginPkceLogin(runtime: GrokOAuthRuntime): Promise<GrokAut
     server: listener.server, cancellation, status: 'pending', completing: false,
   })
   void waitForCallback(listener.server, pkce.state, runtime.timeoutMs, cancellation.signal).then(async (result) => {
-    if (result.kind === 'code') await completePkceLogin(runtime, attemptId, result.code)
-    else cancelPkceLogin(runtime, attemptId)
+    if (result.kind === 'code') {
+      await completePkceLogin(runtime, attemptId, result.code)
+    } else {
+      cancelPkceLogin(runtime, attemptId)
+    }
   }).catch(() => { cancelPkceLogin(runtime, attemptId) })
   return { attemptId, authorizationUrl: url.toString() }
 }

@@ -1,6 +1,6 @@
 /** Browser half: Grok setup inside Plugin configuration. */
 
-import type { ClientContext, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, SettingsScopeSnapshot } from './shim.js'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -51,6 +51,7 @@ export const name = 'dsh-llm-grok-client'
 export const inject = ['slots', 'locale', 'connection']
 
 /** Register localized Grok configuration under Plugin configuration. */
+
 export function apply(ctx: ClientContext): void {
   const localeNamespace = 'settings.grok'
   ctx.effect(

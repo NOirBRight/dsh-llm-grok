@@ -313,7 +313,11 @@ export function createGrokRpcHandler(
   return async (endpoint, payload, signal) => {
     if (endpoint === GROK_AUTH_START_ENDPOINT) {
       if (decodeGrokEmptyRequest(payload) === undefined) return internalError('invalid Grok auth start request')
-      return { ok: true as const, value: await beginPkceLogin(runtime) }
+      const started = await beginPkceLogin(runtime)
+      return {
+        ok: true as const,
+        value: 'attemptId' in started ? { ok: true as const, ...started } : started,
+      }
     }
     if (endpoint === GROK_AUTH_ATTEMPT_STATUS_ENDPOINT) {
       const attemptId = (payload as { attemptId?: unknown })?.attemptId
