@@ -2,6 +2,14 @@
 import type { ClientContext } from './shim.js';
 import type { GrokSettingsKey } from './locales.ts';
 declare module '@deepseek-ai/dsh-client-ui-slots' {
+    interface SlotMap {
+        'settings.provider.item': {
+            kind: 'keyed';
+            scope: 'root';
+        };
+    }
+}
+declare module '@deepseek-ai/dsh-client-ui-slots' {
     interface LocaleNamespaceMap {
         /** Grok Plugin configuration copy. */
         'settings.grok': GrokSettingsKey;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.6
+
+- Settings → LLM Providers: drag cards to reorder; chat picker follows `llm-providers.order` via dsh-llm-providers-ui.
+
+
 ## 0.3.5
 
 - Fix sandbox escalation-schema leak: filter `sandbox_permissions` enum to strictly wider modes than the current DSH file policy before delegating to pi-ai/provider — scans DSH context-injection `options.messages` newest-to-oldest first, then falls back to `options.system` (handles stale system due to appended injection). Applies to both direct `stream` and `prepareCall` stream paths, before pi-ai/server-search tool injection. Preserves immutability and always-on `web_search`/`x_search`. Regression covered: stale `workspace-write` system + latest `danger-full-access` message removes escalation fields.

@@ -18,7 +18,6 @@ import {
   GROK_MODELS_ENDPOINT,
   GROK_SAVE_ENDPOINT,
   GROK_SETTINGS_READ_ENDPOINT,
-  GROK_PROVIDER,
   GROK_SETTINGS_NAMESPACE,
   GROK_USAGE_ENDPOINT,
   decodeGrokAuthLogoutReply,
@@ -39,6 +38,12 @@ import type { GrokModelPickerFace } from './GrokModelPicker.tsx'
 import { en, zh } from './locales.ts'
 import type { GrokSettingsKey } from './locales.ts'
 
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface SlotMap {
+    'settings.provider.item': { kind: 'keyed'; scope: 'root' }
+  }
+}
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** Grok Plugin configuration copy. */
@@ -199,7 +204,6 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('settings.provider.item', () => ctx.slots.register({
     name: 'settings.provider.item',
     key: GROK_SETTINGS_NAMESPACE,
-    provider: GROK_PROVIDER,
     locale: localeNamespace,
     inject: (): GrokPluginCardFace => ({
       t,
