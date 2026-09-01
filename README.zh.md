@@ -8,35 +8,24 @@ DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由�
 
 ## 安装
 
-要求 DeepSeek Harness 0.1.0-rc.6 或更高版本。直接从 GitHub 安装：
+要求 DeepSeek Harness 0.1.2-alpha.1。直接从 GitHub 安装：
 
 ~~~sh
-dsh plugin --profile web add github:NOirBRight/dsh-llm-grok#v0.3.0
+dsh plugin --profile web add github:NOirBRight/dsh-llm-grok#v0.3.7
 dsh web
 ~~~
 
-仓库跟踪可直接发布的 lib artifacts，因此 GitHub 安装不需要 build-script allowlist。源码 checkout 可在执行 `pnpm run build` 后使用 link 安装。
+仓库跟踪可直接发布的 lib artifacts，因此 GitHub 安装不需要 build-script allowlist。
 
-## 远程管理
+## LLM Providers UI ownership
 
-默认插件设置 RPC 仅允许 loopback。通过非回环地址打开 DSH（如 https://dsh.noirbright.top 或 http://192.168.50.75:3080）时会显示“远程浏览器无法编辑插件设置”。
+**LLM 供应商**设置页（`settings.section` 的 `id: providers` 及子槽 `settings.provider.item`）与共享的 `llm-providers` 排序存储完全由 `dsh-llm-providers-ui` 拥有。
 
-如需在可信主机上远程编辑：
+- 本插件仅贡献自己的卡片（`key: llm-grok`）和 Host 上的 `llm` 路由；不安装页面或共享命名空间。加载顺序不影响归属。
+- 未安装 owner 时（Headless 或 Web 未装 `dsh-llm-providers-ui`）：Host 侧模型路由 `grok` 仍可工作；Web 侧 Providers 页面与本卡片不显示。`pack:check` 会校验 owner artifact 的身份、`./sortable` 导出和打包后的 client closure。
+- 导航地球图标为 `alpha.1` 临时 DOM 适配器，仅由 `dsh-llm-providers-ui` 持有；本插件不含该适配器。
 
-1. 在 profile patch（生产 `~/.dsh/profiles/web/cordis.patch.yml`，lab `~/.dsh-lab/profiles/web/cordis.patch.yml`）中加入：
-   ```yaml
-   - id: llm-grok
-     config:
-       remoteManagement: true
-   ```
-2. 以可信主机重启 DSH：
-   ```sh
-   dsh web --trusted-host 192.168.50.75 --trusted-host dsh.noirbright.top
-   ```
-   当前生产已使用 `--trusted-host 192.168.50.75 --trusted-host dsh.noirbright.top`，新增主机需一并加入。
-3. 刷新浏览器。主机上保存的设置对远程会话依然有效。
-
-未启用 `remoteManagement: true` 时，请使用 `ssh -L 3080:127.0.0.1:3080 user@host` 后打开 `http://127.0.0.1:3080`。
+请在 profile 中与 provider 插件一起显式安装 `dsh-llm-providers-ui`（见其 `cordis.patch.yml`）。
 
 ## Web 配置
 
@@ -48,13 +37,13 @@ dsh web
 
 Plugin 卡上有两份目录：登录后从 `GET /v1/models-v2` 读到的账户列表，以及存进 `settings.models` 的显示子集。对话选择器只用显示子集。每行可设默认思考和作为 DSH 压缩预算的上下文窗口。官方 `grok-4.6` / `grok-4.5` 默认为 500,000 tokens。卡片上的目录默认折叠，可以拖动、改、删，或从账户列表里挑 1–2 个。尚未保存过时，默认显示 `grok-4.6` 和 `grok-4.5`。聊天走 `POST https://cli-chat-proxy.grok.com/v1/responses`。每条请求都带上 DSH function tools，以及始终开启的服务端 `{ type: "web_search" }` 与 `{ type: "x_search" }`。搜索不是 `ctx.web` 提供方。服务端搜索会以加密的 `tco_*` reasoning 项回放；这些项没有可见 summary，不会再各画一个空 Think 块。若 Grok 把同一次搜索再回成客户端 `custom_tool_call`（`xs_call-*` / `ws_call-*`，名字常抄成 `x_keyword_search`），插件会丢掉，避免 DSH 报 `unknown tool`。推理按官方 Responses 字段 `reasoning: { effort }` 传递，取值为 `low` / `medium` / `high`（默认）/ `xhigh`（仅 4.6）。登录后卡片还会展示 Host 读取的订阅额度（`GET /v1/billing?format=credits`）。未登录不请求额度；无法识别的接口显示为不支持，而不是错误。
 
-安装 `dsh-model-switch` v0.2+ 后，Grok 还会给统一的 `generate_image` 路由注册一个可选的 Image-only Adapter。它复用同一套认证实现，不注册 Search 或 Vision Adapter；独立运行行为不变。
+安装 `dsh-model-switch` v0.4.x 后，Grok 还会给统一的 `generate_image` 路由注册一个可选的 Image-only Adapter。它复用同一套认证实现，不注册 Search 或 Vision Adapter；独立运行行为不变。
 
 可选的 **`grok_image_gen`**（默认关闭）会注册一个模型可调用的生图工具，走 Grok Imagine。它复用同一套 Host OAuth 会话，请求 `https://api.x.ai/v1/images/generations` —— 和 Grok Build 本地 `image_gen` 同一条轨，不是 console API key，也不是聊天 proxy。工具名与 Codex 的 `codex_generate_image` 区分。生成的图会写到工作区并通过 attachment store 落盘。
 
 未登录就聊天会失败为 `MISSING_CREDENTIAL`。已有会话但 refresh 失败会清会话并失败为 `AUTH`。每次聊天请求前已经跑过 `ensureFreshSession`；之后的 401 不再在 Responses 层重试。
 
-每条 proxy 请求都会带上本插件的 `X-Dsh-Plugin` 身份，以及 proxy 要求的 CLI 版本头（`x-grok-client-version` / `x-grok-client-identifier`）。缺版本会 426。这些头是兼容约束，不是冒充官方 CLI。
+每条 proxy 请求都会带上本插件的 `X-Dsh-Plugin` 身份，以及 proxy 要求的 CLI 版本头（`x-grok-client-version` / `x-grok-client-identifier`）。缺版本会 426。这些头是 proxy 要求的字段，不是冒充官方 CLI。
 
 Models 页面如果列出 Grok，也只是 hint。因为本包不声明 `apiKeyEnv`，该行不应出现「缺 API key」红点。
 
@@ -79,3 +68,52 @@ bundle 默认对符合条件的模型请求失败最多重试八次。xAI 容量
 没有 `apiKeyEnv`，也没有用户可改的 base URL。`models` 是对话里显示的目录，是账户列表的一个子集。
 
 Composer picker 会按剥掉 Fast 后缀（`-fast`）和通用上下文后缀（`-<n>k` / `-<n>m`）后的 base 把兄弟行收成一个家族。`kimi-k3-max` 这类产品名不算档位。本包目录来自 discovery；若要让 DSH 按更小预算压缩，自行加带后缀的行。本插件不会在发请求前剥这些后缀。
+
+
+## 正式版安装（Latest）
+
+xAI Grok subscription login, Responses chat, usage, search, and Imagine. 正式成品只支持 DeepSeek Harness 0.1.2-alpha.1；发布包只包含构建后的 Host/Client 产物，不包含兄弟仓库源码、本机路径或 link:/workspace: 依赖。
+
+LLM Providers 页面、导航和共享排序由 dsh-llm-providers-ui 独占；本插件只提供卡片、模型和 Host 路由。Web 必须先装 Owner，headless 只使用 Host 路由时可以不装 Owner。
+
+Owner（Latest）：
+
+~~~sh
+dsh plugin --profile web add --force \
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui.tgz
+~~~
+
+本 Provider（Latest）：
+
+~~~sh
+dsh plugin --profile web add --force \
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok.tgz
+~~~
+
+固定版本（可复现）：
+
+~~~sh
+dsh plugin --profile web add --force \
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.2/dsh-llm-providers-ui.tgz
+dsh plugin --profile web add --force \
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.7/dsh-llm-grok.tgz
+~~~
+
+更新、卸载与验证：
+
+~~~sh
+# 更新到最新 Release
+dsh plugin --profile web add --force \
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok.tgz
+# 验证加载与版本
+dsh plugin --profile web list
+dsh plugin --profile web doctor
+# 只卸载本插件
+dsh plugin --profile web remove dsh-llm-grok
+~~~
+
+配置入口：Web 使用「设置」中的本插件页面；Host-only 插件使用 profile 的 dsh.profile.bundles 配置。先复制本 README 的最小 YAML/JSON 示例，再填写凭据或后端地址。
+
+回滚：重新执行固定版本 v0.3.7 命令，确认插件列表后只重启一次 Web 服务。失败时查看 journalctl --user -u dsh-web.service 与 dsh plugin --profile web doctor，不要把源码 checkout 写入 production profile。
+
+Release 与完整性：[v0.3.7](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.7) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.7/SHA256SUMS)。

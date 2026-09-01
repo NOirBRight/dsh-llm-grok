@@ -33,6 +33,13 @@ export declare function resolveGrokAccessToken(runtime: GrokOAuthRuntime): Promi
  * and the documented default `reasoning.effort`.
  */
 export declare function applyOfficialReasoningMetadata(info: LlmResolvedModelInfo, catalog: GrokCatalogModel | undefined): LlmResolvedModelInfo;
+/**
+ * Remove sandbox escalation choices that cannot be strictly wider than the
+ * current DSH policy. Core still validates every retained request; this only
+ * prevents Grok from selecting an impossible optional enum value.
+ * Scans both options.system and DSH context-injection messages.
+ */
+export declare function narrowGrokEscalationSchemas(options: GenerateOptions): GenerateOptions;
 /** The Grok chat adapter backed by pi-ai OpenAI Responses. */
 export declare class GrokAdapter extends LlmAdapter {
     private readonly config;
@@ -46,10 +53,17 @@ export declare class GrokAdapter extends LlmAdapter {
     listModels(provider: string): Promise<readonly LlmModelInfo[]>;
     resolveModel(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;
     stream(options: GenerateOptions): AsyncIterable<StreamChunk>;
-    /** Own the method so rc.2 Host can call it even when this class extends an older LlmAdapter. */
+    /** Prepare one request with Grok's stream transforms applied. */
     prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<{
         model: LlmResolvedModelInfo;
         stream: (options: GenerateOptions) => AsyncGenerator<StreamChunk, void, unknown>;
     }>;
+    /**
+     * Declare no provider-specific image pricing so the Host uses neutral estimation.
+     * @param _provider - provider route.
+     * @param _model - model id.
+     * @returns `undefined` because Grok has no image token pricing contract.
+     */
+    imageRequestPricing(_provider: string, _model: string): undefined;
 }
 //# sourceMappingURL=adapter.d.ts.map

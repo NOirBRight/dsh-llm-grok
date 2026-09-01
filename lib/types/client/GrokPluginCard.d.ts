@@ -1,6 +1,6 @@
 /** Grok Plugin configuration card: Host-owned xAI login, usage, and an editable displayed catalog. */
 import type { ReactNode } from 'react';
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client';
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client';
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 import type { GrokAuthStartReply, GrokAuthAttemptStatus, GrokAuthStatus, GrokCatalogModel, GrokSaveResult, GrokSettingsView, GrokUsageReply } from '../client-contract.ts';
 import type { GrokSettingsKey } from './locales.ts';

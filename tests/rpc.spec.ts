@@ -14,6 +14,7 @@ import {
   GROK_SAVE_ENDPOINT,
   GROK_SETTINGS_NAMESPACE,
   GROK_USAGE_ENDPOINT,
+  decodeGrokAuthStartReply,
   decodeGrokAuthStatus,
   decodeGrokSaveResult,
   decodeGrokUsageReply,
@@ -43,21 +44,47 @@ const tokens = {
   userId: 'user-1',
 }
 
-describe('Grok loopback auth RPC', () => {
-  it('registers /grok as a loopback channel', async () => {
+describe('Grok authenticated Host Connection RPC', () => {
+  it('registers /grok as an authenticated channel', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime).await()
-    const handle = vi.fn((_channel: string, _handler: Handler, _options: { authority: 'loopback' }) =>
-      () => Promise.resolve())
+    let release: (() => void) | undefined
+    const pending = new Promise<void>(resolve => { release = resolve })
+    const dispose = vi.fn(async () => { await pending })
+    const handle = vi.fn((_channel: string, _handler: Handler) => dispose)
     ctx.provide('connection', { rpc: { handle } } as never)
     const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})
     await fiber.await()
 
     expect(handle).toHaveBeenCalledTimes(1)
     expect(handle.mock.calls[0]?.[0]).toBe(GROK_RPC_CHANNEL)
-    expect(handle.mock.calls[0]?.[2]).toEqual({ authority: 'loopback' })
+    expect(handle.mock.calls[0]).toHaveLength(2)
 
-    await fiber.dispose()
+    const unloading = fiber.dispose()
+    await vi.waitFor(() => expect(dispose).toHaveBeenCalledTimes(1))
+    let settled = false
+    void unloading.then(() => { settled = true })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    release?.()
+    await unloading
+    await ctx.fiber.dispose()
+    expect(dispose).toHaveBeenCalledTimes(1)
+  })
+
+  it('unloads an injected connection fiber when registration fails', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime).await()
+    const failure = new Error('rpc registration failed')
+    const logged = vi.spyOn(ctx.logger, 'error').mockImplementation(() => undefined)
+    const handle = vi.fn(() => { throw failure })
+    ctx.provide('connection', { rpc: { handle } } as never)
+    const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})
+    await fiber.await()
+    expect(logged).toHaveBeenCalledWith(failure)
+    await expect(fiber.dispose()).resolves.toBeUndefined()
+    expect(handle).toHaveBeenCalledTimes(1)
+    logged.mockRestore()
     await ctx.fiber.dispose()
   })
 
@@ -176,12 +203,14 @@ describe('Grok loopback auth RPC', () => {
     const started = await handler(GROK_AUTH_START_ENDPOINT, {}, new AbortController().signal)
     expect(started).toMatchObject({
       ok: true,
-      value: { attemptId: expect.any(String), authorizationUrl: expect.any(String) },
+      value: { ok: true, attemptId: expect.any(String), authorizationUrl: expect.any(String) },
     })
     expect(JSON.stringify(started)).not.toMatch(/access-secret|refresh-secret/u)
     if (!started.ok) throw new Error('expected auth attempt')
-    const challenge = started.value as { authorizationUrl: string }
-    const parsed = new URL(challenge.authorizationUrl)
+    const rawChallenge = started.value as { ok: true, attemptId: string, authorizationUrl: string }
+    const decoded = decodeGrokAuthStartReply({ ...rawChallenge, authorizationUrl: 'https://auth.x.ai/oauth2/authorize' })
+    expect(decoded).toMatchObject({ ok: true, attemptId: rawChallenge.attemptId })
+    const parsed = new URL(rawChallenge.authorizationUrl)
     auth.expectedChallenge = parsed.searchParams.get('code_challenge') ?? undefined
     await fetch(`${parsed.searchParams.get('redirect_uri')}?code=${auth.nextCode}&state=${parsed.searchParams.get('state')}`)
     await vi.waitFor(async () => { expect(await readSession(path)).toBeDefined() })
@@ -354,7 +383,7 @@ describe('Grok settings/save RPC', () => {
     }
     const ctx = new Context()
     await ctx.plugin(LlmRuntime).await()
-    const handle = vi.fn((_channel: string, _handler: Handler, _options: { authority: 'loopback' }) =>
+    const handle = vi.fn((_channel: string, _handler: Handler) =>
       () => Promise.resolve())
     ctx.provide('connection', { rpc: { handle } } as never)
     ctx.provide('settings', settings as never)
@@ -389,7 +418,7 @@ describe('Grok settings/save RPC', () => {
   it('rejects a save payload that tries to send token fields', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime).await()
-    const handle = vi.fn((_channel: string, _handler: Handler, _options: { authority: 'loopback' }) =>
+    const handle = vi.fn((_channel: string, _handler: Handler) =>
       () => Promise.resolve())
     ctx.provide('connection', { rpc: { handle } } as never)
     const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})

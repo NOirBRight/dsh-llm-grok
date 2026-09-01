@@ -120,7 +120,7 @@ export function createGrokPiAiProfile(connection: GrokConnectionOptions): Resolv
     retryPolicy: connection.retryPolicy,
     /** Mirrors the official aggregate base64 image limit per request. */
     maxRequestImageBytes: 20 * 1024 * 1024,
-    /** Required by the rc.2 resolved-profile contract for deterministic request images. */
+    /** Request-image pixel budget used by the alpha.1 attachment normalizer. */
     requestImagePixelBudget: 2048 * 2048,
     requestImageMaxBytes: 1024 * 1024,
     piProvider,

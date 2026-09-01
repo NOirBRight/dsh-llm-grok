@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {
@@ -30,8 +30,7 @@ import {
   fieldStyle,
 } from './model-catalog-ui.tsx'
 import { AuthToolbar, ProviderCardHeader, UsageHeader, UsageResetAt, UsageSkeleton, UsageUpdatedAt, formatProviderSummary, formatUsageClock, providerHeaderStyle, resetLabelOf } from './provider-chrome.tsx'
-import type {} from './provider-section.ts'
-import { SortableList } from './SortableList.tsx'
+import { SortableList } from 'dsh-llm-providers-ui/sortable'
 
 /** Dependencies injected by the browser-plugin registration. */
 export interface GrokPluginCardFace {
@@ -344,7 +343,7 @@ function usageResetCopy(t: GrokPluginCardFace['t']): { at: string, atDays: strin
 /** Render the single-package Grok contribution under Plugin configuration. */
 export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   const { t, startAuth, completeAuth, cancelAuth, readAuthStatus, readAuthAttemptStatus, logout, fetchUsage, fetchModels } = props
-  const snapshot = props.useGrokSettings(value => value)
+  const snapshot = props.useGrokSettings((value: SettingsScopeSnapshot<GrokSettingsView>) => value)
   const [open, setOpen] = useState(false)
   const initial = useMemo(
     () => snapshot.value === undefined ? undefined : snapshot.value.models.map(modelDraftOf),

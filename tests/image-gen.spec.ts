@@ -6,7 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
-import { CallId, LlmRuntime } from '@deepseek-ai/dsh-llm'
+import { ToolCallId, LlmRuntime } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { GROK_IMAGINE_MODEL } from '../src/image-gen-client.ts'
@@ -72,7 +72,7 @@ function agent(): object {
 async function generate(context: Context, args: Record<string, unknown>) {
   return context.tools.execute({
     signal,
-    callId: CallId('grok-image-' + String(++callCounter)),
+    callId: ToolCallId('grok-image-' + String(++callCounter)),
     name: GROK_IMAGE_GEN_TOOL_NAME,
     arguments: args,
     agent: agent() as never,

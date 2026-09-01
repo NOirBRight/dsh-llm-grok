@@ -117,6 +117,87 @@ function classifyGrokTransientError(chunk: StreamChunk): StreamChunk {
   }
 }
 
+
+const SANDBOX_MODE_RANK: Record<string, number> = {
+  'read-only': 0,
+  'workspace-write': 1,
+  'danger-full-access': 2,
+}
+
+/**
+ * Remove sandbox escalation choices that cannot be strictly wider than the
+ * current DSH policy. Core still validates every retained request; this only
+ * prevents Grok from selecting an impossible optional enum value.
+ * Scans both options.system and DSH context-injection messages.
+ */
+export function narrowGrokEscalationSchemas(options: GenerateOptions): GenerateOptions {
+  const mode = sandboxModeOf(options)
+  const currentRank = mode === undefined ? undefined : SANDBOX_MODE_RANK[mode]
+  if (currentRank === undefined || options.tools === undefined) return options
+  let changed = false
+  const tools = options.tools.map((tool) => {
+    const parameters = tool.parameters
+    const properties = isRecord(parameters.properties) ? parameters.properties : undefined
+    const permission = properties === undefined || !isRecord(properties.sandbox_permissions)
+      ? undefined
+      : properties.sandbox_permissions
+    if (permission === undefined || !Array.isArray(permission.enum)) return tool
+    const wider = permission.enum.filter((candidate): candidate is string => {
+      return typeof candidate === 'string' && (SANDBOX_MODE_RANK[candidate] ?? -1) > currentRank
+    })
+    if (wider.length === permission.enum.length) return tool
+    changed = true
+    const nextProperties = { ...properties }
+    if (wider.length === 0) {
+      delete nextProperties.sandbox_permissions
+      delete nextProperties.justification
+    } else {
+      nextProperties.sandbox_permissions = { ...permission, enum: wider }
+    }
+    const required = Array.isArray(parameters.required)
+      ? parameters.required.filter(name => name !== 'sandbox_permissions' && name !== 'justification')
+      : undefined
+    return {
+      ...tool,
+      parameters: {
+        ...parameters,
+        properties: nextProperties,
+        ...(required === undefined ? {} : { required }),
+      },
+    }
+  })
+  return changed ? { ...options, tools } : options
+}
+
+function sandboxModeOf(options: GenerateOptions): string | undefined {
+  for (let index = options.messages.length - 1; index >= 0; index -= 1) {
+    const message = options.messages[index] as unknown
+    if (!isRecord(message)) continue
+    const found = sandboxModeIn((message as { content?: unknown }).content)
+    if (found !== undefined) return found
+  }
+  return sandboxModeIn(options.system)
+}
+
+function sandboxModeIn(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return /Current DSH file policy:\s*(read-only|workspace-write|danger-full-access)\./u.exec(value)?.[1]
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = sandboxModeIn(item)
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
+  if (!isRecord(value)) return undefined
+  return sandboxModeIn((value as Record<string, unknown>).text) ?? sandboxModeIn((value as Record<string, unknown>).content)
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 /** The Grok chat adapter backed by pi-ai OpenAI Responses. */
 export class GrokAdapter extends LlmAdapter {
   private readonly auth = createGrokPiAiAuth()
@@ -169,30 +250,31 @@ export class GrokAdapter extends LlmAdapter {
   }
 
   override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
-    for await (const chunk of this.current().stream(options)) {
+    for await (const chunk of this.current().stream(narrowGrokEscalationSchemas(options))) {
       yield classifyGrokTransientError(chunk)
     }
   }
 
-  /** Own the method so rc.2 Host can call it even when this class extends an older LlmAdapter. */
-  async prepareCall(provider: string, model: string, signal?: AbortSignal) {
-    const delegate = this.current()
-    const inner = typeof (delegate as { prepareCall?: unknown }).prepareCall === 'function'
-      ? await (delegate as unknown as { prepareCall: (provider: string, model: string, signal?: AbortSignal) => Promise<{
-        model: LlmResolvedModelInfo
-        stream: (options: GenerateOptions) => AsyncIterable<StreamChunk>
-      }> }).prepareCall(provider, model, signal)
-      : {
-        model: await this.resolveModel(provider, model, signal),
-        stream: (options: GenerateOptions) => delegate.stream(options),
-      }
+  /** Prepare one request with Grok's stream transforms applied. */
+  override async prepareCall(provider: string, model: string, signal?: AbortSignal) {
+    const inner = await this.current().prepareCall(provider, model, signal)
     return {
       model: inner.model,
       stream: async function* (options: GenerateOptions) {
-        for await (const chunk of inner.stream(options) as AsyncIterable<StreamChunk>) {
+        for await (const chunk of inner.stream(narrowGrokEscalationSchemas(options))) {
           yield classifyGrokTransientError(chunk)
         }
       },
     }
+  }
+
+  /**
+   * Declare no provider-specific image pricing so the Host uses neutral estimation.
+   * @param _provider - provider route.
+   * @param _model - model id.
+   * @returns `undefined` because Grok has no image token pricing contract.
+   */
+  override imageRequestPricing(_provider: string, _model: string): undefined {
+    return undefined
   }
 }

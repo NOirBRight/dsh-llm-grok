@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.6
+
+- Settings → LLM Providers: drag cards to reorder; chat picker follows `llm-providers.order` via dsh-llm-providers-ui.
+
+
+## 0.3.5
+
+- Fix sandbox escalation-schema leak: filter `sandbox_permissions` enum to strictly wider modes than the current DSH file policy before delegating to pi-ai/provider — scans DSH context-injection `options.messages` newest-to-oldest first, then falls back to `options.system` (handles stale system due to appended injection). Applies to both direct `stream` and `prepareCall` stream paths, before pi-ai/server-search tool injection. Preserves immutability and always-on `web_search`/`x_search`. Regression covered: stale `workspace-write` system + latest `danger-full-access` message removes escalation fields.
+
+
+## 0.3.4
+
+- Support the DSH 0.1.2-alpha.1 Host image-pricing call with neutral heuristic pricing
+- Restore published-RC and alpha1 client build compatibility
+- Add frozen-install CI and built-adapter release checks
+
 ## 0.3.2
 
 - Unify model catalog to opencode baseline (Context first row, Vision/Reasoning/Default thinking second row, 32/36px)

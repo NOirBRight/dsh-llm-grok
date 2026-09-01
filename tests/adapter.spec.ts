@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createUserMessage, LlmError, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { GrokAdapter, resolveGrokAccessToken } from '../src/adapter.ts'
+import { GrokAdapter, narrowGrokEscalationSchemas, resolveGrokAccessToken } from '../src/adapter.ts'
 import type { GrokAdapterOptions, GrokConnectionOptions } from '../src/adapter.ts'
 import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
 import { resolveAdapterOptions } from '../src/index.ts'
@@ -101,6 +101,263 @@ describe('injectGrokServerSearchTools', () => {
   })
 })
 
+describe('narrowGrokEscalationSchemas', () => {
+  const options = (mode: string) => ({
+    provider: 'grok',
+    model: 'grok-4.6',
+    messages: [],
+    system: 'Current DSH file policy: ' + mode + '.',
+    tools: [{
+      name: 'write',
+      description: 'write',
+      parameters: {
+        type: 'object',
+        properties: {
+          file_path: { type: 'string' },
+          sandbox_permissions: { type: 'string', enum: ['workspace-write', 'danger-full-access'] },
+          justification: { type: 'string' },
+        },
+        required: ['file_path'],
+      },
+    }],
+  })
+
+  it('reads the current mode from a DSH context-injection message', () => {
+    const request = options('unknown') as unknown as GenerateOptions
+    request.system = 'You are a coding agent.'
+    request.messages = [{
+      role: 'user',
+      content: [{ type: 'text', text: 'Current DSH file policy: workspace-write. Writes are confined.' }],
+    }] as never
+    const narrowed = narrowGrokEscalationSchemas(request as never)
+    expect((narrowed.tools?.[0]?.parameters as any).properties.sandbox_permissions.enum).toEqual(['danger-full-access'])
+  })
+
+  it('prefers newest message over stale system (messages-first)', () => {
+    const request = options('workspace-write') as unknown as GenerateOptions
+    request.messages = [{
+      role: 'user',
+      content: [{ type: 'text', text: 'Current DSH file policy: read-only. original' }],
+    }] as never
+    const narrowed = narrowGrokEscalationSchemas(request as never)
+    expect((narrowed.tools?.[0]?.parameters as any).properties.sandbox_permissions.enum).toEqual(['workspace-write', 'danger-full-access'])
+  })
+
+  it('regression: stale system workspace-write + latest message danger-full-access must remove escalation fields', () => {
+    const request = options('workspace-write') as unknown as GenerateOptions
+    request.messages = [
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Current DSH file policy: read-only. old' }],
+      } as never,
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Current DSH file policy: danger-full-access. latest — stale system must be ignored' }],
+      } as never,
+    ]
+    const narrowed = narrowGrokEscalationSchemas(request as never)
+    const parameters = narrowed.tools?.[0]?.parameters as any
+    expect(parameters.properties.sandbox_permissions).toBeUndefined()
+    expect(parameters.properties.justification).toBeUndefined()
+    expect(parameters.required).toEqual(['file_path'])
+  })
+
+  it('offers only strictly wider modes to a workspace-write session', () => {
+    const original = options('workspace-write') as unknown as GenerateOptions
+    const narrowed = narrowGrokEscalationSchemas(original as never)
+    expect((narrowed.tools?.[0]?.parameters as any).properties.sandbox_permissions.enum).toEqual(['danger-full-access'])
+    expect((narrowed.tools?.[0]?.parameters as any).properties.justification).toBeDefined()
+    expect((original.tools[0]?.parameters as any).properties.sandbox_permissions.enum).toEqual(['workspace-write', 'danger-full-access'])
+  })
+
+  it('removes impossible escalation fields from a danger-full-access session (system)', () => {
+    const narrowed = narrowGrokEscalationSchemas(options('danger-full-access') as never)
+    const parameters = narrowed.tools?.[0]?.parameters as any
+    expect(parameters.properties.sandbox_permissions).toBeUndefined()
+    expect(parameters.properties.justification).toBeUndefined()
+    expect(parameters.required).toEqual(['file_path'])
+  })
+
+  it('removes impossible escalation fields from a danger-full-access session (messages)', () => {
+    const request = {
+      provider: 'grok',
+      model: 'grok-4.6',
+      messages: [{
+        role: 'user',
+        content: [{ type: 'text', text: 'Current DSH file policy: danger-full-access. Already full.' }],
+      }],
+      tools: [{
+        name: 'write',
+        description: 'write',
+        parameters: {
+          type: 'object',
+          properties: {
+            file_path: { type: 'string' },
+            sandbox_permissions: { type: 'string', enum: ['workspace-write', 'danger-full-access'] },
+            justification: { type: 'string' },
+          },
+          required: ['file_path', 'sandbox_permissions', 'justification'],
+        },
+      }],
+    } as unknown as GenerateOptions
+    const narrowed = narrowGrokEscalationSchemas(request as never)
+    const parameters = narrowed.tools?.[0]?.parameters as any
+    expect(parameters.properties.sandbox_permissions).toBeUndefined()
+    expect(parameters.properties.justification).toBeUndefined()
+    expect(parameters.required).toEqual(['file_path'])
+  })
+
+  it('keeps both wider modes available to a read-only session', () => {
+    const narrowed = narrowGrokEscalationSchemas(options('read-only') as never)
+    expect((narrowed.tools?.[0]?.parameters as any).properties.sandbox_permissions.enum)
+      .toEqual(['workspace-write', 'danger-full-access'])
+  })
+
+  it('is immutable and does not mutate original when filtering', () => {
+    const original = options('danger-full-access') as unknown as GenerateOptions
+    const originalEnum = (original.tools[0]?.parameters as any).properties.sandbox_permissions.enum.slice()
+    const narrowed = narrowGrokEscalationSchemas(original as never)
+    expect(narrowed).not.toBe(original)
+    expect((original.tools[0]?.parameters as any).properties.sandbox_permissions.enum).toEqual(originalEnum)
+    expect((original.tools[0]?.parameters as any).properties.justification).toBeDefined()
+  })
+
+  it('leaves tools without sandbox_permissions untouched', () => {
+    const opts = {
+      provider: 'grok',
+      model: 'grok-4.6',
+      messages: [],
+      system: 'Current DSH file policy: workspace-write.',
+      tools: [{
+        name: 'read',
+        description: 'read',
+        parameters: {
+          type: 'object',
+          properties: { file_path: { type: 'string' } },
+          required: ['file_path'],
+        },
+      }],
+    } as unknown as GenerateOptions
+    const narrowed = narrowGrokEscalationSchemas(opts as never)
+    expect(narrowed).toBe(opts)
+  })
+
+  it('filters danger-full-access tool via direct stream path (before PiAi injection)', async () => {
+    const server = await fakeChatProxy([{ kind: 'json', status: 400, body: { error: { message: 'captured' } } }])
+    const a = adapter({ options: () => connection({ baseURL: `${server.url}/v1` }) })
+    const esTool = {
+      name: 'es_tool',
+      description: 'es',
+      parameters: {
+        type: 'object',
+        properties: {
+          file_path: { type: 'string' },
+          sandbox_permissions: { type: 'string', enum: ['workspace-write', 'danger-full-access'] },
+          justification: { type: 'string' },
+        },
+        required: ['file_path', 'sandbox_permissions', 'justification'],
+      },
+    }
+    await collect(a.stream(request({
+      system: 'Current DSH file policy: danger-full-access.',
+      tools: [esTool as never],
+    })))
+    const body = server.requests[0]?.body as { tools?: Array<{ type?: string, name?: string, parameters?: any }> }
+    const sent = body.tools?.find(t => t.name === 'es_tool')
+    expect(sent?.parameters.properties.sandbox_permissions).toBeUndefined()
+    expect(sent?.parameters.properties.justification).toBeUndefined()
+    expect(sent?.parameters.required).toEqual(['file_path'])
+    // still injects server tools
+    expect(body.tools?.some(t => t.type === 'web_search')).toBe(true)
+    expect(body.tools?.some(t => t.type === 'x_search')).toBe(true)
+  })
+
+  it('filters via prepareCall stream path as well', async () => {
+    const server = await fakeChatProxy([{ kind: 'json', status: 400, body: { error: { message: 'captured' } } }])
+    const a = adapter({ options: () => connection({ baseURL: `${server.url}/v1` }) })
+    const call = await a.prepareCall('grok', 'grok-4.6')
+    const esTool = {
+      name: 'es_tool2',
+      description: 'es2',
+      parameters: {
+        type: 'object',
+        properties: {
+          file_path: { type: 'string' },
+          sandbox_permissions: { type: 'string', enum: ['workspace-write', 'danger-full-access'] },
+          justification: { type: 'string' },
+        },
+        required: ['file_path'],
+      },
+    }
+    await collect(call.stream(request({
+      system: 'Current DSH file policy: workspace-write.',
+      tools: [esTool as never],
+    })))
+    const body = server.requests[0]?.body as { tools?: Array<{ type?: string, name?: string, parameters?: any }> }
+    const sent = body.tools?.find(t => t.name === 'es_tool2')
+    expect(sent?.parameters.properties.sandbox_permissions.enum).toEqual(['danger-full-access'])
+  })
+
+  it('also filters when policy is in messages injection (not system)', async () => {
+    const server = await fakeChatProxy([{ kind: 'json', status: 400, body: { error: { message: 'captured' } } }])
+    const a = adapter({ options: () => connection({ baseURL: `${server.url}/v1` }) })
+    const esTool = {
+      name: 'es_tool3',
+      description: 'es3',
+      parameters: {
+        type: 'object',
+        properties: {
+          file_path: { type: 'string' },
+          sandbox_permissions: { type: 'string', enum: ['workspace-write', 'danger-full-access'] },
+          justification: { type: 'string' },
+        },
+        required: ['file_path'],
+      },
+    }
+    await collect(a.stream(request({
+      system: 'You are helpful',
+      messages: [
+        createUserMessage({ content: [{ type: 'text', text: 'Current DSH file policy: danger-full-access. Already max.' }], source: { kind: 'user' } }),
+      ],
+      tools: [esTool as never],
+    })))
+    const body = server.requests[0]?.body as { tools?: Array<{ type?: string, name?: string, parameters?: any }> }
+    const sent = body.tools?.find(t => t.name === 'es_tool3')
+    expect(sent?.parameters.properties.sandbox_permissions).toBeUndefined()
+  })
+
+  it('regression: stale system workspace-write ignored when latest message is danger-full-access (stream)', async () => {
+    const server = await fakeChatProxy([{ kind: 'json', status: 400, body: { error: { message: 'captured' } } }])
+    const a = adapter({ options: () => connection({ baseURL: `${server.url}/v1` }) })
+    const esTool = {
+      name: 'es_stale',
+      description: 'es_stale',
+      parameters: {
+        type: 'object',
+        properties: {
+          file_path: { type: 'string' },
+          sandbox_permissions: { type: 'string', enum: ['workspace-write', 'danger-full-access'] },
+          justification: { type: 'string' },
+        },
+        required: ['file_path', 'sandbox_permissions', 'justification'],
+      },
+    }
+    await collect(a.stream(request({
+      system: 'Current DSH file policy: workspace-write. stale',
+      messages: [
+        createUserMessage({ content: [{ type: 'text', text: 'Current DSH file policy: read-only. old' }], source: { kind: 'user' } }),
+        createUserMessage({ content: [{ type: 'text', text: 'Current DSH file policy: danger-full-access. latest' }], source: { kind: 'user' } }),
+      ],
+      tools: [esTool as never],
+    })))
+    const body = server.requests[0]?.body as { tools?: Array<{ type?: string, name?: string, parameters?: any }> }
+    const sent = body.tools?.find(t => t.name === 'es_stale')
+    expect(sent?.parameters.properties.sandbox_permissions).toBeUndefined()
+    expect(sent?.parameters.properties.justification).toBeUndefined()
+    expect(sent?.parameters.required).toEqual(['file_path'])
+  })
+})
+
 describe('resolveAdapterOptions', () => {
   it('uses the saved displayed catalog, not the frozen account list', () => {
     const options = resolveAdapterOptions({
@@ -143,6 +400,12 @@ describe('GrokAdapter metadata', () => {
     const older = await a.resolveModel('grok', 'grok-4.5')
     expect(older.reasoning?.efforts.map(effort => effort.id)).toEqual(['high', 'medium', 'low'])
     expect(older.reasoning?.defaultEffort).toBe('high')
+  })
+
+  it('exposes neutral image pricing (alpha Host calls adapter method directly)', () => {
+    expect(Object.hasOwn(GrokAdapter.prototype, 'imageRequestPricing')).toBe(true)
+    const a = adapter({})
+    expect(a.imageRequestPricing('grok', 'grok-4.6')).toBeUndefined()
   })
 })
 

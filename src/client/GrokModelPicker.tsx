@@ -227,7 +227,7 @@ const outlineButtonStyle: CSSProperties = {
 /** Render the Grok model candidate picker in the frame overlay layer. */
 export function GrokModelPicker(props: GrokModelPickerProps): ReactNode {
   const { t } = props
-  const snapshot = props.useGrokModelPicker(value => value)
+  const snapshot = props.useGrokModelPicker((value: GrokModelPickerSnapshot) => value)
   useEffect(() => {
     if (!snapshot.open) return
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -259,7 +259,7 @@ export function GrokModelPicker(props: GrokModelPickerProps): ReactNode {
             ? <p style={errorStyle} role="alert">{snapshot.error}</p>
             : (
               <ul style={listStyle}>
-                {snapshot.candidates.map(model => (
+                {snapshot.candidates.map((model: GrokCatalogModel) => (
                   <li key={model.id}>
                     <label style={candidateStyle}>
                       <input

@@ -1,11 +1,13 @@
 /** Browser half: Grok setup inside Plugin configuration. */
 
-import type { ClientContext, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import {
   GROK_AUTH_COMPLETE_ENDPOINT,
@@ -30,7 +32,6 @@ import {
   decodeGrokUsageReply,
 } from '../client-contract.ts'
 import type { GrokSettingsView } from '../client-contract.ts'
-import { ensureProviderSection } from './provider-section.ts'
 import { GrokPluginCard } from './GrokPluginCard.tsx'
 import type { GrokPluginCardFace } from './GrokPluginCard.tsx'
 import { GrokModelPicker, GrokModelPickerController } from './GrokModelPicker.tsx'
@@ -38,6 +39,12 @@ import type { GrokModelPickerFace } from './GrokModelPicker.tsx'
 import { en, zh } from './locales.ts'
 import type { GrokSettingsKey } from './locales.ts'
 
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface SlotMap {
+    'settings.provider.item': { kind: 'keyed'; scope: 'root' }
+  }
+}
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** Grok Plugin configuration copy. */
@@ -51,6 +58,7 @@ export const name = 'dsh-llm-grok-client'
 export const inject = ['slots', 'locale', 'connection']
 
 /** Register localized Grok configuration under Plugin configuration. */
+
 export function apply(ctx: ClientContext): void {
   const localeNamespace = 'settings.grok'
   ctx.effect(
@@ -64,9 +72,10 @@ export function apply(ctx: ClientContext): void {
     status: 'loading', value: undefined, base: undefined, user: undefined, revision: undefined, writable: true, mode: 'host',
   }
   const listeners = new Set<() => void>()
-  const scope = {
+  const scope: SettingsScope<GrokSettingsView> = {
     getSnapshot: () => currentSnapshot,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener) },
+    mutate: async () => { throw new Error('Use Grok management settings/save') },
     set: async () => { throw new Error('Use Grok management settings/save') },
     unset: async () => { throw new Error('Use Grok management settings/save') },
   }
@@ -192,8 +201,6 @@ export function apply(ctx: ClientContext): void {
       adoptPickerModels: picker.adopt,
     }),
   }, GrokModelPicker))
-
-  ensureProviderSection(ctx)
   ctx.slots.inject('settings.provider.item', () => ctx.slots.register({
     name: 'settings.provider.item',
     key: GROK_SETTINGS_NAMESPACE,
@@ -205,7 +212,7 @@ export function apply(ctx: ClientContext): void {
       completeAuth,
       cancelAuth,
       readAuthStatus,
-       readAuthAttemptStatus,
+      readAuthAttemptStatus,
       logout,
       fetchUsage,
       fetchModels,
