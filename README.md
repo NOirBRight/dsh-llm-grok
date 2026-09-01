@@ -6,37 +6,26 @@ xAI Grok integration for DeepSeek Harness. This plugin is a separate provider ro
 
 The package root exposes the Cordis plugin contract. The same artifact exports `./client`, which contributes the Grok card under Settings → LLM Providers.
 
+## LLM Providers UI ownership
+
+The **LLM Providers** Settings page (`settings.section` `id: providers` with child `settings.provider.item`) and the shared `llm-providers` order store are owned solely by `dsh-llm-providers-ui`.
+
+- This plugin contributes only its keyed card (`key: llm-grok`) and its Host `llm` route; it does not install the page or the shared `llm-providers` namespace. Load order with the owner does not matter.
+- Without the owner (Headless or Web without `dsh-llm-providers-ui`): the Host model route `grok` still works; in Web the Providers page and this card are omitted. `pack:check` verifies the owner artifact identity, `./sortable` export, and packed client closure.
+- The nav globe glyph is a temporary `alpha.1` DOM adapter owned only by `dsh-llm-providers-ui` (`src/client/nav-icon.ts`); this plugin does not ship that adapter.
+
+Install `dsh-llm-providers-ui` explicitly in the profile alongside provider plugins (see that package's `cordis.patch.yml`).
+
 ## Installation
 
-DeepSeek Harness 0.1.0-rc.6 or later is required. Install directly from GitHub:
+DeepSeek Harness 0.1.2-alpha.1 is required. Install directly from GitHub:
 
 ~~~sh
-dsh plugin --profile web add github:NOirBRight/dsh-llm-grok#v0.3.5
+dsh plugin --profile web add github:NOirBRight/dsh-llm-grok#v0.3.7
 dsh web
 ~~~
 
-The repository tracks release-ready lib artifacts, so GitHub installation needs no build-script allowlist. A source checkout can use a link installation after running `pnpm run build`.
-
-## Remote management
-
-By default the plugin's settings RPC is loopback-only. When you open DSH from a non-loopback host (e.g. https://dsh.noirbright.top or http://192.168.50.75:3080), the card shows “A remote browser cannot edit plugin settings”.
-
-To allow editing from a trusted host:
-
-1. Add to your profile patch (`~/.dsh/profiles/web/cordis.patch.yml` for production, `~/.dsh-lab/profiles/web/cordis.patch.yml` for lab):
-   ```yaml
-   - id: llm-grok
-     config:
-       remoteManagement: true
-   ```
-2. Restart DSH with the host allowlisted:
-   ```sh
-   dsh web --trusted-host 192.168.50.75 --trusted-host dsh.noirbright.top
-   ```
-   The current production launch already uses `--trusted-host 192.168.50.75 --trusted-host dsh.noirbright.top`; add any additional host you use.
-3. Refresh the browser. Settings saved on the host keep working for remote sessions.
-
-Without `remoteManagement: true`, use `ssh -L 3080:127.0.0.1:3080 user@host` and open `http://127.0.0.1:3080`.
+The repository tracks release-ready lib artifacts, so GitHub installation needs no build-script allowlist.
 
 ## Web configuration
 
@@ -48,13 +37,13 @@ Open Settings → LLM Providers → Grok. **Sign in with xAI** starts a Host-own
 
 The Plugin card keeps two catalogs: the signed-in account list from `GET /v1/models-v2`, and the displayed subset stored as `settings.models`. The conversation picker uses only the displayed subset. Each row can set Default thinking and a Context window used as the DSH compaction budget. Official `grok-4.6` / `grok-4.5` default to 500,000 tokens. The card catalog starts collapsed; it can be reordered, edited, deleted, or replaced from the account list. When the subset has never been saved, the frozen default is `grok-4.6` and `grok-4.5`. Chat goes to `POST https://cli-chat-proxy.grok.com/v1/responses`. Every request includes DSH function tools plus always-on server-side `{ type: "web_search" }` and `{ type: "x_search" }`. Search is not a `ctx.web` provider. Server search returns encrypted `tco_*` reasoning items with empty summaries; those stay in replay and no longer each paint an empty Think row. If Grok also echoes the same search as a client `custom_tool_call` (`xs_call-*` / `ws_call-*`, often named `x_keyword_search`), the plugin drops it so DSH does not report `unknown tool`. Reasoning is sent as official Responses `reasoning: { effort }`, with values `low` / `medium` / `high` (default) / `xhigh` (4.6 only). When signed in, the card also shows subscription usage from a Host billing read (`GET /v1/billing?format=credits`). Logged-out cards do not request billing; an unrecognized surface is shown as unsupported, not as an error.
 
-With `dsh-model-switch` v0.2+, Grok also registers an optional Image-only adapter for the stable `generate_image` router. It reuses the same authenticated implementation and registers no Search or Vision adapter. Standalone behavior is unchanged.
+With `dsh-model-switch` v0.4.x, Grok also registers an optional Image-only adapter for the stable `generate_image` router. It reuses the same authenticated implementation and registers no Search or Vision adapter. Standalone behavior is unchanged.
 
 Optional **`grok_image_gen`** (default off) registers a model-facing tool that generates an image with Grok Imagine. It reuses the same Host OAuth session and posts `https://api.x.ai/v1/images/generations` — the same rail Grok Build's local `image_gen` uses, not a console API key and not the chat proxy. The name is distinct from Codex `codex_generate_image`. Generated bytes are saved to the workspace and committed through the attachment store.
 
 Chat without a session fails `MISSING_CREDENTIAL`. A stored session whose refresh fails is cleared and fails `AUTH`. `ensureFreshSession` already runs before each chat request; a later 401 is not retried at the Responses layer.
 
-Every proxy request sends this plugin's `X-Dsh-Plugin` identity plus the CLI version headers the proxy requires (`x-grok-client-version` / `x-grok-client-identifier`). A missing version is answered 426. Those headers are a compatibility constraint, not an attempt to impersonate the official CLI product.
+Every proxy request sends this plugin's `X-Dsh-Plugin` identity plus the CLI version headers the proxy requires (`x-grok-client-version` / `x-grok-client-identifier`). A missing version is answered 426. Those headers are required by the proxy and do not attempt to impersonate the official CLI product.
 
 The Models page, if it lists Grok at all, is hint-only. Because this package does not declare `apiKeyEnv`, that row must not show a missing-API-key badge.
 
@@ -79,3 +68,52 @@ The bundle retries eligible model-request failures up to eight times by default.
 There is no `apiKeyEnv` and no user-editable base URL. `models` is the displayed conversation catalog, a subset of the account list.
 
 The composer picker groups sibling catalog rows that share a base id after peeling a Fast suffix (`-fast`) and a generic context suffix (`-<n>k` / `-<n>m`). Product names such as `kimi-k3-max` are not treated as a context tier. This package's catalog comes from discovery; add extra suffix rows yourself if you want DSH to compact against a smaller budget. This plugin does not peel those suffixes on the wire.
+
+
+## Release installation (Latest)
+
+xAI Grok subscription login, Responses chat, usage, search, and Imagine. The release artifact targets DeepSeek Harness 0.1.2-alpha.1 and contains built Host/Client files only; it has no sibling-repository source, workstation path, link:, or workspace: dependency.
+
+The dsh-llm-providers-ui package owns the LLM Providers page, navigation, and shared order store. This package owns only its provider card, models, credentials, and Host route. Install the Owner first for Web; headless Host routing works without the Owner.
+
+Owner (Latest):
+
+~~~sh
+dsh plugin --profile web add --force \
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui.tgz
+~~~
+
+Provider (Latest):
+
+~~~sh
+dsh plugin --profile web add --force \
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok.tgz
+~~~
+
+Fixed versions (reproducible):
+
+~~~sh
+dsh plugin --profile web add --force \
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.2/dsh-llm-providers-ui.tgz
+dsh plugin --profile web add --force \
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.7/dsh-llm-grok.tgz
+~~~
+
+Update, uninstall, and verify:
+
+~~~sh
+# Update to the latest Release
+dsh plugin --profile web add --force \
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok.tgz
+# Verify the loaded version
+dsh plugin --profile web list
+dsh plugin --profile web doctor
+# Uninstall only this plugin
+dsh plugin --profile web remove dsh-llm-grok
+~~~
+
+Configuration: use the plugin section in Settings for Web UI plugins, or the profile dsh.profile.bundles entry for Host-only plugins. Start with this README's minimal YAML/JSON example and provide credentials/backend addresses explicitly.
+
+Rollback: rerun the fixed v0.3.7 command, verify the profile list, then restart the Web service once. Inspect journalctl --user -u dsh-web.service and dsh plugin --profile web doctor; never put a source checkout in the production profile.
+
+Release and integrity: [v0.3.7](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.7) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.7/SHA256SUMS).

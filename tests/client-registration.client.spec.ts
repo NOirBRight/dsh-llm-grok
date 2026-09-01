@@ -27,7 +27,11 @@ class FakeSlots extends Service {
   register(options: Record<string, unknown> & { inject?: () => unknown }, _component: unknown): () => void {
     const entry = { options, inject: options.inject }
     this.registered.push(entry)
-    return () => { this.registered.splice(this.registered.indexOf(entry), 1) }
+    return () => {
+      const index = this.registered.indexOf(entry)
+      if (index === -1) return
+      this.registered.splice(index, 1)
+    }
   }
 
   entries(name: string): readonly SlotEntry[] {
@@ -110,7 +114,7 @@ describe('Grok client plugin registration', () => {
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
 
-    expect(slots.entries('settings.section').map(e => e.options.id)).toEqual(['providers'])
+    expect(slots.entries('settings.section')).toHaveLength(0) // owned by dsh-llm-providers-ui
     const entries = slots.entries('settings.provider.item')
     expect(entries).toHaveLength(1)
     expect(entries[0]?.options).toMatchObject({ key: 'llm-grok', locale: 'settings.grok' })

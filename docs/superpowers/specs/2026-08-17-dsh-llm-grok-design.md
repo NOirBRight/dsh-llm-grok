@@ -76,7 +76,7 @@ DSH Models 页编辑器只手写两家：`llm-deepseek`、`llm-pi-ai`。其它 n
 
 ### 流程
 
-1. 卡上「用 xAI 登录」→ loopback RPC `auth/start`。
+1. 卡上「用 xAI 登录」→ Host Connection RPC `auth/start`。
 2. Host 在 `127.0.0.1` 随机端口听 callback，生成 PKCE S256，打开系统浏览器到 `auth.x.ai`（Grok CLI 同款公开 OAuth client：issuer `https://auth.x.ai`，client_id 钉死当前 CLI 公开值）。
 3. callback 校验 `state`，换 access / refresh，写入会话，关掉 listener。
 4. 用户取消、浏览器不回跳、或超时：不写半截会话，RPC 回可重试失败。
@@ -133,7 +133,7 @@ Proxy 身份头：本插件 `X-Dsh-Plugin`，外加 proxy 要求的 `x-grok-clie
 
 ## 9. RPC
 
-Channel：`/grok`，`authority: 'loopback'`。
+Channel：`/grok`；alpha.1 Host Connection 服务负责浏览器认证和可信主机策略。
 
 | endpoint | 作用 |
 |---|---|

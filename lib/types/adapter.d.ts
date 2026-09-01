@@ -53,17 +53,16 @@ export declare class GrokAdapter extends LlmAdapter {
     listModels(provider: string): Promise<readonly LlmModelInfo[]>;
     resolveModel(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;
     stream(options: GenerateOptions): AsyncIterable<StreamChunk>;
-    /** Own the method so rc.2 Host can call it even when this class extends an older LlmAdapter. */
+    /** Prepare one request with Grok's stream transforms applied. */
     prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<{
         model: LlmResolvedModelInfo;
         stream: (options: GenerateOptions) => AsyncGenerator<StreamChunk, void, unknown>;
     }>;
     /**
-     * Declare neutral request-image pricing when a newer Host calls an adapter built against an older peer instance.
-     * The method omits `override` so the same source compiles against pre-alpha peer types.
+     * Declare no provider-specific image pricing so the Host uses neutral estimation.
      * @param _provider - provider route.
      * @param _model - model id.
-     * @returns `undefined` so the Host uses heuristic image pricing.
+     * @returns `undefined` because Grok has no image token pricing contract.
      */
     imageRequestPricing(_provider: string, _model: string): undefined;
 }

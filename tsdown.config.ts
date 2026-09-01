@@ -1,6 +1,7 @@
 import type { UserConfig } from 'tsdown'
 
 const PACKAGE_ID = 'dsh-llm-grok'
+const ownerSortableOverride = process.env.DSH_LLM_PROVIDERS_UI_SORTABLE
 
 const host: UserConfig = {
   name: PACKAGE_ID,
@@ -41,6 +42,7 @@ const client: UserConfig = {
   target: 'es2024',
   dts: false,
   clean: false,
+  ...(ownerSortableOverride === undefined ? {} : { alias: { 'dsh-llm-providers-ui/sortable': ownerSortableOverride } }),
   deps: {
     neverBundle: [
       'react',
@@ -52,7 +54,7 @@ const client: UserConfig = {
       '@deepseek-ai/dsh-client-ui-settings-plugins/client',
       '@deepseek-ai/dsh-client-ui-slots',
     ],
-    alwaysBundle: (id: string) => id === 'dsh-llm-providers-ui' || id.startsWith('dsh-llm-providers-ui/'),
+    alwaysBundle: id => id === 'dsh-llm-providers-ui/sortable' || id.startsWith('dsh-llm-providers-ui/sortable/'),
   },
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),

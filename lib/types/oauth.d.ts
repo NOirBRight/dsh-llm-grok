@@ -92,7 +92,7 @@ export declare function startPkceLogin(runtime: GrokOAuthRuntime, signal?: Abort
 /**
  * Deliver a code copied from the Grok Build "paste this code" page into the
  * in-flight PKCE exchange. The Host still owns the verifier; the browser only
- * sends the short-lived authorization code over loopback RPC.
+ * sends the short-lived authorization code over the authenticated Host Connection RPC.
  * @param runtime - the same runtime `startPkceLogin` is waiting on.
  * @param code - trimmed authorization code from the IdP page.
  */

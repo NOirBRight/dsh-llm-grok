@@ -1,5 +1,5 @@
 /** Browser half: Grok setup inside Plugin configuration. */
-import type { ClientContext } from './shim.js';
+import type { Context as ClientContext } from '@deepseek-ai/cordis';
 import type { GrokSettingsKey } from './locales.ts';
 declare module '@deepseek-ai/dsh-client-ui-slots' {
     interface SlotMap {

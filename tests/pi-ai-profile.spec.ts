@@ -4,7 +4,7 @@ import { GROK_CATALOG } from '../src/client-contract.ts'
 import { createGrokPiAiProfile } from '../src/pi-ai-profile.ts'
 
 describe('createGrokPiAiProfile', () => {
-  it('declares the rc.2 request-image budgets', () => {
+  it('declares the request-image budgets', () => {
     const profile = createGrokPiAiProfile({
       baseURL: 'https://cli-chat-proxy.grok.com/v1',
       models: GROK_CATALOG,

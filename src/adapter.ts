@@ -255,22 +255,13 @@ export class GrokAdapter extends LlmAdapter {
     }
   }
 
-  /** Own the method so rc.2 Host can call it even when this class extends an older LlmAdapter. */
+  /** Prepare one request with Grok's stream transforms applied. */
   override async prepareCall(provider: string, model: string, signal?: AbortSignal) {
-    const delegate = this.current()
-    const inner = typeof (delegate as { prepareCall?: unknown }).prepareCall === 'function'
-      ? await (delegate as unknown as { prepareCall: (provider: string, model: string, signal?: AbortSignal) => Promise<{
-        model: LlmResolvedModelInfo
-        stream: (options: GenerateOptions) => AsyncIterable<StreamChunk>
-      }> }).prepareCall(provider, model, signal)
-      : {
-        model: await this.resolveModel(provider, model, signal),
-        stream: (options: GenerateOptions) => delegate.stream(options),
-      }
+    const inner = await this.current().prepareCall(provider, model, signal)
     return {
       model: inner.model,
       stream: async function* (options: GenerateOptions) {
-        for await (const chunk of inner.stream(narrowGrokEscalationSchemas(options)) as AsyncIterable<StreamChunk>) {
+        for await (const chunk of inner.stream(narrowGrokEscalationSchemas(options))) {
           yield classifyGrokTransientError(chunk)
         }
       },
@@ -278,13 +269,12 @@ export class GrokAdapter extends LlmAdapter {
   }
 
   /**
-   * Declare neutral request-image pricing when a newer Host calls an adapter built against an older peer instance.
-   * The method omits `override` so the same source compiles against pre-alpha peer types.
+   * Declare no provider-specific image pricing so the Host uses neutral estimation.
    * @param _provider - provider route.
    * @param _model - model id.
-   * @returns `undefined` so the Host uses heuristic image pricing.
+   * @returns `undefined` because Grok has no image token pricing contract.
    */
-  imageRequestPricing(_provider: string, _model: string): undefined {
+  override imageRequestPricing(_provider: string, _model: string): undefined {
     return undefined
   }
 }

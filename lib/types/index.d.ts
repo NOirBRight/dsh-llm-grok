@@ -1,6 +1,6 @@
 /**
  * Register the `grok` provider directory entry, the Responses chat adapter,
- * the `llm-grok` settings section, and the loopback `/grok` auth and usage RPC.
+ * the `llm-grok` settings section, and the Host Connection `/grok` auth and usage RPC.
  * The route is distinct from the built-in `xai` console-key provider.
  * @module dsh-llm-grok
  */
@@ -51,11 +51,9 @@ export interface Config {
     retryPolicy?: RetryPolicyConfig;
     /** Set false when Model Switch owns stable tool names, preventing legacy duplicates. */
     registerLegacyTools?: boolean;
-    /** Permit explicitly trusted-host management RPCs; default false. */
-    remoteManagement?: boolean;
 }
 export declare const Config: z<Config>;
-/** Optional Host overrides for the loopback handler (local billing in tests). */
+/** Optional Host overrides for the authenticated Host Connection handler (local billing in tests). */
 export interface GrokRpcHandlerOptions {
     /** Override {@link GROK_BILLING_URL} for a local fake billing server. */
     billingURL?: string;
@@ -63,7 +61,8 @@ export interface GrokRpcHandlerOptions {
     modelsURL?: string;
 }
 /**
- * Loopback `/grok` handler. Status, start, and usage replies never include tokens.
+ * Host Connection `/grok` handler. Status, start, and usage replies never include tokens;
+ * the alpha.1 Host Connection service applies browser authentication and trusted-host policy.
  * @param runtime - Host OAuth runtime (production or a test fake).
  * @param options - optional billing URL override for tests.
  */

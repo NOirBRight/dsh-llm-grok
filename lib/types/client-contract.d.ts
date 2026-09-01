@@ -181,7 +181,7 @@ export type GrokUsageReply = {
 export declare function decodeGrokSettings(value: unknown): GrokSettingsView | undefined;
 /**
  * Narrow an empty auth RPC payload. Token-shaped fields are rejected so a
- * confused caller cannot push secrets across the loopback channel.
+ * confused caller cannot push secrets across the authenticated Host Connection.
  * @param value - untrusted RPC request payload.
  * @returns an empty object, or undefined when the payload is invalid.
  */
