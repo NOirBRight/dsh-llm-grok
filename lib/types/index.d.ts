@@ -62,7 +62,7 @@ export interface GrokRpcHandlerOptions {
 }
 /**
  * Host Connection `/grok` handler. Status, start, and usage replies never include tokens;
- * the alpha.1 Host Connection service applies browser authentication and trusted-host policy.
+ * the Alpha.4 Host Connection service applies browser authentication and trusted-host policy.
  * @param runtime - Host OAuth runtime (production or a test fake).
  * @param options - optional billing URL override for tests.
  */

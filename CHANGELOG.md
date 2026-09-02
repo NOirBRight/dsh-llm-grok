@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.8
+
+- Declare Store `dsh.compatibility.dshReleases` for DSH `0.1.2-alpha.4`; Alpha.5 is unverified and Alpha.1–Alpha.3 remain incompatible.
+- Target the Alpha.4 Host/Client peer set and keep published artifacts under the Store runtime-source byte bound
+
 ## 0.3.6
 
 - Settings → LLM Providers: drag cards to reorder; chat picker follows `llm-providers.order` via dsh-llm-providers-ui.

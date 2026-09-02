@@ -11,7 +11,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type { ConnectionRpcHandler } from '@deepseek-ai/dsh-client-connection'
 import { resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
 import type { RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
-import { deepEqualJson, installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
 import type { SettingsPathOp } from '@deepseek-ai/dsh-settings'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import type {} from '@deepseek-ai/dsh-attachment'
@@ -175,7 +175,7 @@ export {
 export const name = 'llm-grok'
 export const inject = ['llm']
 
-const NS = settingsNamespace(GROK_SETTINGS_NAMESPACE)
+const NS = GROK_SETTINGS_NAMESPACE
 
 /** One resolution's complete request facts. */
 export type ResolvedGrokOptions = GrokConnectionOptions
@@ -300,7 +300,7 @@ function usageFailure(error: unknown, secrets: readonly string[]) {
 
 /**
  * Host Connection `/grok` handler. Status, start, and usage replies never include tokens;
- * the alpha.1 Host Connection service applies browser authentication and trusted-host policy.
+ * the Alpha.4 Host Connection service applies browser authentication and trusted-host policy.
  * @param runtime - Host OAuth runtime (production or a test fake).
  * @param options - optional billing URL override for tests.
  */
@@ -476,11 +476,13 @@ export function apply(ctx: Context, config: Config): void {
     ), 'llm-grok: register Host Connection RPC')
   })
   ctx.effect(() => () => connectionFiber.dispose(), 'llm-grok: dispose Host Connection injection')
-  installSettingsSection(ctx, NS, Config, config, {
-    setSource: (source) => {
-      current = source as () => Config
-    },
-    onChange: scheduleCapabilities,
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.installSection(ctx, NS, Config, config, {
+      setSource: (source) => {
+        current = source as () => Config
+      },
+      onChange: scheduleCapabilities,
+    })
   })
 
   let stopped = false
