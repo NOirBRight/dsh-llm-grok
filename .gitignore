@@ -5,6 +5,7 @@ node_modules/
 *.tgz
 !fixtures/alpha1/tarballs/
 !fixtures/alpha1/tarballs/*.tgz
+!fixtures/alpha4/tarballs/*.tgz
 *.tsbuildinfo
 coverage/
 *.log
