@@ -11,7 +11,7 @@ import type { RetryPolicyConfig } from '@deepseek-ai/dsh-llm';
 import type { GrokConnectionOptions } from './adapter.ts';
 import type { GrokCatalogModel } from './client-contract.ts';
 import type { GrokOAuthRuntime } from './oauth.ts';
-export { GrokAdapter, resolveGrokAccessToken } from './adapter.ts';
+export { GrokAdapter, refreshGrokAccessToken, resolveGrokAccessToken } from './adapter.ts';
 export type { GrokAdapterOptions, GrokConnectionOptions } from './adapter.ts';
 export { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS, GROK_PROVIDER, GROK_SETTINGS_NAMESPACE, GROK_RPC_CHANNEL, GROK_AUTH_START_ENDPOINT, GROK_AUTH_STATUS_ENDPOINT, GROK_AUTH_ATTEMPT_STATUS_ENDPOINT, GROK_AUTH_LOGOUT_ENDPOINT, GROK_AUTH_COMPLETE_ENDPOINT, GROK_AUTH_CANCEL_ENDPOINT, GROK_MODELS_ENDPOINT, GROK_SETTINGS_READ_ENDPOINT, GROK_SAVE_ENDPOINT, GROK_USAGE_ENDPOINT, decodeGrokSettings, decodeGrokSaveRequest, decodeGrokSaveResult, decodeGrokSettingsReadResult, decodeGrokAuthStatus, decodeGrokAuthAttemptStatus, decodeGrokAuthStartReply, decodeGrokAuthLogoutReply, decodeGrokAuthCompleteRequest, decodeGrokEmptyRequest, decodeGrokUsageView, decodeGrokUsageReply, decodeGrokModelsReply, } from './client-contract.ts';
 export { GROK_CHAT_BASE_URL, GROK_DEFAULT_CONTEXT_WINDOW, GROK_DEFAULT_MODEL_MAX_TOKENS, GROK_PLUGIN_IDENTITY_HEADER, createGrokPiAiProfile, } from './pi-ai-profile.ts';

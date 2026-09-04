@@ -23,7 +23,7 @@ DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由�
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.5/dsh-llm-providers-ui-0.1.5.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.9/dsh-llm-grok-0.3.9.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.10/dsh-llm-grok-0.3.10.tgz
 dsh web
 ~~~
 
@@ -53,7 +53,7 @@ Plugin 卡上有两份目录：登录后从 `GET /v1/models-v2` 读到的账户�
 
 可选的 **`grok_image_gen`**（默认关闭）会注册一个模型可调用的生图工具，走 Grok Imagine。它复用同一套 Host OAuth 会话，请求 `https://api.x.ai/v1/images/generations` —— 和 Grok Build 本地 `image_gen` 同一条轨，不是 console API key，也不是聊天 proxy。工具名与 Codex 的 `codex_generate_image` 区分。生成的图会写到工作区并通过 attachment store 落盘。
 
-未登录就聊天会失败为 `MISSING_CREDENTIAL`。已有会话但 refresh 失败会清会话并失败为 `AUTH`。每次聊天请求前已经跑过 `ensureFreshSession`；之后的 401 不再在 Responses 层重试。
+未登录就聊天会失败为 `MISSING_CREDENTIAL`。已有会话但 refresh 失败会清会话并失败为 `AUTH`。每次聊天请求前已经跑过 `ensureFreshSession`。之后若在没有任何模型内容前收到 `AUTH`（HTTP 401），会强制 refresh 再打一次请求；仍失败的 `AUTH` 进入 bundle 默认的八次 normal 重试。
 
 每条 proxy 请求都会带上本插件的 `X-Dsh-Plugin` 身份，以及 proxy 要求的 CLI 版本头（`x-grok-client-version` / `x-grok-client-identifier`）。缺版本会 426。这些头是 proxy 要求的字段，不是冒充官方 CLI。
 
@@ -75,7 +75,7 @@ Models 页面如果列出 Grok，也只是 hint。因为本包不声明 `apiKeyE
         jitterRatio: 0.1
 ~~~
 
-bundle 默认对符合条件的模型请求失败最多重试八次。xAI 容量不足/高需求失败归类为 `RATE_LIMIT`；临时可用性下降归类为 `SERVER`。
+bundle 默认对符合条件的模型请求失败最多重试八次，包括 `AUTH`。xAI 容量不足/高需求失败归类为 `RATE_LIMIT`；临时可用性下降归类为 `SERVER`。
 
 没有 `apiKeyEnv`，也没有用户可改的 base URL。`models` 是对话里显示的目录，是账户列表的一个子集。
 
@@ -98,7 +98,7 @@ dsh plugin --profile web add --force \
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.9.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.10.tgz
 ~~~
 
 固定版本（可复现）：
@@ -107,7 +107,7 @@ dsh plugin --profile web add --force \
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.5/dsh-llm-providers-ui-0.1.5.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.9/dsh-llm-grok-0.3.9.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.10/dsh-llm-grok-0.3.10.tgz
 ~~~
 
 更新、卸载与验证：
@@ -115,7 +115,7 @@ dsh plugin --profile web add --force \
 ~~~sh
 # 更新到最新 Release
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.9.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.10.tgz
 # 验证加载与版本
 dsh plugin --profile web list
 dsh plugin --profile web doctor
@@ -127,4 +127,4 @@ dsh plugin --profile web remove dsh-llm-grok
 
 回滚：重新执行固定版本 v0.3.7 命令，确认插件列表后只重启一次 Web 服务。失败时查看 journalctl --user -u dsh-web.service 与 dsh plugin --profile web doctor，不要把源码 checkout 写入 production profile。
 
-Release 与完整性：[v0.3.9](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.9) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.9/SHA256SUMS)。
+Release 与完整性：[v0.3.10](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.10) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.10/SHA256SUMS)。
