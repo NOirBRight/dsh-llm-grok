@@ -127,10 +127,14 @@ function checkAlpha4Manifest(manifest, label) {
   for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies']) {
     for (const [name, range] of Object.entries(manifest[section] ?? {})) {
       if (typeof range !== 'string') fail(label + ' has non-string ' + section + '.' + name)
-      // Exact pins of either verified runtime are allowed: Alpha.4 pool purity is still
-      // enforced by edge satisfaction below, so an exact-rc.1 runtime edge cannot pull
-      // an rc.1 DSH archive into the offline graph (released fixtures pin devDeps per runtime).
-      if (name.startsWith('@deepseek-ai/dsh-') && range !== ALPHA4 && range !== RC1 && !(satisfies(ALPHA4, range) && satisfies(RC1, range)) && !(capturedOfficialWorkspace && range === 'workspace:^')) fail(label + ' has a DSH range that excludes Alpha.4 or rc.1: ' + name + ' ' + range)
+      // Fixture devDependencies are never installed into the offline closure (only
+      // dependencies/optionalDependencies/peerDependencies feed edge resolution, plus the
+      // root devDeps for the owner/type packages), so an exact pin of either verified
+      // runtime is accepted there. Runtime sections stay strict, and Alpha.4 pool purity
+      // is still enforced by edge satisfaction below, so an exact-rc.1 runtime edge cannot
+      // pull an rc.1 DSH archive into the graph (released fixtures pin devDeps per runtime).
+      const devRuntimePin = section === 'devDependencies' && (range === ALPHA4 || range === RC1)
+      if (name.startsWith('@deepseek-ai/dsh-') && range !== ALPHA4 && !devRuntimePin && !(satisfies(ALPHA4, range) && satisfies(RC1, range)) && !(capturedOfficialWorkspace && range === 'workspace:^')) fail(label + ' has a DSH range that excludes Alpha.4 or rc.1: ' + name + ' ' + range)
       // Cordis plugins published from the upstream monorepo retain their
       // workspace peer range; the harness packages and this plugin must pin
       // the runtime Cordis version itself.

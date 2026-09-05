@@ -27,7 +27,7 @@ Install `dsh-llm-providers-ui` explicitly in the profile alongside provider plug
 
 ## Installation
 
-DeepSeek Harness 0.1.2-alpha.4 is required exactly. Install directly from GitHub:
+Verified on DeepSeek Harness `0.1.2-alpha.4` and `0.1.2-rc.1` (Cordis `4.0.2`). Install directly from GitHub:
 
 ~~~sh
 dsh plugin --profile web add --force \

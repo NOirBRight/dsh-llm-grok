@@ -17,7 +17,7 @@ DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由�
 
 ## 安装
 
-直接从 GitHub 安装：
+已在 DeepSeek Harness `0.1.2-alpha.4` 与 `0.1.2-rc.1`（Cordis `4.0.2`）验证。直接从 GitHub 安装：
 
 ~~~sh
 dsh plugin --profile web add --force \
