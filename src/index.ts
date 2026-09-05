@@ -10,14 +10,15 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { ConnectionRpcHandler } from '@deepseek-ai/dsh-client-connection'
 import { resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
-import type { RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
+import type { ResolvedRetryPolicy, RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
 import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
 import type { SettingsPathOp } from '@deepseek-ai/dsh-settings'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
+import { allowDshRuntime } from './compatibility.ts'
 import type {} from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-tools'
-import { GrokAdapter, resolveGrokAccessToken } from './adapter.ts'
+import { GrokAdapter, refreshGrokAccessToken, resolveGrokAccessToken } from './adapter.ts'
 import { grokImageGenTool } from './image-gen.ts'
 import { installGrokModelSwitchAdapters } from './model-switch-adapter.ts'
 import type { GrokConnectionOptions } from './adapter.ts'
@@ -53,7 +54,13 @@ import { readGrokUsage } from './usage.ts'
 /** Preserve Grok's historical normal retry count across host-line default changes. */
 const DEFAULT_MAX_RETRIES = 2
 
-export { GrokAdapter, resolveGrokAccessToken } from './adapter.ts'
+function withAuthRetries(policy: ResolvedRetryPolicy): ResolvedRetryPolicy {
+  if (policy.mode !== 'normal') return policy
+  if (policy.retryableCodes.includes('AUTH')) return policy
+  return { ...policy, retryableCodes: Object.freeze([...policy.retryableCodes, 'AUTH']) }
+}
+
+export { GrokAdapter, refreshGrokAccessToken, resolveGrokAccessToken } from './adapter.ts'
 export type { GrokAdapterOptions, GrokConnectionOptions } from './adapter.ts'
 export {
   GROK_CATALOG,
@@ -93,6 +100,15 @@ export {
   createGrokPiAiProfile,
 } from './pi-ai-profile.ts'
 export { GROK_SERVER_SEARCH_TOOLS, grokResponsesApi, injectGrokServerSearchTools } from './responses-tools.ts'
+export {
+  GROK_SEARCH_LABEL,
+  GROK_SEARCH_PROVIDER,
+  GrokSearchProvider,
+  grokSearchModels,
+  isSearchableGrokModel,
+  mapGrokSearchResponse,
+} from './search.ts'
+export type { GrokSearchProviderOptions } from './search.ts'
 export {
   isGrokServerSearchToolCallId,
   stripGrokServerSearchToolCalls,
@@ -222,10 +238,10 @@ export function resolveAdapterOptions(config: Config): ResolvedGrokOptions {
     baseURL: GROK_CHAT_BASE_URL,
     models: resolveModels(config.models),
     streamIdleTimeoutMs,
-    retryPolicy: resolveRetryPolicy(
+    retryPolicy: withAuthRetries(resolveRetryPolicy(
       config.retryPolicy ?? { mode: 'normal', maxRetries: DEFAULT_MAX_RETRIES },
       'llm-grok: retryPolicy',
-    ),
+    )),
   }
 }
 
@@ -420,6 +436,8 @@ async function saveDisplayedCatalog(ctx: Context, payload: unknown) {
 }
 
 export function apply(ctx: Context, config: Config): void {
+  if (!allowDshRuntime(ctx.logger, 'dsh-llm-grok', ['@deepseek-ai/dsh-llm'])) return
+
   let current: () => Config = () => config
   let lastRaw: Config | undefined
   let lastGood: ResolvedGrokOptions | undefined
@@ -449,6 +467,7 @@ export function apply(ctx: Context, config: Config): void {
   const adapter = new GrokAdapter({
     options,
     resolveApiKey: () => resolveGrokAccessToken(runtime),
+    refreshApiKey: () => refreshGrokAccessToken(runtime),
     resolveAttachments: () => ctx.get('attachments'),
   })
   ctx.llm.registerConfigurableProviders([

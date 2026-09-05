@@ -1,4 +1,30 @@
 # Changelog
+## [0.3.11] - 2026-09-06
+
+### Added
+
+- Provider-owned independent Model Switch search over the existing subscription Responses endpoint with required server-side search tools. It reuses the provider token resolver and identity headers; only native URL citations and search-call results become sources.
+- Explicit failures for missing credentials, unsupported models, and responses without search evidence; upstream error bodies are not exposed.
+
+### Notes
+
+- Verified with both `grok-4.6` and `grok-4.5` (`pnpm test` 143 passed, `pnpm run build`, lab Web selection on 3082 returned real sources with each model in sequence).
+- The coordinated Model Switch search UI requires `dsh-model-switch` 0.4.7; the 0.4.6 dev type package remains sufficient for this adapter (peer range unchanged).
+
+## [0.3.10] - 2026-09-04
+
+### Changed
+
+- Retry a content-less chat `AUTH` (HTTP 401) after forcing an OAuth refresh; include `AUTH` in the normal retryable set so remaining 401s follow the eight-retry policy.
+
+## [0.3.9] - 2026-09-03
+
+### Changed
+
+- DSH compatibility declarations cover the verified Alpha.4 and rc.1 runtimes.
+- Unknown runtimes warn once and use the normal best-effort mount path; only reproduced failures may be blocklisted.
+
+
 
 ## 0.3.8
 

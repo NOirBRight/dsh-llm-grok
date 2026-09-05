@@ -6,15 +6,24 @@ DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由�
 
 包根入口公开 Cordis plugin contract。同一 artifact 还导出 `./client`，在 Settings → LLM Providers 中提供 Grok 卡片。
 
+## 兼容性
+
+已验证运行时是 DeepSeek Harness `0.1.2-alpha.4` 与 `0.1.2-rc.1`（Cordis `4.0.2`）；这份记录只是证据，不是 allowlist。
+
+未知的新版本会先打一条 warning，再按正常挂载路径 best-effort 尝试，不会因为未验证而跳过。
+
+只有复现过的故障才会加入 blocklist；受影响版本、原因和证据见[兼容性记录](package.json)。
+
+
 ## 安装
 
-本版本严格要求 DeepSeek Harness 0.1.2-alpha.4；Alpha.1–Alpha.3 不兼容，Alpha.5 尚未验证。直接从 GitHub 安装：
+已在 DeepSeek Harness `0.1.2-alpha.4` 与 `0.1.2-rc.1`（Cordis `4.0.2`）验证。直接从 GitHub 安装：
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.3/dsh-llm-providers-ui-0.1.3.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.9/dsh-llm-providers-ui-0.1.9.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.8/dsh-llm-grok-0.3.8.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/dsh-llm-grok-0.3.11.tgz
 dsh web
 ~~~
 
@@ -44,7 +53,7 @@ Plugin 卡上有两份目录：登录后从 `GET /v1/models-v2` 读到的账户�
 
 可选的 **`grok_image_gen`**（默认关闭）会注册一个模型可调用的生图工具，走 Grok Imagine。它复用同一套 Host OAuth 会话，请求 `https://api.x.ai/v1/images/generations` —— 和 Grok Build 本地 `image_gen` 同一条轨，不是 console API key，也不是聊天 proxy。工具名与 Codex 的 `codex_generate_image` 区分。生成的图会写到工作区并通过 attachment store 落盘。
 
-未登录就聊天会失败为 `MISSING_CREDENTIAL`。已有会话但 refresh 失败会清会话并失败为 `AUTH`。每次聊天请求前已经跑过 `ensureFreshSession`；之后的 401 不再在 Responses 层重试。
+未登录就聊天会失败为 `MISSING_CREDENTIAL`。已有会话但 refresh 失败会清会话并失败为 `AUTH`。每次聊天请求前已经跑过 `ensureFreshSession`。之后若在没有任何模型内容前收到 `AUTH`（HTTP 401），会强制 refresh 再打一次请求；仍失败的 `AUTH` 进入 bundle 默认的八次 normal 重试。
 
 每条 proxy 请求都会带上本插件的 `X-Dsh-Plugin` 身份，以及 proxy 要求的 CLI 版本头（`x-grok-client-version` / `x-grok-client-identifier`）。缺版本会 426。这些头是 proxy 要求的字段，不是冒充官方 CLI。
 
@@ -66,16 +75,15 @@ Models 页面如果列出 Grok，也只是 hint。因为本包不声明 `apiKeyE
         jitterRatio: 0.1
 ~~~
 
-bundle 默认对符合条件的模型请求失败最多重试八次。xAI 容量不足/高需求失败归类为 `RATE_LIMIT`；临时可用性下降归类为 `SERVER`。
+bundle 默认对符合条件的模型请求失败最多重试八次，包括 `AUTH`。xAI 容量不足/高需求失败归类为 `RATE_LIMIT`；临时可用性下降归类为 `SERVER`。
 
 没有 `apiKeyEnv`，也没有用户可改的 base URL。`models` 是对话里显示的目录，是账户列表的一个子集。
 
 Composer picker 会按剥掉 Fast 后缀（`-fast`）和通用上下文后缀（`-<n>k` / `-<n>m`）后的 base 把兄弟行收成一个家族。`kimi-k3-max` 这类产品名不算档位。本包目录来自 discovery；若要让 DSH 按更小预算压缩，自行加带后缀的行。本插件不会在发请求前剥这些后缀。
 
-
 ## 正式版安装（Latest）
 
-xAI Grok subscription login, Responses chat, usage, search, and Imagine. 正式成品只支持 DeepSeek Harness 0.1.2-alpha.4；发布包只包含构建后的 Host/Client 产物，不包含兄弟仓库源码、本机路径或 link:/workspace: 依赖。
+xAI Grok subscription login, Responses chat, usage, search, and Imagine. 正式成品按上方兼容性记录运行；发布包只包含构建后的 Host/Client 产物，不包含兄弟仓库源码、本机路径或 link:/workspace: 依赖。
 
 LLM Providers 页面、导航和共享排序由 dsh-llm-providers-ui 独占；本插件只提供卡片、模型和 Host 路由。Web 必须先装 Owner，headless 只使用 Host 路由时可以不装 Owner。
 
@@ -83,23 +91,23 @@ Owner（Latest）：
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.1.3.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.1.9.tgz
 ~~~
 
 本 Provider（Latest）：
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.8.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.11.tgz
 ~~~
 
 固定版本（可复现）：
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.3/dsh-llm-providers-ui-0.1.3.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.9/dsh-llm-providers-ui-0.1.9.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.8/dsh-llm-grok-0.3.8.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/dsh-llm-grok-0.3.11.tgz
 ~~~
 
 更新、卸载与验证：
@@ -107,7 +115,7 @@ dsh plugin --profile web add --force \
 ~~~sh
 # 更新到最新 Release
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.8.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.11.tgz
 # 验证加载与版本
 dsh plugin --profile web list
 dsh plugin --profile web doctor
@@ -119,4 +127,12 @@ dsh plugin --profile web remove dsh-llm-grok
 
 回滚：重新执行固定版本 v0.3.7 命令，确认插件列表后只重启一次 Web 服务。失败时查看 journalctl --user -u dsh-web.service 与 dsh plugin --profile web doctor，不要把源码 checkout 写入 production profile。
 
-Release 与完整性：[v0.3.8](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.8) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.8/SHA256SUMS)。
+Release 与完整性：[v0.3.11](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.11) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/SHA256SUMS)。
+
+## 独立 Model Switch 搜索
+
+Host 通过现有 Model Switch 注册表同时注册 Search 与 Image adapter，并做生命周期释放。独立搜索声明支持的 Grok 对话模型，调用已有订阅 Responses 端点与必需的服务端搜索工具，复用 provider token 解析与身份头。只有原生 URL 引用/搜索调用结果才会成为来源；缺凭据、不支持的模型、无搜索证据的响应都会明确失败，不暴露上游错误体。这与“对话模型自带联网”不是一回事。
+
+这需要协同的 Model Switch 动态搜索实现（`dsh-model-switch` 0.4.7；本 adapter 按 0.4.6 注册表契约构建）。注册 adapter 不会切换全局 Web 路由：显式配置 `web.searchProvider: model-switch`（保留其余 Web 配置），再在 Model Switch 中选择 provider/model。`web_fetch` 不变，不注册替代 web 工具。ProviderDirectory 延迟 role/usage 集成保持不变。
+
+验证：`pnpm test`（143 通过）、`pnpm run build`；3082 官方 Web 先后用 `grok-4.6` 与 `grok-4.5` 选中，均返回真实来源。lab 组成与证据见 Model Switch 集成审计。

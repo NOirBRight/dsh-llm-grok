@@ -18,12 +18,12 @@ import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import { GROK_PROVIDER } from './client-contract.ts'
 import type { GrokCatalogModel } from './client-contract.ts'
 import { officialDefaultEffort, officialEffortsFor, isGrokReasoningWire } from './reasoning.ts'
-import { ensureFreshSession } from './oauth.ts'
+import { ensureFreshSession, refreshSession } from './oauth.ts'
 import type { GrokOAuthRuntime } from './oauth.ts'
 import { createGrokPiAiProfile } from './pi-ai-profile.ts'
 import type { GrokConnectionOptions } from './pi-ai-profile.ts'
 import { createGrokPiAiAuth } from './pi-ai-auth.ts'
-import { readSession } from './session.ts'
+import { deleteSession, readSession, writeSession } from './session.ts'
 
 export type { GrokConnectionOptions } from './pi-ai-profile.ts'
 
@@ -36,6 +36,11 @@ export interface GrokAdapterOptions {
    * MISSING_CREDENTIAL when no session exists, or AUTH when refresh failed.
    */
   resolveApiKey: () => Promise<string>
+  /**
+   * Force-refresh the OAuth access token. Used once when a request finishes
+   * AUTH before any model content.
+   */
+  refreshApiKey?: () => Promise<string>
   /** Resolve the optional durable attachment service at request time. */
   resolveAttachments?: () => AttachmentStore | undefined
 }
@@ -63,6 +68,93 @@ export async function resolveGrokAccessToken(runtime: GrokOAuthRuntime): Promise
     )
   }
   return session.accessToken
+}
+
+/**
+ * Exchange the refresh token even when the access token is not near expiry.
+ * @param runtime - Host OAuth runtime.
+ * @returns the new access token.
+ */
+export async function refreshGrokAccessToken(runtime: GrokOAuthRuntime): Promise<string> {
+  const path = runtime.resolveSessionPath()
+  const existing = await readSession(path)
+  if (existing === undefined) {
+    throw new LlmError(
+      'llm-grok: not signed in; sign in with an xAI subscription from Plugin configuration',
+      'MISSING_CREDENTIAL',
+    )
+  }
+  const refreshed = await refreshSession(runtime, existing)
+  if (refreshed === undefined) {
+    await deleteSession(path)
+    throw new LlmError(
+      'llm-grok: session refresh failed; sign in again with an xAI subscription',
+      'AUTH',
+    )
+  }
+  await writeSession(path, refreshed)
+  return refreshed.accessToken
+}
+
+function isAuthFinish(chunk: StreamChunk): boolean {
+  return chunk.type === 'finish' && chunk.reason.kind === 'error' && chunk.reason.failure.code === 'AUTH'
+}
+
+function isModelContent(chunk: StreamChunk): boolean {
+  return chunk.type === 'block-start'
+    || chunk.type === 'text-delta'
+    || chunk.type === 'reasoning-delta'
+    || chunk.type === 'tool-call-delta'
+    || chunk.type === 'block-end'
+}
+
+/**
+ * Replay a stream once after a content-less AUTH finish, forcing a token refresh first.
+ * Usage-only prefixes are buffered so a 401 after `usage` still retries.
+ * @param stream - one request-scoped model stream factory.
+ * @param options - the same generate options passed to both attempts.
+ * @param classify - per-chunk error remapping applied to both attempts.
+ * @param refreshApiKey - force-refresh hook; omitted means AUTH is not retried here.
+ * @returns chunks from the first successful attempt, or the original AUTH finish.
+ */
+async function* streamWithAuthRetry(
+  stream: (options: GenerateOptions) => AsyncIterable<StreamChunk>,
+  options: GenerateOptions,
+  classify: (chunk: StreamChunk) => StreamChunk,
+  refreshApiKey: (() => Promise<string>) | undefined,
+): AsyncGenerator<StreamChunk> {
+  const buffered: StreamChunk[] = []
+  let sawContent = false
+  for await (const raw of stream(options)) {
+    const chunk = classify(raw)
+    if (isAuthFinish(chunk) && !sawContent && refreshApiKey !== undefined) {
+      try {
+        await refreshApiKey()
+      } catch (error) {
+        // Only AUTH/MISSING_CREDENTIAL from a failed refresh stay here; abort must
+        // surface as cancellation, not as a fake AUTH finish.
+        if (options.signal?.aborted === true || (error instanceof Error && error.name === 'AbortError')) throw error
+        yield* buffered
+        yield chunk
+        return
+      }
+      options.signal?.throwIfAborted()
+      for await (const retryRaw of stream(options)) {
+        yield classify(retryRaw)
+      }
+      return
+    }
+    if (isModelContent(chunk)) {
+      sawContent = true
+      yield* buffered
+      buffered.length = 0
+      yield chunk
+      continue
+    }
+    if (sawContent) yield chunk
+    else buffered.push(chunk)
+  }
+  yield* buffered
 }
 
 /**
@@ -250,21 +342,26 @@ export class GrokAdapter extends LlmAdapter {
   }
 
   override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
-    for await (const chunk of this.current().stream(narrowGrokEscalationSchemas(options))) {
-      yield classifyGrokTransientError(chunk)
-    }
+    yield* streamWithAuthRetry(
+      opts => this.current().stream(narrowGrokEscalationSchemas(opts)),
+      options,
+      classifyGrokTransientError,
+      this.config.refreshApiKey,
+    )
   }
 
   /** Prepare one request with Grok's stream transforms applied. */
   override async prepareCall(provider: string, model: string, signal?: AbortSignal) {
     const inner = await this.current().prepareCall(provider, model, signal)
+    const refreshApiKey = this.config.refreshApiKey
     return {
       model: inner.model,
-      stream: async function* (options: GenerateOptions) {
-        for await (const chunk of inner.stream(narrowGrokEscalationSchemas(options))) {
-          yield classifyGrokTransientError(chunk)
-        }
-      },
+      stream: (options: GenerateOptions) => streamWithAuthRetry(
+        opts => inner.stream(narrowGrokEscalationSchemas(opts)),
+        options,
+        classifyGrokTransientError,
+        refreshApiKey,
+      ),
     }
   }
 

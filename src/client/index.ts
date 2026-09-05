@@ -9,6 +9,16 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
+import { createGrokUsageReader } from 'dsh-llm-providers-ui/usage-readers'
+
+/** Register this card and its quota reader on the shared Provider directory. */
+function installProviderDirectory(ctx: ClientContext): void {
+  ctx.inject(['providerDirectory'], scope => {
+    const directory = (scope as unknown as { providerDirectory: { register(entry: { key: string, usage: unknown }): () => void } }).providerDirectory
+    scope.effect(() => directory.register({ key: GROK_SETTINGS_NAMESPACE, usage: createGrokUsageReader() }), 'dsh-llm-grok: provider directory registration')
+  })
+}
+
 import {
   GROK_AUTH_COMPLETE_ENDPOINT,
   GROK_AUTH_CANCEL_ENDPOINT,
@@ -60,6 +70,8 @@ export const inject = ['slots', 'locale', 'connection']
 /** Register localized Grok configuration under Plugin configuration. */
 
 export function apply(ctx: ClientContext): void {
+  installProviderDirectory(ctx)
+
   const localeNamespace = 'settings.grok'
   ctx.effect(
     () => ctx.locale.register(localeNamespace, { zh, en }),
