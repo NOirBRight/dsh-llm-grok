@@ -128,3 +128,11 @@ Configuration: use the plugin section in Settings for Web UI plugins, or the pro
 Rollback: rerun the fixed v0.3.7 command, verify the profile list, then restart the Web service once. Inspect journalctl --user -u dsh-web.service and dsh plugin --profile web doctor; never put a source checkout in the production profile.
 
 Release and integrity: [v0.3.10](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.10) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.10/SHA256SUMS).
+
+## Independent Model Switch search (unreleased integration)
+
+The Host registers Search and Image adapters together through the existing Model Switch registry, with lifecycle disposal. Independent search declares the supported Grok chat models and calls the existing subscription Responses endpoint with required server-side search tools. It reuses the provider token resolver and identity headers. Only native URL citations/search-call results become sources; missing credentials, unsupported models and responses without search evidence fail explicitly. Upstream error bodies are not exposed. This is distinct from a conversational model merely having native networking enabled.
+
+This requires the coordinated Model Switch dynamic-search implementation. Registering an adapter does not select global Web routing: explicitly configure `web.searchProvider: model-switch`, retaining every other Web config field, then choose the provider/model in Model Switch. No replacement web tool is registered; `web_fetch` is unchanged. ProviderDirectory deferred role/usage integration is preserved.
+
+Validation: `pnpm test` (143 passed), `pnpm run build`; 3082 official Web selection returned real sources with both `grok-4.6` and `grok-4.5` in sequence. See the Model Switch integration audit for exact lab composition and evidence.
