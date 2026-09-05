@@ -101,6 +101,16 @@ export {
 } from './pi-ai-profile.ts'
 export { GROK_SERVER_SEARCH_TOOLS, grokResponsesApi, injectGrokServerSearchTools } from './responses-tools.ts'
 export {
+  GROK_SEARCH_LABEL,
+  GROK_SEARCH_PROVIDER,
+  GrokSearchProvider,
+  grokSearchModels,
+  grokSearchResponsesURL,
+  isSearchableGrokModel,
+  mapGrokSearchResponse,
+} from './search.ts'
+export type { GrokSearchProviderOptions } from './search.ts'
+export {
   isGrokServerSearchToolCallId,
   stripGrokServerSearchToolCalls,
 } from './server-search-calls.ts'
