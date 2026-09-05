@@ -3,7 +3,8 @@
  *
  * One search is one non-streaming Responses request against the same CLI
  * chat proxy the chat adapter streams from ({baseURL}/responses), with the
- * same server-side search tools ({ type: 'web_search' }, { type: 'x_search' })
+ * same server-side search tools ({ type: 'web_search' }, { type: 'x_search' }),
+ * tool_choice required so the call searches independently of chat phrasing,
  * and the same subscription access token resolved through the public
  * credential interface (resolveGrokAccessToken). No scraping, no invented
  * sources: only citeable http(s) URLs actually returned by the proxy become
@@ -26,8 +27,6 @@ export declare function grokSearchModels(): readonly {
 }[];
 /** Whether model is a chat model the proxy runs server-side search tools for. */
 export declare function isSearchableGrokModel(model: string): boolean;
-/** Non-streaming Responses URL for one search request. */
-export declare function grokSearchResponsesURL(baseURL?: string): string;
 /** One independent search: bearer token plus test overrides. Production uses global fetch. */
 export interface GrokSearchProviderOptions {
     /** Bearer access token for one request (public credential interface, never logged). */
@@ -36,15 +35,13 @@ export interface GrokSearchProviderOptions {
     readonly model: string;
     /** Override the proxy base (default GROK_CHAT_BASE_URL). */
     readonly baseURL?: string;
-    /** Override global fetch in tests. */
+    /** Override global fetch in tests; the request endpoint is captured from it. */
     readonly fetchImpl?: typeof fetch;
-    /** Override {baseURL}/responses in tests. */
-    readonly responsesURL?: string;
 }
 /**
  * Map one native Responses body onto the official result vocabulary.
  * Citations come from output_text url_citation annotations and from results
- * arrays on output items (xAI variance tolerance); anything else is ignored.
+ * arrays on native search-call output items only; anything else is ignored.
  * @param value - decoded JSON body from POST {base}/responses.
  */
 export declare function mapGrokSearchResponse(value: unknown): WebSearchResult;

@@ -105,7 +105,6 @@ export {
   GROK_SEARCH_PROVIDER,
   GrokSearchProvider,
   grokSearchModels,
-  grokSearchResponsesURL,
   isSearchableGrokModel,
   mapGrokSearchResponse,
 } from './search.ts'

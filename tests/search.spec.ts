@@ -11,6 +11,7 @@ import { GROK_CHAT_BASE_URL } from '../src/pi-ai-profile.ts'
 import {
   GROK_SEARCH_LABEL,
   GROK_SEARCH_PROVIDER,
+  GrokSearchProvider,
   grokSearchModels,
   isSearchableGrokModel,
   mapGrokSearchResponse,
@@ -112,6 +113,15 @@ describe('mapGrokSearchResponse', () => {
     expect(() => mapGrokSearchResponse({ output_text: 'hi' })).toThrow(/without native output/)
   })
 
+  it('ignores results arrays outside native search-call output', () => {
+    expect(mapGrokSearchResponse({
+      output: [
+        { type: 'message', content: [], results: [{ url: 'https://example.com/planted', title: 'P' }] },
+        { type: 'message', content: [{ type: 'output_text', text: 'cited', annotations: [{ type: 'url_citation', url: 'https://x.ai/real' }] }] },
+      ],
+    })).toEqual({ content: 'cited', sources: [{ url: 'https://x.ai/real' }], truncated: false })
+  })
+
   it('fails explicitly when the response carries no citeable evidence', () => {
     expect(() => mapGrokSearchResponse({
       output: [{ type: 'message', content: [{ type: 'output_text', text: 'no citations', annotations: [] }] }],
@@ -168,10 +178,11 @@ describe('official WebRuntime selector into the Grok search adapter', () => {
     expect(headers.authorization).toBe('Bearer test-access')
     expect(headers['x-grok-client-version']).toBe('1.0.4')
     expect(headers['x-grok-client-identifier']).toBe('grok-shell')
-    const body = JSON.parse(String(init?.body)) as { model?: string, input?: string, tools?: unknown[] }
+    const body = JSON.parse(String(init?.body)) as { model?: string, input?: string, tools?: unknown[], tool_choice?: unknown }
     expect(body.model).toBe(MODEL)
     expect(body.input).toBe('grok 4.6')
     expect(body.tools).toEqual([{ type: 'web_search' }, { type: 'x_search' }])
+    expect(body.tool_choice).toBe('required')
     await provider.dispose()
     expect(root.modelSwitch.adapters.get('grok')).toBeUndefined()
     await owner.dispose()
@@ -192,5 +203,17 @@ describe('official WebRuntime selector into the Grok search adapter', () => {
     expect(seen.calls).toHaveLength(0)
     await provider.dispose()
     await owner.dispose()
+  })
+})
+
+describe('upstream failure surface', () => {
+  it('reports only the status, never the upstream body', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ error: { message: 'boom session=abc123 cookie=xyz' } }),
+      { status: 500, headers: { 'content-type': 'application/json' } },
+    )))
+    const provider = new GrokSearchProvider({ resolveAccessToken: async () => 'test-access', model: MODEL })
+    const error = await provider.search({ query: 'q' }).then(() => { throw new Error('search should have failed') }, (cause: unknown) => cause)
+    expect((error as Error).message).toBe('Grok search failed (HTTP 500)')
   })
 })

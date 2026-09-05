@@ -3,7 +3,8 @@
  *
  * One search is one non-streaming Responses request against the same CLI
  * chat proxy the chat adapter streams from ({baseURL}/responses), with the
- * same server-side search tools ({ type: 'web_search' }, { type: 'x_search' })
+ * same server-side search tools ({ type: 'web_search' }, { type: 'x_search' }),
+ * tool_choice required so the call searches independently of chat phrasing,
  * and the same subscription access token resolved through the public
  * credential interface (resolveGrokAccessToken). No scraping, no invented
  * sources: only citeable http(s) URLs actually returned by the proxy become
@@ -43,7 +44,7 @@ export function isSearchableGrokModel(model: string): boolean {
 }
 
 /** Non-streaming Responses URL for one search request. */
-export function grokSearchResponsesURL(baseURL: string = GROK_CHAT_BASE_URL): string {
+function grokSearchResponsesURL(baseURL: string = GROK_CHAT_BASE_URL): string {
   return baseURL.replace(/\/+$/u, '') + '/responses'
 }
 
@@ -55,10 +56,8 @@ export interface GrokSearchProviderOptions {
   readonly model: string
   /** Override the proxy base (default GROK_CHAT_BASE_URL). */
   readonly baseURL?: string
-  /** Override global fetch in tests. */
+  /** Override global fetch in tests; the request endpoint is captured from it. */
   readonly fetchImpl?: typeof fetch
-  /** Override {baseURL}/responses in tests. */
-  readonly responsesURL?: string
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -83,7 +82,7 @@ function citeableUrl(value: unknown): string | undefined {
 /**
  * Map one native Responses body onto the official result vocabulary.
  * Citations come from output_text url_citation annotations and from results
- * arrays on output items (xAI variance tolerance); anything else is ignored.
+ * arrays on native search-call output items only; anything else is ignored.
  * @param value - decoded JSON body from POST {base}/responses.
  */
 export function mapGrokSearchResponse(value: unknown): WebSearchResult {
@@ -119,7 +118,8 @@ export function mapGrokSearchResponse(value: unknown): WebSearchResult {
         }
       }
     }
-    const results = item['results']
+    const kind = item['type']
+    const results = kind === 'web_search_call' || kind === 'x_search_call' ? item['results'] : undefined
     if (Array.isArray(results)) {
       for (const result of results) {
         if (!isRecord(result)) continue
@@ -174,17 +174,6 @@ function abortable<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
   })
 }
 
-function providerMessage(value: unknown): string | undefined {
-  if (!isRecord(value)) return undefined
-  const error = value['error']
-  const raw = typeof error === 'string'
-    ? error
-    : isRecord(error) && typeof error['message'] === 'string'
-      ? error['message']
-      : typeof value['message'] === 'string' ? value['message'] : undefined
-  return raw?.replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, '[REDACTED]').slice(0, 1000)
-}
-
 /** Provider-owned search over the CLI chat proxy Responses API. */
 export class GrokSearchProvider implements WebSearchProvider {
   readonly id = GROK_SEARCH_PROVIDER
@@ -219,7 +208,7 @@ export class GrokSearchProvider implements WebSearchProvider {
       throw new WebError('Grok search is signed out; sign in from Plugin configuration', 'WEB_PROVIDER_CREDENTIAL_MISSING')
     }
     throwIfSearchAborted(signal)
-    const url = this.options.responsesURL ?? grokSearchResponsesURL(this.options.baseURL)
+    const url = grokSearchResponsesURL(this.options.baseURL)
     const fetchImpl = this.options.fetchImpl ?? fetch
     let response: Response
     try {
@@ -237,6 +226,7 @@ export class GrokSearchProvider implements WebSearchProvider {
           model: this.options.model,
           input: query,
           tools: [...GROK_SERVER_SEARCH_TOOLS],
+          tool_choice: 'required',
         }),
         ...signal === undefined ? {} : { signal },
       })
@@ -258,10 +248,8 @@ export class GrokSearchProvider implements WebSearchProvider {
       )
     }
     if (!response.ok) {
-      const detail = providerMessage(payload)
-      const message = detail === undefined
-        ? 'Grok search failed (HTTP ' + String(response.status) + ')'
-        : 'Grok search failed (HTTP ' + String(response.status) + '): ' + detail
+      // Never surface upstream bodies: they can echo non-JWT tokens or cookies.
+      const message = 'Grok search failed (HTTP ' + String(response.status) + ')'
       throw new WebError(
         response.status === 401 || response.status === 403
           ? message + '; sign in again'
