@@ -31,9 +31,9 @@ DeepSeek Harness 0.1.2-alpha.4 is required exactly. Install directly from GitHub
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.5/dsh-llm-providers-ui-0.1.5.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.9/dsh-llm-providers-ui-0.1.9.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.10/dsh-llm-grok-0.3.10.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/dsh-llm-grok-0.3.11.tgz
 dsh web
 ~~~
 
@@ -91,23 +91,23 @@ Owner (Latest):
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.1.5.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.1.9.tgz
 ~~~
 
 Provider (Latest):
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.10.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.11.tgz
 ~~~
 
 Fixed versions (reproducible):
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.5/dsh-llm-providers-ui-0.1.5.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.9/dsh-llm-providers-ui-0.1.9.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.10/dsh-llm-grok-0.3.10.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/dsh-llm-grok-0.3.11.tgz
 ~~~
 
 Update, uninstall, and verify:
@@ -115,7 +115,7 @@ Update, uninstall, and verify:
 ~~~sh
 # Update to the latest Release
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.10.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.11.tgz
 # Verify the loaded version
 dsh plugin --profile web list
 dsh plugin --profile web doctor
@@ -127,12 +127,12 @@ Configuration: use the plugin section in Settings for Web UI plugins, or the pro
 
 Rollback: rerun the fixed v0.3.7 command, verify the profile list, then restart the Web service once. Inspect journalctl --user -u dsh-web.service and dsh plugin --profile web doctor; never put a source checkout in the production profile.
 
-Release and integrity: [v0.3.10](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.10) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.10/SHA256SUMS).
+Release and integrity: [v0.3.11](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.11) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/SHA256SUMS).
 
-## Independent Model Switch search (unreleased integration)
+## Independent Model Switch search
 
 The Host registers Search and Image adapters together through the existing Model Switch registry, with lifecycle disposal. Independent search declares the supported Grok chat models and calls the existing subscription Responses endpoint with required server-side search tools. It reuses the provider token resolver and identity headers. Only native URL citations/search-call results become sources; missing credentials, unsupported models and responses without search evidence fail explicitly. Upstream error bodies are not exposed. This is distinct from a conversational model merely having native networking enabled.
 
-This requires the coordinated Model Switch dynamic-search implementation. Registering an adapter does not select global Web routing: explicitly configure `web.searchProvider: model-switch`, retaining every other Web config field, then choose the provider/model in Model Switch. No replacement web tool is registered; `web_fetch` is unchanged. ProviderDirectory deferred role/usage integration is preserved.
+This requires the coordinated Model Switch dynamic-search implementation (`dsh-model-switch` 0.4.7; the adapter itself builds against the 0.4.6 registry contract). Registering an adapter does not select global Web routing: explicitly configure `web.searchProvider: model-switch`, retaining every other Web config field, then choose the provider/model in Model Switch. No replacement web tool is registered; `web_fetch` is unchanged. ProviderDirectory deferred role/usage integration is preserved.
 
 Validation: `pnpm test` (143 passed), `pnpm run build`; 3082 official Web selection returned real sources with both `grok-4.6` and `grok-4.5` in sequence. See the Model Switch integration audit for exact lab composition and evidence.

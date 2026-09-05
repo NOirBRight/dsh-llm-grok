@@ -21,9 +21,9 @@ DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由�
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.5/dsh-llm-providers-ui-0.1.5.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.9/dsh-llm-providers-ui-0.1.9.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.10/dsh-llm-grok-0.3.10.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/dsh-llm-grok-0.3.11.tgz
 dsh web
 ~~~
 
@@ -91,23 +91,23 @@ Owner（Latest）：
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.1.5.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.1.9.tgz
 ~~~
 
 本 Provider（Latest）：
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.10.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.11.tgz
 ~~~
 
 固定版本（可复现）：
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.5/dsh-llm-providers-ui-0.1.5.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.9/dsh-llm-providers-ui-0.1.9.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.10/dsh-llm-grok-0.3.10.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/dsh-llm-grok-0.3.11.tgz
 ~~~
 
 更新、卸载与验证：
@@ -115,7 +115,7 @@ dsh plugin --profile web add --force \
 ~~~sh
 # 更新到最新 Release
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.10.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.11.tgz
 # 验证加载与版本
 dsh plugin --profile web list
 dsh plugin --profile web doctor
@@ -127,4 +127,12 @@ dsh plugin --profile web remove dsh-llm-grok
 
 回滚：重新执行固定版本 v0.3.7 命令，确认插件列表后只重启一次 Web 服务。失败时查看 journalctl --user -u dsh-web.service 与 dsh plugin --profile web doctor，不要把源码 checkout 写入 production profile。
 
-Release 与完整性：[v0.3.10](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.10) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.10/SHA256SUMS)。
+Release 与完整性：[v0.3.11](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.11) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/SHA256SUMS)。
+
+## 独立 Model Switch 搜索
+
+Host 通过现有 Model Switch 注册表同时注册 Search 与 Image adapter，并做生命周期释放。独立搜索声明支持的 Grok 对话模型，调用已有订阅 Responses 端点与必需的服务端搜索工具，复用 provider token 解析与身份头。只有原生 URL 引用/搜索调用结果才会成为来源；缺凭据、不支持的模型、无搜索证据的响应都会明确失败，不暴露上游错误体。这与“对话模型自带联网”不是一回事。
+
+这需要协同的 Model Switch 动态搜索实现（`dsh-model-switch` 0.4.7；本 adapter 按 0.4.6 注册表契约构建）。注册 adapter 不会切换全局 Web 路由：显式配置 `web.searchProvider: model-switch`（保留其余 Web 配置），再在 Model Switch 中选择 provider/model。`web_fetch` 不变，不注册替代 web 工具。ProviderDirectory 延迟 role/usage 集成保持不变。
+
+验证：`pnpm test`（143 通过）、`pnpm run build`；3082 官方 Web 先后用 `grok-4.6` 与 `grok-4.5` 选中，均返回真实来源。lab 组成与证据见 Model Switch 集成审计。

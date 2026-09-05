@@ -127,7 +127,10 @@ function checkAlpha4Manifest(manifest, label) {
   for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies']) {
     for (const [name, range] of Object.entries(manifest[section] ?? {})) {
       if (typeof range !== 'string') fail(label + ' has non-string ' + section + '.' + name)
-      if (name.startsWith('@deepseek-ai/dsh-') && range !== ALPHA4 && !(satisfies(ALPHA4, range) && satisfies(RC1, range)) && !(capturedOfficialWorkspace && range === 'workspace:^')) fail(label + ' has a DSH range that excludes Alpha.4 or rc.1: ' + name + ' ' + range)
+      // Exact pins of either verified runtime are allowed: Alpha.4 pool purity is still
+      // enforced by edge satisfaction below, so an exact-rc.1 runtime edge cannot pull
+      // an rc.1 DSH archive into the offline graph (released fixtures pin devDeps per runtime).
+      if (name.startsWith('@deepseek-ai/dsh-') && range !== ALPHA4 && range !== RC1 && !(satisfies(ALPHA4, range) && satisfies(RC1, range)) && !(capturedOfficialWorkspace && range === 'workspace:^')) fail(label + ' has a DSH range that excludes Alpha.4 or rc.1: ' + name + ' ' + range)
       // Cordis plugins published from the upstream monorepo retain their
       // workspace peer range; the harness packages and this plugin must pin
       // the runtime Cordis version itself.
