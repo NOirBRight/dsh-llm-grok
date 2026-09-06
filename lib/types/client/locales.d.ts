@@ -26,7 +26,11 @@ export declare const en: {
     readonly summaryOff: "Not signed in";
     readonly unsaved: "Unsaved changes";
     readonly modelDetails: "Details";
+    readonly sortModels: "Sort";
+    readonly doneSorting: "Done";
     readonly dragModel: "Drag to reorder";
+    readonly moveUp: "Move up";
+    readonly moveDown: "Move down";
     readonly fetchModels: "Choose from account";
     readonly fetchingModels: "Loading account models…";
     readonly fetchEmpty: "The account returned no models.";

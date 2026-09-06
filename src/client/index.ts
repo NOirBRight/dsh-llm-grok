@@ -9,13 +9,13 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
+import type {} from 'dsh-llm-providers-ui/client'
 import { createGrokUsageReader } from 'dsh-llm-providers-ui/usage-readers'
 
-/** Register this card and its quota reader on the shared Provider directory. */
+/** Register this card, its shared header ownership, and its quota reader. */
 function installProviderDirectory(ctx: ClientContext): void {
   ctx.inject(['providerDirectory'], scope => {
-    const directory = (scope as unknown as { providerDirectory: { register(entry: { key: string, usage: unknown }): () => void } }).providerDirectory
-    scope.effect(() => directory.register({ key: GROK_SETTINGS_NAMESPACE, usage: createGrokUsageReader() }), 'dsh-llm-grok: provider directory registration')
+    scope.effect(() => scope.providerDirectory.register({ key: GROK_SETTINGS_NAMESPACE, header: 'shared', usage: createGrokUsageReader() }), 'dsh-llm-grok: provider directory registration')
   })
 }
 
@@ -140,6 +140,9 @@ export function apply(ctx: ClientContext): void {
     if (!result.ok) return { ok: false, retryable: true, message: result.error.message }
     const decoded = decodeGrokAuthStartReply(result.value)
     if (decoded === undefined) return { ok: false, retryable: true, message: t('signInFailed') }
+    if (decoded.ok === true) {
+      try { ctx.get('providerDirectory')?.invalidateUsage(GROK_SETTINGS_NAMESPACE) } catch { /* providerDirectory is optional in lab */ }
+    }
     return decoded
   }
 
@@ -168,6 +171,7 @@ export function apply(ctx: ClientContext): void {
     const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_LOGOUT_ENDPOINT, {})
     if (!result.ok) throw new Error(result.error.message)
     if (decodeGrokAuthLogoutReply(result.value) === undefined) throw new Error(t('signOutFailed'))
+    try { ctx.get('providerDirectory')?.invalidateUsage(GROK_SETTINGS_NAMESPACE) } catch { /* providerDirectory is optional in lab */ }
   }
 
   const fetchModels: GrokPluginCardFace['fetchModels'] = async () => {

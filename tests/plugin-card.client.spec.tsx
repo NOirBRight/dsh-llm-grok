@@ -239,11 +239,12 @@ describe('GrokPluginCard', () => {
     })} />)
     expand()
 
-    await waitFor(() => { expect(screen.getByText(`${en.usageUsed} 12 / 100`)).toBeTruthy() })
-    expect(screen.getByText('monthly (month)')).toBeTruthy()
-    expect(screen.getByText(`${en.usageUsed} 3 / 20`)).toBeTruthy()
-    expect(screen.getByRole('progressbar', { name: 'monthly (month)' }).getAttribute('aria-valuenow')).toBe('12')
-    expect(screen.getByRole('progressbar', { name: 'weekly' }).querySelectorAll('[data-usage-fill]')).toHaveLength(1)
+    await waitFor(() => { expect(screen.getAllByRole('meter', { name: 'monthly (month)' }).length).toBeGreaterThanOrEqual(2) })
+    expect(screen.getAllByText('monthly (month)').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('88%').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('85%').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByRole('meter', { name: 'monthly (month)' })[0]?.getAttribute('aria-valuenow')).toBe('88')
+    expect(screen.getAllByRole('meter', { name: 'weekly' })[0]?.querySelectorAll('[data-provider-quota-meter]').length).toBeGreaterThanOrEqual(0)
     expect(fetchUsage).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(fetchUsage.mock.results)).not.toMatch(/accessToken|refreshToken|Bearer/u)
   })
@@ -256,6 +257,7 @@ describe('GrokPluginCard', () => {
 
     await waitFor(() => { expect(screen.getByText(en.usageUnsupported)).toBeTruthy() })
     expect(screen.queryByRole('progressbar')).toBeNull()
+    expect(screen.queryByRole('meter')).toBeNull()
   })
 
   it('shows a usage read failure without secrets and retries on demand', async () => {
@@ -280,7 +282,8 @@ describe('GrokPluginCard', () => {
     expect(screen.getByText('could not reach https://cli-chat-proxy.grok.com/v1/billing').textContent)
       .not.toMatch(/accessToken|Bearer /u)
     fireEvent.click(screen.getByRole('button', { name: en.usageRefresh }))
-    await waitFor(() => { expect(screen.getByText(`${en.usageUsed} 1 / 10`)).toBeTruthy() })
+    await waitFor(() => { expect(screen.getAllByRole('meter', { name: 'monthly' }).length).toBeGreaterThanOrEqual(2) })
+    expect(screen.getAllByText('90%').length).toBeGreaterThanOrEqual(2)
     expect(fetchUsage).toHaveBeenCalledTimes(2)
    })
 

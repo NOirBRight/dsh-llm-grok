@@ -29,7 +29,8 @@ import {
   modelDetailStyle,
   fieldStyle,
 } from './model-catalog-ui.tsx'
-import { AuthToolbar, ProviderCardHeader, UsageHeader, UsageResetAt, UsageSkeleton, UsageUpdatedAt, formatProviderSummary, formatUsageClock, providerHeaderStyle, resetLabelOf } from './provider-chrome.tsx'
+import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatProviderSummary, formatUsageClock, providerHeaderStyle, resetLabelOf } from './provider-chrome.tsx'
+import type { ProviderQuotaState } from './provider-chrome.tsx'
 import { SortableList } from 'dsh-llm-providers-ui/sortable'
 
 /** Dependencies injected by the browser-plugin registration. */
@@ -127,14 +128,7 @@ const hintStyle: CSSProperties = { margin: 0, fontSize: 12, color: 'var(--dsw-al
 const labelStyle: CSSProperties = { fontSize: 13, color: 'var(--dsw-alias-label-secondary)' }
 const statusStyle: CSSProperties = { margin: 0, fontSize: 13, color: 'var(--dsw-alias-label-secondary)' }
 const errorStyle: CSSProperties = { ...statusStyle, color: 'var(--dsw-alias-state-error-primary)' }
-const barTrackStyle: CSSProperties = {
-  boxSizing: 'border-box',
-  height: 14,
-  display: 'flex',
-  overflow: 'hidden',
-  borderRadius: 999,
-  background: 'color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent)',
-}
+/* Selected-A quota meters come from the shared ProviderQuotaMeter; no local bar track. */
 const buttonStyle: CSSProperties = {
   alignSelf: 'flex-start',
   minHeight: 34,
@@ -290,54 +284,54 @@ function IconTrash(): ReactNode {
   )
 }
 
-/** One quota window: used/limit numbers and a solid meter. */
+/** Remaining quota for one window; null when the wire value cannot name a remaining percent (never synthetic). */
+function remainingOf(quota: GrokUsageWindow): number | undefined {
+  if (quota.unit === 'percent') {
+    const remaining = 100 - quota.used
+    return Number.isFinite(remaining) && remaining >= 0 && remaining <= 100 ? remaining : undefined
+  }
+  if (quota.limit <= 0) return undefined
+  const remaining = (1 - quota.used / quota.limit) * 100
+  return Number.isFinite(remaining) && remaining >= 0 && remaining <= 100 ? remaining : undefined
+}
+
+/** One quota window as a segmented remaining meter. */
 function UsageBar({ usedText, window: quota, t }: {
   usedText: string
   window: GrokUsageWindow
   t: GrokPluginCardFace['t']
 }): ReactNode {
-  const ratio = quota.limit > 0 ? quota.used / quota.limit : quota.used > 0 ? 1 : 0
-  const percent = Math.round(ratio * 1000) / 10
-  const fill = Math.min(100, Math.max(0, percent))
+  void usedText
+  const remaining = remainingOf(quota)
+  if (remaining === undefined) return null
   const label = quota.period === undefined || quota.resetsAt !== undefined
     ? quota.id
     : quota.id + ' (' + quota.period + ')'
+  const detail = resetLabelOf(quota.resetsAt, usageResetCopy(t))
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-        <span style={labelStyle}>{label}</span>
-        <span style={hintStyle}>
-          {quota.unit === 'percent'
-            ? String(quota.used) + '%'
-            : usedText + ' ' + String(quota.used) + ' / ' + String(quota.limit)}
-        </span>
-      </div>
-      <div
-        style={barTrackStyle}
-        role="progressbar"
-        aria-label={label}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(fill)}
-      >
-        <span
-          data-usage-fill="true"
-          style={{
-            width: String(fill) + '%',
-            height: '100%',
-            flex: 'none',
-            background: 'var(--dsw-alias-state-business-primary)',
-            transition: 'width 200ms ease',
-          }}
-        />
-      </div>
-      <UsageResetAt label={resetLabelOf(quota.resetsAt, usageResetCopy(t))} />
-    </div>
+    <ProviderQuotaMeter
+      remainingPercent={remaining}
+      label={label}
+      {...detail === undefined ? {} : { detail }}
+    />
   )
 }
 
 function usageResetCopy(t: GrokPluginCardFace['t']): { at: string, atDays: string } {
   return { at: t('usageResetAt'), atDays: t('usageResetAtDays') }
+}
+
+/** Headline remaining quota from real usage; null when no window is available (never synthetic). */
+function headerQuotaOf(usage: GrokUsageView | undefined, t: GrokPluginCardFace['t']): ProviderQuotaState | null {
+  const window = usage?.windows[0]
+  if (window === undefined) return null
+  const remaining = remainingOf(window)
+  if (remaining === undefined) return null
+  const label = window.period === undefined || window.resetsAt !== undefined
+    ? window.id
+    : window.id + ' (' + window.period + ')'
+  const detail = resetLabelOf(window.resetsAt, usageResetCopy(t))
+  return { remainingPercent: remaining, label, ...detail === undefined ? {} : { detail } }
 }
 
 /** Render the single-package Grok contribution under Plugin configuration. */
@@ -364,6 +358,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   const [enableImageGen, setEnableImageGen] = useState(snapshot.value?.enableImageGen === true)
   const [sourceEnableImageGen, setSourceEnableImageGen] = useState(snapshot.value?.enableImageGen === true)
   const [catalogOpen, setCatalogOpen] = useState(false)
+  const [modelSort, setModelSort] = useState(false)
   const [expandedModels, setExpandedModels] = useState<ReadonlySet<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [fetching, setFetching] = useState(false)
@@ -659,13 +654,15 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
     auth.kind === 'signed-in' ? t('summaryOn') : t('summaryOff'),
     t('summaryModels').replace('{count}', String(modelCount)),
   )
+  const headerQuota = headerQuotaOf(usage.status === 'ready' ? usage.usage : lastUsage, t)
 
   if (snapshot.status === 'unavailable') {
     return (
-      <li style={cardStyle}>
+      <li style={cardStyle} data-provider-card="" data-provider-role="llm">
         <button
           type="button"
           style={headerStyle}
+          data-provider-card-header=""
           aria-expanded={open}
           aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
           onClick={() => { setOpen(!open) }}
@@ -675,11 +672,12 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
             mark={<BrandMark />}
             summary={headerSummary}
             open={open}
+            role="llm"
           />
         </button>
         {open
           ? (
-            <div style={bodyStyle}>
+            <div style={bodyStyle} data-provider-body="">
               <p style={statusStyle} role="status">{t('remoteAccess')}</p>
             </div>
           )
@@ -690,10 +688,11 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
 
   if (snapshot.status !== 'ready' || draft === undefined) {
     return (
-      <li style={cardStyle}>
+      <li style={cardStyle} data-provider-card="" data-provider-role="llm">
         <button
           type="button"
           style={headerStyle}
+          data-provider-card-header=""
           aria-expanded={open}
           aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
           onClick={() => { setOpen(!open) }}
@@ -703,18 +702,20 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
             mark={<BrandMark />}
             summary={headerSummary}
             open={open}
+            role="llm"
           />
         </button>
-        {open ? <div style={bodyStyle}><p style={statusStyle}>{t('loading')}</p></div> : null}
+        {open ? <div style={bodyStyle} data-provider-body=""><p style={statusStyle}>{t('loading')}</p></div> : null}
       </li>
     )
   }
 
   return (
-    <li style={cardStyle}>
+    <li style={cardStyle} data-provider-card="" data-provider-role="llm">
       <button
         type="button"
         style={headerStyle}
+        data-provider-card-header=""
         aria-expanded={open}
         aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
         onClick={() => { setOpen(!open) }}
@@ -726,11 +727,13 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
           open={open}
           unsaved={dirty}
           unsavedLabel={t('unsaved')}
+          role="llm"
+          {...headerQuota === null ? {} : { quota: headerQuota }}
         />
       </button>
       {open
         ? (
-          <div style={bodyStyle}>
+          <div style={bodyStyle} data-provider-body="">
             <p style={hintStyle}>{t('description')}</p>
             <section style={sectionStyle} aria-label={statusLabel}>
               <AuthToolbar
@@ -825,14 +828,19 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                   <span style={sectionTitleStyle}>{t('models')}</span>
                   <span style={hintStyle}>{customModels ? t('customized') : t('inherited')}</span>
                 </button>
-                <button
-                  type="button"
-                  style={buttonStyle}
-                  disabled={fetching || disabled}
-                  onClick={() => { void chooseFromAccount() }}
-                >
-                  {t(fetching ? 'fetchingModels' : 'fetchModels')}
-                </button>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: 'none' }}>
+                  <button type="button" style={buttonStyle} disabled={disabled} onClick={() => { setModelSort(current => !current) }} aria-pressed={modelSort}>
+                    {modelSort ? t('doneSorting') : t('sortModels')}
+                  </button>
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={fetching || disabled}
+                    onClick={() => { void chooseFromAccount() }}
+                  >
+                    {t(fetching ? 'fetchingModels' : 'fetchModels')}
+                  </button>
+                </span>
               </div>
               {catalogOpen
                 ? (
@@ -841,16 +849,26 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                       items={draft}
                       getId={model => model.rowId}
                       disabled={disabled}
+                      sorting={modelSort}
+                      moveButtons={modelSort}
                       dragLabel={(model, index) => {
                         const label = model.id.trim().length > 0 ? model.id.trim() : String(index + 1)
                         return t('dragModel') + ': ' + label
+                      }}
+                      moveUpLabel={(model, index) => {
+                        const label = model.id.trim().length > 0 ? model.id.trim() : String(index + 1)
+                        return t('moveUp') + ': ' + label
+                      }}
+                      moveDownLabel={(model, index) => {
+                        const label = model.id.trim().length > 0 ? model.id.trim() : String(index + 1)
+                        return t('moveDown') + ': ' + label
                       }}
                       onReorder={patchDraft}
                       renderItem={(model, index) => {
                         const expanded = expandedModels.has(model.rowId)
                         const label = model.id.trim().length > 0 ? model.id.trim() : String(index + 1)
                         return (
-                          <div data-model-row={label} style={modelContentStyle}>
+                          <div data-model-row={label} data-provider-model="" style={modelContentStyle}>
                             <input
                               style={rowInputStyle}
                               value={model.id}
