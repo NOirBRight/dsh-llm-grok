@@ -29,7 +29,7 @@ import {
   modelDetailStyle,
   fieldStyle,
 } from './model-catalog-ui.tsx'
-import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatProviderSummary, formatUsageClock, providerHeaderStyle, resetLabelOf } from './provider-chrome.tsx'
+import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatUsageClock, providerHeaderStyle, resetLabelOf } from './provider-chrome.tsx'
 import type { ProviderQuotaState } from './provider-chrome.tsx'
 import { SortableList } from 'dsh-llm-providers-ui/sortable'
 
@@ -650,10 +650,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
       ? formatSignedIn(t, auth.email)
       : auth.message ?? t('signedOut')
   const modelCount = draft?.length ?? 0
-  const headerSummary = formatProviderSummary(
-    auth.kind === 'signed-in' ? t('summaryOn') : t('summaryOff'),
-    t('summaryModels').replace('{count}', String(modelCount)),
-  )
+  const headerModels = t('summaryModels').replace('{count}', String(modelCount))
+  const headerStatus = auth.kind === 'signed-in' ? t('summaryOn') : t('summaryOff')
   const headerQuota = headerQuotaOf(usage.status === 'ready' ? usage.usage : lastUsage, t)
 
   if (snapshot.status === 'unavailable') {
@@ -670,7 +668,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
           <ProviderCardHeader
             title={title}
             mark={<BrandMark />}
-            summary={headerSummary}
+            summary={headerModels}
+            status={headerStatus}
             open={open}
             role="llm"
           />
@@ -700,7 +699,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
           <ProviderCardHeader
             title={title}
             mark={<BrandMark />}
-            summary={headerSummary}
+            summary={headerModels}
+            status={headerStatus}
             open={open}
             role="llm"
           />
@@ -723,7 +723,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
         <ProviderCardHeader
           title={title}
           mark={<BrandMark />}
-          summary={headerSummary}
+          summary={headerModels}
+          status={headerStatus}
           open={open}
           unsaved={dirty}
           unsavedLabel={t('unsaved')}
