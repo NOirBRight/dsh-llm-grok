@@ -10,7 +10,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from 'dsh-llm-providers-ui/client'
-import { createGrokUsageReader } from 'dsh-llm-providers-ui/usage-readers'
+import { createGrokUsageReader, dropPersistedUsageKeys } from 'dsh-llm-providers-ui/usage-readers'
 
 /** Register this card, its shared header ownership, and its quota reader. */
 function installProviderDirectory(ctx: ClientContext): void {
@@ -130,13 +130,21 @@ export function apply(ctx: ClientContext): void {
     }
   }
 
+  let authGeneration = 0
+  /** Purge every bundle copy, even without providerDirectory. Stale reads check currency first. */
+  const invalidateUsageCache = (): void => {
+    dropPersistedUsageKeys([GROK_SETTINGS_NAMESPACE])
+    try { ctx.get('providerDirectory')?.invalidateUsage(GROK_SETTINGS_NAMESPACE) } catch { /* providerDirectory is optional in lab */ }
+  }
+
   const completeAuth: GrokPluginCardFace['completeAuth'] = async (code, attemptId) => {
     const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_COMPLETE_ENDPOINT, { code, ...attemptId === undefined ? {} : { attemptId } })
     if (!result.ok) return { ok: false, retryable: true, message: result.error.message }
     const decoded = decodeGrokAuthStartReply(result.value)
     if (decoded === undefined) return { ok: false, retryable: true, message: t('signInFailed') }
     if (decoded.ok === true) {
-      try { ctx.get('providerDirectory')?.invalidateUsage(GROK_SETTINGS_NAMESPACE) } catch { /* providerDirectory is optional in lab */ }
+      authGeneration += 1
+      invalidateUsageCache()
     }
     return decoded
   }
@@ -146,6 +154,10 @@ export function apply(ctx: ClientContext): void {
     if (!result.ok) throw new Error(result.error.message)
     const decoded = decodeGrokAuthAttemptStatus(result.value)
     if (decoded === undefined) throw new Error(t('statusFailed'))
+    if (decoded.state === 'succeeded') {
+      authGeneration += 1
+      invalidateUsageCache()
+    }
     return decoded
   }
 
@@ -155,10 +167,12 @@ export function apply(ctx: ClientContext): void {
   }
 
   const readAuthStatus: GrokPluginCardFace['readAuthStatus'] = async () => {
+    const generation = authGeneration
     const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_STATUS_ENDPOINT, {})
     if (!result.ok) throw new Error(result.error.message)
     const decoded = decodeGrokAuthStatus(result.value)
     if (decoded === undefined) throw new Error(t('statusFailed'))
+    if (decoded.loggedIn === false && generation === authGeneration) invalidateUsageCache()
     return decoded
   }
 
@@ -166,7 +180,8 @@ export function apply(ctx: ClientContext): void {
     const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_LOGOUT_ENDPOINT, {})
     if (!result.ok) throw new Error(result.error.message)
     if (decodeGrokAuthLogoutReply(result.value) === undefined) throw new Error(t('signOutFailed'))
-    try { ctx.get('providerDirectory')?.invalidateUsage(GROK_SETTINGS_NAMESPACE) } catch { /* providerDirectory is optional in lab */ }
+    authGeneration += 1
+    invalidateUsageCache()
   }
 
   const fetchModels: GrokPluginCardFace['fetchModels'] = async () => {
@@ -178,10 +193,12 @@ export function apply(ctx: ClientContext): void {
   }
 
   const fetchUsage: GrokPluginCardFace['fetchUsage'] = async () => {
+    const generation = authGeneration
     const result = await rpc.call(GROK_RPC_CHANNEL, GROK_USAGE_ENDPOINT, {})
     if (!result.ok) throw new Error(result.error.message)
     const decoded = decodeGrokUsageReply(result.value)
     if (decoded === undefined) throw new Error(t('usageFailed'))
+    if (decoded.status === 'logged-out' && generation === authGeneration) invalidateUsageCache()
     return decoded
   }
 
