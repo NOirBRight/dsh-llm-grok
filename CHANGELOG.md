@@ -1,4 +1,13 @@
 # Changelog
+## [0.3.12] - 2026-09-07
+
+### Changed
+
+- Adopt the shared provider-ui header from `dsh-llm-providers-ui` 0.1.10; remove the per-provider header fork.
+- Header quota loads collapsed on sign-in with idle dedup so expansion never refires; a failed read shows a truthful unavailable dash, never a fabricated percent.
+- Grok billing parser: a 404 stays `unsupported` while a 200 with an unrecognized body throws (failed read, keeps stale data); percentages validate as 0-100 points; an omitted `credit_usage_percent` decodes to 0% only with a known-typed currentPeriod covering `fetchedAt` and zero-or-omitted money pools; summary id follows the period (`monthly`/`weekly`).
+- Development dependency now points at the final `dsh-llm-providers-ui` 0.1.10 release URL with pinned integrity.
+
 ## [0.3.11] - 2026-09-06
 
 ### Added

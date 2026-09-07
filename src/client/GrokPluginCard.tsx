@@ -29,7 +29,7 @@ import {
   modelDetailStyle,
   fieldStyle,
 } from './model-catalog-ui.tsx'
-import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatUsageClock, providerHeaderStyle, resetLabelOf } from './provider-chrome.tsx'
+import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatUsageClock, providerUiCss, resetLabelOf } from './provider-chrome.tsx'
 import type { ProviderQuotaState } from './provider-chrome.tsx'
 import { SortableList } from 'dsh-llm-providers-ui/sortable'
 
@@ -108,7 +108,6 @@ const cardStyle: CSSProperties = {
   borderRadius: 10,
   background: 'var(--dsw-alias-bg-module-platform)',
 }
-const headerStyle = providerHeaderStyle
 const bodyStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
@@ -403,6 +402,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
           const loggedIn = await readAuthStatus()
           if (!stopped && loggedIn.loggedIn) {
             setAuth({ kind: 'signed-in', ...loggedIn.email === undefined ? {} : { email: loggedIn.email } })
+            setUsage({ status: 'idle' })
             setAuthAttemptId(undefined); setAuthorizationUrl(undefined); setPopupBlocked(false)
           }
         } else if (status.state !== 'pending') {
@@ -458,11 +458,11 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
     return () => { cancelled = true }
   }, [readAuthStatus, t])
 
+  // Header quota loads collapsed on sign-in; idle status dedups so expansion never refires.
   useEffect(() => {
-    if (!open || auth.kind !== 'signed-in') return
-    setUsage({ status: 'loading' })
+    if (auth.kind !== 'signed-in' || usage.status !== 'idle') return
     void loadUsage()
-  }, [open, auth.kind])
+  }, [auth.kind, usage.status])
 
   const patchDraft = (models: ModelDraft[]): void => {
     setDraft(models)
@@ -537,6 +537,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
       }
       const status = await readAuthStatus()
       setAuthAttemptId(undefined)
+      if (status.loggedIn) setUsage({ status: 'idle' })
       setAuth(status.loggedIn
         ? { kind: 'signed-in', ...status.email === undefined ? {} : { email: status.email } }
         : { kind: 'signed-out', message: t('signInFailed') })
@@ -657,9 +658,9 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   if (snapshot.status === 'unavailable') {
     return (
       <li style={cardStyle} data-provider-card="" data-provider-role="llm">
+        <style>{providerUiCss}</style>
         <button
           type="button"
-          style={headerStyle}
           data-provider-card-header=""
           aria-expanded={open}
           aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
@@ -688,9 +689,9 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   if (snapshot.status !== 'ready' || draft === undefined) {
     return (
       <li style={cardStyle} data-provider-card="" data-provider-role="llm">
+        <style>{providerUiCss}</style>
         <button
           type="button"
-          style={headerStyle}
           data-provider-card-header=""
           aria-expanded={open}
           aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
@@ -712,9 +713,9 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
 
   return (
     <li style={cardStyle} data-provider-card="" data-provider-role="llm">
+      <style>{providerUiCss}</style>
       <button
         type="button"
-        style={headerStyle}
         data-provider-card-header=""
         aria-expanded={open}
         aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
@@ -729,7 +730,12 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
           unsaved={dirty}
           unsavedLabel={t('unsaved')}
           role="llm"
-          {...headerQuota === null ? {} : { quota: headerQuota }}
+          {...headerQuota === null
+            ? (auth.kind === 'signed-in' && (usage.status === 'error' || usage.status === 'unsupported')
+              // Query attempted but no metered quota: unavailable dash, never a fabricated percent.
+              ? { quota: { label: t('usage') } }
+              : {})
+            : { quota: headerQuota }}
         />
       </button>
       {open

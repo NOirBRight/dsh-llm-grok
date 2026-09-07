@@ -31,9 +31,9 @@ Verified on DeepSeek Harness `0.1.2-alpha.4` and `0.1.2-rc.1` (Cordis `4.0.2`). 
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.9/dsh-llm-providers-ui-0.1.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.10/dsh-llm-providers-ui-0.1.10.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/dsh-llm-grok-0.3.11.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.12/dsh-llm-grok-0.3.12.tgz
 dsh web
 ~~~
 
@@ -47,7 +47,7 @@ Open Settings → LLM Providers → Grok. **Sign in with xAI** starts a Host-own
 
 ![Grok Plugin card: subscription login, usage, and model catalog](docs/images/plugin-card.png)
 
-The Plugin card keeps two catalogs: the signed-in account list from `GET /v1/models-v2`, and the displayed subset stored as `settings.models`. The conversation picker uses only the displayed subset. Each row can set Default thinking and a Context window used as the DSH compaction budget. Official `grok-4.6` / `grok-4.5` default to 500,000 tokens. The card catalog starts collapsed; it can be reordered, edited, deleted, or replaced from the account list. When the subset has never been saved, the frozen default is `grok-4.6` and `grok-4.5`. Chat goes to `POST https://cli-chat-proxy.grok.com/v1/responses`. Every request includes DSH function tools plus always-on server-side `{ type: "web_search" }` and `{ type: "x_search" }`. Search is not a `ctx.web` provider. Server search returns encrypted `tco_*` reasoning items with empty summaries; those stay in replay and no longer each paint an empty Think row. If Grok also echoes the same search as a client `custom_tool_call` (`xs_call-*` / `ws_call-*`, often named `x_keyword_search`), the plugin drops it so DSH does not report `unknown tool`. Reasoning is sent as official Responses `reasoning: { effort }`, with values `low` / `medium` / `high` (default) / `xhigh` (4.6 only). When signed in, the card also shows subscription usage from a Host billing read (`GET /v1/billing?format=credits`). Logged-out cards do not request billing; an unrecognized surface is shown as unsupported, not as an error.
+The Plugin card keeps two catalogs: the signed-in account list from `GET /v1/models-v2`, and the displayed subset stored as `settings.models`. The conversation picker uses only the displayed subset. Each row can set Default thinking and a Context window used as the DSH compaction budget. Official `grok-4.6` / `grok-4.5` default to 500,000 tokens. The card catalog starts collapsed; it can be reordered, edited, deleted, or replaced from the account list. When the subset has never been saved, the frozen default is `grok-4.6` and `grok-4.5`. Chat goes to `POST https://cli-chat-proxy.grok.com/v1/responses`. Every request includes DSH function tools plus always-on server-side `{ type: "web_search" }` and `{ type: "x_search" }`. Search is not a `ctx.web` provider. Server search returns encrypted `tco_*` reasoning items with empty summaries; those stay in replay and no longer each paint an empty Think row. If Grok also echoes the same search as a client `custom_tool_call` (`xs_call-*` / `ws_call-*`, often named `x_keyword_search`), the plugin drops it so DSH does not report `unknown tool`. Reasoning is sent as official Responses `reasoning: { effort }`, with values `low` / `medium` / `high` (default) / `xhigh` (4.6 only). When signed in, the card also shows subscription usage from a Host billing read (`GET /v1/billing?format=credits`). The signed-in card starts its cached billing read while collapsed; expansion does not refetch. Logged-out cards do not request billing. For a valid active credits period with no paid or legacy budget, omitted proto3 zero usage is decoded as zero; malformed or ambiguous paid data is not defaulted. Only a missing billing endpoint (404) is unsupported; malformed or unrecognized successful responses are query errors, without invented quota values.
 
 With `dsh-model-switch` v0.4.x, Grok also registers an optional Image-only adapter for the stable `generate_image` router. It reuses the same authenticated implementation and registers no Search or Vision adapter. Standalone behavior is unchanged.
 
@@ -91,23 +91,23 @@ Owner (Latest):
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.1.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.1.10.tgz
 ~~~
 
 Provider (Latest):
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.11.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.12.tgz
 ~~~
 
 Fixed versions (reproducible):
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.9/dsh-llm-providers-ui-0.1.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.10/dsh-llm-providers-ui-0.1.10.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/dsh-llm-grok-0.3.11.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.12/dsh-llm-grok-0.3.12.tgz
 ~~~
 
 Update, uninstall, and verify:
@@ -115,7 +115,7 @@ Update, uninstall, and verify:
 ~~~sh
 # Update to the latest Release
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.11.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.12.tgz
 # Verify the loaded version
 dsh plugin --profile web list
 dsh plugin --profile web doctor

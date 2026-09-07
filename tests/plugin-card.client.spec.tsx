@@ -294,14 +294,17 @@ describe('GrokPluginCard', () => {
      const readAuthAttemptStatus = vi.fn()
        .mockResolvedValueOnce({ attemptId: 'attempt-1', state: 'pending' as const })
        .mockResolvedValueOnce({ attemptId: 'attempt-1', state: 'succeeded' as const })
+     const fetchUsage = vi.fn(() => Promise.resolve({ status: 'unsupported' } satisfies GrokUsageReply))
      render(<GrokPluginCard {...props({
        startAuth: vi.fn(() => Promise.resolve({ ok: true, attemptId: 'attempt-1', authorizationUrl: 'https://auth.x.ai/example' } satisfies GrokAuthStartReply)),
-       readAuthStatus, readAuthAttemptStatus,
+       readAuthStatus, readAuthAttemptStatus, fetchUsage,
      })} />)
      expand()
      await waitFor(() => { expect(screen.getByRole('button', { name: en.signIn })).toBeTruthy() })
      fireEvent.click(screen.getByRole('button', { name: en.signIn }))
      await waitFor(() => { expect(screen.getByText('Signed in as callback@example.test.')).toBeTruthy() })
      expect(readAuthAttemptStatus).toHaveBeenCalled()
+     // Re-auth re-reads quota for the new session instead of keeping a stale snapshot.
+     await waitFor(() => { expect(fetchUsage).toHaveBeenCalledTimes(1) })
    })
 })

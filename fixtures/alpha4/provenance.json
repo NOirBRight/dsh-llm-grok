@@ -7,7 +7,7 @@
     "commit": "4e84901e6471b79ec0338099867ebb4606d12bb5"
   },
   "roots": [
-    "dsh-llm-grok@0.3.11"
+    "dsh-llm-grok@0.3.12"
   ],
   "packages": [
     {
@@ -2525,15 +2525,15 @@
     },
     {
       "name": "dsh-llm-providers-ui",
-      "version": "0.1.9",
-      "file": "dsh-llm-providers-ui-0.1.9.tgz",
-      "bytes": 55027,
-      "sha256": "be72be8a1fc7681ac676db0683a1628f1122321fa7c850e42daa35926c108fb8",
-      "sha512": "sha512-r3ZcARwJDGwgcWrAmCntY321wdHZ7ZE4UVI/Pg5dAJ4SJCdcJLcem7ZBB086VhRGyWDNIG/Ig8lME4kDFSg9bg==",
+      "version": "0.1.10",
+      "file": "dsh-llm-providers-ui-0.1.10.tgz",
+      "bytes": 77406,
+      "sha256": "1ec6b3fdcb2b204307acc3dbad7ec391ccb15531b4d5dafa0a6938599990ead9",
+      "sha512": "sha512-8P6vR6fua5QWf0pVx4TqrT82Kh81po8rrbwT7uxfKOISfZ+5KstTnUYAcxSPRvMC/l9Mgc3aguthHtA/hcZj6Q==",
       "source": {
         "kind": "npm-registry",
         "registry": "https://registry.npmjs.org",
-        "integrity": "sha512-r3ZcARwJDGwgcWrAmCntY321wdHZ7ZE4UVI/Pg5dAJ4SJCdcJLcem7ZBB086VhRGyWDNIG/Ig8lME4kDFSg9bg=="
+        "integrity": "sha512-8P6vR6fua5QWf0pVx4TqrT82Kh81po8rrbwT7uxfKOISfZ+5KstTnUYAcxSPRvMC/l9Mgc3aguthHtA/hcZj6Q=="
       }
     },
     {
@@ -10431,7 +10431,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/cordis@4.0.2",
       "dependency": "@deepseek-ai/cordis",
       "section": "peerDependencies",
@@ -10439,7 +10439,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-api-remotes@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-api-remotes",
       "section": "peerDependencies",
@@ -10447,7 +10447,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-attachment@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-attachment",
       "section": "peerDependencies",
@@ -10455,7 +10455,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-client-connection@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-connection",
       "section": "peerDependencies",
@@ -10463,7 +10463,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-client-locale@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-locale",
       "section": "peerDependencies",
@@ -10471,7 +10471,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-client-ui-layout@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-ui-layout",
       "section": "peerDependencies",
@@ -10479,7 +10479,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-client-ui-renderer@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-ui-renderer",
       "section": "peerDependencies",
@@ -10487,7 +10487,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-client-ui-settings-plugins@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-ui-settings-plugins",
       "section": "peerDependencies",
@@ -10495,7 +10495,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-client-ui-settings@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-ui-settings",
       "section": "peerDependencies",
@@ -10503,7 +10503,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-client-ui-slots@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-ui-slots",
       "section": "peerDependencies",
@@ -10511,7 +10511,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-fs@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-fs",
       "section": "peerDependencies",
@@ -10519,7 +10519,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-invariants@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-invariants",
       "section": "peerDependencies",
@@ -10527,7 +10527,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-launch-environment@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-launch-environment",
       "section": "peerDependencies",
@@ -10535,7 +10535,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-llm-pi-ai@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-llm-pi-ai",
       "section": "peerDependencies",
@@ -10543,7 +10543,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-llm@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-llm",
       "section": "peerDependencies",
@@ -10551,7 +10551,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-settings@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-settings",
       "section": "peerDependencies",
@@ -10559,7 +10559,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-timeout@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-timeout",
       "section": "peerDependencies",
@@ -10567,7 +10567,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-tools@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-tools",
       "section": "peerDependencies",
@@ -10575,7 +10575,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-util-values@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-util-values",
       "section": "dependencies",
@@ -10583,7 +10583,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/dsh-web@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-web",
       "section": "peerDependencies",
@@ -10591,7 +10591,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@deepseek-ai/schemastery@3.18.2",
       "dependency": "@deepseek-ai/schemastery",
       "section": "peerDependencies",
@@ -10599,7 +10599,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "@earendil-works/pi-ai@0.84.4",
       "dependency": "@earendil-works/pi-ai",
       "section": "dependencies",
@@ -10607,15 +10607,15 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
-      "to": "dsh-llm-providers-ui@0.1.9",
+      "from": "dsh-llm-grok@0.3.12",
+      "to": "dsh-llm-providers-ui@0.1.10",
       "dependency": "dsh-llm-providers-ui",
       "section": "devDependencies",
-      "specifier": "https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.9/dsh-llm-providers-ui-0.1.9.tgz",
+      "specifier": "https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.10/dsh-llm-providers-ui-0.1.10.tgz",
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "dsh-model-switch@0.4.6",
       "dependency": "dsh-model-switch",
       "section": "devDependencies",
@@ -10623,7 +10623,7 @@
       "optional": true
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "dsh-model-switch@0.4.6",
       "dependency": "dsh-model-switch",
       "section": "peerDependencies",
@@ -10631,7 +10631,7 @@
       "optional": true
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "react-dom@18.3.1",
       "dependency": "react-dom",
       "section": "peerDependencies",
@@ -10639,7 +10639,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-grok@0.3.11",
+      "from": "dsh-llm-grok@0.3.12",
       "to": "react@18.3.1",
       "dependency": "react",
       "section": "peerDependencies",
@@ -10647,7 +10647,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-providers-ui@0.1.9",
+      "from": "dsh-llm-providers-ui@0.1.10",
       "to": "@deepseek-ai/cordis@4.0.2",
       "dependency": "@deepseek-ai/cordis",
       "section": "peerDependencies",
@@ -10655,7 +10655,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-providers-ui@0.1.9",
+      "from": "dsh-llm-providers-ui@0.1.10",
       "to": "@deepseek-ai/dsh-client-connection@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-connection",
       "section": "peerDependencies",
@@ -10663,7 +10663,7 @@
       "optional": true
     },
     {
-      "from": "dsh-llm-providers-ui@0.1.9",
+      "from": "dsh-llm-providers-ui@0.1.10",
       "to": "@deepseek-ai/dsh-client-locale@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-locale",
       "section": "peerDependencies",
@@ -10671,7 +10671,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-providers-ui@0.1.9",
+      "from": "dsh-llm-providers-ui@0.1.10",
       "to": "@deepseek-ai/dsh-client-ui-renderer@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-ui-renderer",
       "section": "peerDependencies",
@@ -10679,7 +10679,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-providers-ui@0.1.9",
+      "from": "dsh-llm-providers-ui@0.1.10",
       "to": "@deepseek-ai/dsh-client-ui-session@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-ui-session",
       "section": "peerDependencies",
@@ -10687,7 +10687,7 @@
       "optional": true
     },
     {
-      "from": "dsh-llm-providers-ui@0.1.9",
+      "from": "dsh-llm-providers-ui@0.1.10",
       "to": "@deepseek-ai/dsh-client-ui-settings@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-ui-settings",
       "section": "peerDependencies",
@@ -10695,7 +10695,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-providers-ui@0.1.9",
+      "from": "dsh-llm-providers-ui@0.1.10",
       "to": "@deepseek-ai/dsh-client-ui-sidebar@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-ui-sidebar",
       "section": "peerDependencies",
@@ -10703,7 +10703,7 @@
       "optional": true
     },
     {
-      "from": "dsh-llm-providers-ui@0.1.9",
+      "from": "dsh-llm-providers-ui@0.1.10",
       "to": "@deepseek-ai/dsh-client-ui-slots@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-client-ui-slots",
       "section": "peerDependencies",
@@ -10711,7 +10711,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-providers-ui@0.1.9",
+      "from": "dsh-llm-providers-ui@0.1.10",
       "to": "@deepseek-ai/dsh-settings@0.1.2-alpha.4",
       "dependency": "@deepseek-ai/dsh-settings",
       "section": "peerDependencies",
@@ -10719,7 +10719,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-providers-ui@0.1.9",
+      "from": "dsh-llm-providers-ui@0.1.10",
       "to": "@deepseek-ai/schemastery@3.18.2",
       "dependency": "@deepseek-ai/schemastery",
       "section": "peerDependencies",
@@ -10727,7 +10727,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-providers-ui@0.1.9",
+      "from": "dsh-llm-providers-ui@0.1.10",
       "to": "react-dom@18.3.1",
       "dependency": "react-dom",
       "section": "peerDependencies",
@@ -10735,7 +10735,7 @@
       "optional": false
     },
     {
-      "from": "dsh-llm-providers-ui@0.1.9",
+      "from": "dsh-llm-providers-ui@0.1.10",
       "to": "react@18.3.1",
       "dependency": "react",
       "section": "peerDependencies",
