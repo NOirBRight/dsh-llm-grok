@@ -33,6 +33,7 @@ import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, Usage
 import type { ProviderQuotaState } from './provider-chrome.tsx'
 import { SortableList } from 'dsh-llm-providers-ui/sortable'
 
+
 /** Provider key this card shares with the Provider Usage sidebar cache. */
 const USAGE_PROVIDER_KEY = 'llm-grok'
 
@@ -81,6 +82,7 @@ export type GrokPluginCardProps =
   & InjectFace<GrokPluginCardFace>
 
 type AuthUi =
+  | { kind: 'unknown', message?: string }
   | { kind: 'signed-out', message?: string }
   | { kind: 'signing-in' }
   | { kind: 'signed-in', email?: string }
@@ -351,14 +353,13 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   const [source, setSource] = useState<ModelDraft[] | undefined>(initial)
   const [draft, setDraft] = useState<ModelDraft[] | undefined>(initial)
   const [sourceRevision, setSourceRevision] = useState<number | undefined>(snapshot.revision)
-  const [auth, setAuth] = useState<AuthUi>({ kind: 'signed-out' })
-  /** True once a status read has answered: before that, "signed-out" is only the initial state. */
-  const [authAnswered, setAuthAnswered] = useState(false)
+  const [auth, setAuth] = useState<AuthUi>({ kind: 'unknown' })
   const [pasteCode, setPasteCode] = useState('')
   const [authAttemptId, setAuthAttemptId] = useState<string | undefined>(undefined)
   const [authorizationUrl, setAuthorizationUrl] = useState<string | undefined>(undefined)
   const [popupBlocked, setPopupBlocked] = useState(false)
   const authAttemptRef = useRef<string | undefined>(undefined)
+  const usageEpoch = useRef(0)
   const [usage, setUsage] = useState<UsageState>({ status: 'idle' })
   const [lastUsage, setLastUsage] = useState<GrokUsageView | undefined>(undefined)
   const [usageUpdatedAt, setUsageUpdatedAt] = useState<Date | undefined>(undefined)
@@ -393,6 +394,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   }, [dirty, snapshot.revision, snapshot.status, snapshot.value, sourceRevision])
 
   useEffect(() => { authAttemptRef.current = authAttemptId }, [authAttemptId])
+  useEffect(() => () => { usageEpoch.current++ }, [])
   useEffect(() => () => {
     const attemptId = authAttemptRef.current
     if (attemptId !== undefined) void cancelAuth(attemptId).catch(() => undefined)
@@ -425,10 +427,14 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   }, [auth.kind, authAttemptId, readAuthAttemptStatus, readAuthStatus, t])
 
   const loadUsage = async (): Promise<void> => {
+    const epoch = ++usageEpoch.current
     setUsage({ status: 'loading' })
     try {
       const read = await fetchUsage()
+      if (epoch !== usageEpoch.current) return
       if (read.status === 'logged-out') {
+        setLastUsage(undefined)
+        setUsageUpdatedAt(undefined)
         setAuth({ kind: 'signed-out' })
         setUsage({ status: 'idle' })
         return
@@ -441,26 +447,28 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
       setUsageUpdatedAt(new Date())
       setUsage({ status: 'ready', usage: read.usage })
     } catch (error: unknown) {
+      if (epoch !== usageEpoch.current) return
       setUsage({ status: 'error', message: messageOf(error, t('usageFailed')) })
     }
   }
 
   useEffect(() => {
     let cancelled = false
+    const epoch = usageEpoch.current
     void readAuthStatus().then((status) => {
-      if (cancelled) return
-      setAuthAnswered(true)
+      if (cancelled || epoch !== usageEpoch.current) return
       if (status.loggedIn) {
         setAuth({ kind: 'signed-in', ...status.email === undefined ? {} : { email: status.email } })
         return
       }
+      usageEpoch.current++
       setAuth({ kind: 'signed-out' })
       setLastUsage(undefined)
       setUsageUpdatedAt(undefined)
       setUsage({ status: 'idle' })
     }).catch(() => {
-      if (!cancelled) {
-        setAuth({ kind: 'signed-out', message: t('statusFailed') })
+      if (!cancelled && epoch === usageEpoch.current) {
+        setAuth({ kind: 'unknown', message: t('statusFailed') })
         setUsage({ status: 'idle' })
       }
     })
@@ -506,6 +514,9 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   }
 
   const onSignIn = async (): Promise<void> => {
+    usageEpoch.current++
+    setLastUsage(undefined)
+    setUsageUpdatedAt(undefined)
     setAuth({ kind: 'signing-in' })
     setPasteCode('')
     setAuthorizationUrl(undefined)
@@ -564,13 +575,16 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   }
 
   const onSignOut = async (): Promise<void> => {
+    usageEpoch.current++
     try {
       await logout()
+      usageEpoch.current++
       setAuth({ kind: 'signed-out' })
       setLastUsage(undefined)
       setUsageUpdatedAt(undefined)
       setUsage({ status: 'idle' })
     } catch {
+      setUsage({ status: 'idle' })
       setAuth(current => current.kind === 'signed-in'
         ? current
         : { kind: 'signed-out', message: t('signOutFailed') })
@@ -654,20 +668,32 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
     }
   }
 
-  const statusLabel = signingIn
+  const statusLabel = auth.kind === 'unknown' ? auth.message ?? t('loading') : signingIn
     ? t('signingIn')
     : auth.kind === 'signed-in'
       ? formatSignedIn(t, auth.email)
       : auth.message ?? t('signedOut')
   const modelCount = draft?.length ?? 0
   const headerModels = t('summaryModels').replace('{count}', String(modelCount))
-  const headerStatus = auth.kind === 'signed-in' ? t('summaryOn') : t('summaryOff')
+  const headerStatus = auth.kind === 'unknown' ? auth.message ?? t('loading') : auth.kind === 'signed-in' ? t('summaryOn') : t('summaryOff')
   const liveQuota = headerQuotaOf(usage.status === 'ready' ? usage.usage : lastUsage, t)
-  // The cache only covers "no answer yet"; a settled failure keeps its unavailable dash.
+  // The account read settles into "unknown" while it is still pending, so a cached
+  // meter paints on the first frame; a settled failure withholds the meter instead of
+  // showing a stale percent, and only a known sign-out drops the stored entry.
+  const withheld = auth.kind === 'signed-out' || auth.kind === 'signing-in'
+    || usage.status === 'error' || usage.status === 'unsupported'
   const headerQuota = useProviderQuotaCache(USAGE_PROVIDER_KEY, USAGE_PROVIDER_NAME, liveQuota, {
-    answered: authAnswered,
+    answered: auth.kind !== 'unknown',
     signedOut: auth.kind === 'signed-out',
+    withheld,
   })
+  // Both the loading frame and the settled frame carry the meter; a settled query that
+  // returned no usable quota shows the unavailable dash instead.
+  const quotaProps = headerQuota === null
+    ? (auth.kind === 'signed-in' && (usage.status === 'error' || usage.status === 'unsupported')
+      ? { quota: { label: t('usage') } }
+      : {})
+    : { quota: headerQuota }
 
   if (snapshot.status === 'unavailable') {
     return (
@@ -714,10 +740,11 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
           <ProviderCardHeader
             title={title}
             mark={<BrandMark />}
-            summary={headerModels}
-            status={headerStatus}
+            summary={t('loading')}
+            status=""
             open={open}
             role="llm"
+            {...quotaProps}
           />
         </button>
         {open ? <div style={bodyStyle} data-provider-body=""><p style={statusStyle}>{t('loading')}</p></div> : null}
@@ -744,12 +771,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
           unsaved={dirty}
           unsavedLabel={t('unsaved')}
           role="llm"
-          {...headerQuota === null
-            ? (auth.kind === 'signed-in' && (usage.status === 'error' || usage.status === 'unsupported')
-              // Query attempted but no metered quota: unavailable dash, never a fabricated percent.
-              ? { quota: { label: t('usage') } }
-              : {})
-            : { quota: headerQuota }}
+          {...quotaProps}
         />
       </button>
       {open
