@@ -65,6 +65,9 @@ export interface GrokRpcHandlerOptions {
 /**
  * Host Connection `/grok` handler. Status, start, and usage replies never include tokens;
  * the Alpha.4 Host Connection service applies browser authentication and trusted-host policy.
+ * Every usage failure is answered as a result rather than thrown: an unusable
+ * credential answers {@link INVALID_CREDENTIAL_CODE} so the shared quota cache
+ * drops the previous account's entry instead of keeping it.
  * @param runtime - Host OAuth runtime (production or a test fake).
  * @param options - optional billing URL override for tests.
  */

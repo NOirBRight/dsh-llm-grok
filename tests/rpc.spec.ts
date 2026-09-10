@@ -19,6 +19,7 @@ import {
   decodeGrokSaveResult,
   decodeGrokUsageReply,
 } from '../src/client-contract.ts'
+import { LlmError } from '@deepseek-ai/dsh-llm'
 import { apply, Config, createGrokRpcHandler, inject } from '../src/index.ts'
 import { createGrokAuthRuntime } from '../src/oauth.ts'
 import { readSession, resolveGrokSessionPath, writeSession } from '../src/session.ts'
@@ -238,6 +239,35 @@ describe('Grok authenticated Host Connection RPC', () => {
     expect(result).toEqual({ ok: true, value: { status: 'logged-out' } })
     expect(decodeGrokUsageReply(result.ok ? result.value : undefined)).toEqual({ status: 'logged-out' })
     expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('answers a credential-resolution failure instead of letting it escape', async () => {
+    for (const code of ['MISSING_CREDENTIAL', 'AUTH', 'INVALID_CREDENTIAL']) {
+      // Resolving the stored session is the usage branch's first Host-side step;
+      // a throw here must still answer a typed result, never reject the handler.
+      const handler = createGrokRpcHandler(createGrokAuthRuntime({
+        resolveSessionPath: () => { throw new LlmError(`llm-grok: no usable credential (${code})`, code) },
+      }))
+      const result = await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+      expect(result.ok).toBe(false)
+      expect(result.error?.code).toBe('INVALID_CREDENTIAL')
+      expect(result.error?.message).toBe(`llm-grok: no usable credential (${code})`)
+    }
+  })
+
+  it('keeps a non-credential LlmError code and internalizes other failures', async () => {
+    const throttled = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => { throw new LlmError('llm-grok: the issuer asked for a slower retry', 'RATE_LIMIT') },
+    }))
+    expect((await throttled(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)).error?.code)
+      .toBe('RATE_LIMIT')
+
+    const broken = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => { throw new Error('llm-grok: the session file is unreadable') },
+    }))
+    const result = await broken(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+    expect(result.ok).toBe(false)
+    expect(result.error?.code).toBe('internal')
   })
 
   it('returns decoded billing windows and never includes tokens', async () => {
