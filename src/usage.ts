@@ -5,6 +5,9 @@
  * token. The browser only receives the decoded window view.
  *
  * A missing billing surface (404) is `unsupported`, not a failure.
+ * A 401/403 means the billing surface rejected the stored credential, so the
+ * read fails as {@link INVALID_CREDENTIAL_CODE} and the shared quota cache
+ * drops the previous account's entry instead of keeping it.
  * A 200 with an unrecognized body throws: the capability exists but the
  * read failed, so the sidebar shows an error (keeping stale data), never
  * `unsupported` (capability absent). One documented exception: the official
@@ -15,6 +18,7 @@
  * @module dsh-llm-grok/usage
  */
 
+import { INVALID_CREDENTIAL_CODE, LlmError } from '@deepseek-ai/dsh-llm'
 import type { GrokUsageView, GrokUsageWindow } from './client-contract.ts'
 
 import { GROK_CLI_REQUEST_HEADERS } from './cli-identity.ts'
@@ -248,10 +252,12 @@ export function parseGrokBilling(value: unknown, fetchedAt: string): GrokUsageVi
 
 /**
  * Read the account's current billing windows with a Host-held access token.
- * Only 404 is `unsupported` (no billing surface). Unrecognized 200 JSON
- * (except the documented zero-omitted credits shape), non-JSON bodies, and
- * transport/rate-limit/auth failures throw a message that never includes
- * the token.
+ * Only 404 is `unsupported` (no billing surface). A 401/403 is the billing
+ * surface rejecting the stored credential, so it fails as a {@link LlmError}
+ * carrying {@link INVALID_CREDENTIAL_CODE}. Unrecognized 200 JSON (except the
+ * documented zero-omitted credits shape), non-JSON bodies, transport failures,
+ * and other non-2xx statuses throw a non-LlmError whose message never includes
+ * the token, so callers keep them out of the credential-failure class.
  * @param request - access token and optional test overrides.
  */
 export async function readGrokUsage(
@@ -288,9 +294,12 @@ export async function readGrokUsage(
     await response.body?.cancel()
     return { status: 'unsupported' }
   }
-  if (response.status === 403) {
+  if (response.status === 401 || response.status === 403) {
     await response.body?.cancel()
-    throw new Error('This session cannot read Grok CLI billing. Sign out and sign in again.')
+    throw new LlmError(
+      'This session cannot read Grok CLI billing. Sign out and sign in again.',
+      INVALID_CREDENTIAL_CODE,
+    )
   }
   if (!response.ok) {
     await response.body?.cancel()

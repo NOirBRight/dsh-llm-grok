@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { LlmError } from '@deepseek-ai/dsh-llm'
 import {
   decodeGrokUsageReply,
   decodeGrokUsageView,
@@ -425,9 +426,9 @@ describe('readGrokUsage', () => {
     expect((failure as Error).message).not.toMatch(/access-secret/u)
   })
 
-  it('tells the user to re-login when billing rejects a non-CLI token', async () => {
+  it.each([401, 403])('fails a %i rejection as an unusable credential', async (status) => {
     const server = await fakeBillingServer([{
-      status: 403,
+      status,
       body: { error: 'Action must be performed by Grok CLI token users.' },
     }])
 
@@ -436,9 +437,22 @@ describe('readGrokUsage', () => {
       billingURL: server.url,
     }).catch((error: unknown) => error)
 
-    expect(failure).toBeInstanceOf(Error)
+    expect(failure).toBeInstanceOf(LlmError)
+    expect((failure as LlmError).code).toBe('INVALID_CREDENTIAL')
     expect((failure as Error).message).toMatch(/Sign out and sign in again/u)
     expect((failure as Error).message).not.toMatch(/access-secret/u)
+  })
+
+  it('keeps a 500 out of the credential class', async () => {
+    const server = await fakeBillingServer([{ status: 500, body: { error: 'internal' } }])
+
+    const failure = await readGrokUsage({
+      accessToken: 'access-secret',
+      billingURL: server.url,
+    }).catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(Error)
+    expect(failure).not.toBeInstanceOf(LlmError)
   })
 
   it('surfaces a transport failure without token material', async () => {
@@ -448,6 +462,7 @@ describe('readGrokUsage', () => {
     }).catch((error: unknown) => error)
 
     expect(failure).toBeInstanceOf(Error)
+    expect(failure).not.toBeInstanceOf(LlmError)
     expect((failure as Error).message).toMatch(/could not reach/u)
     expect((failure as Error).message).not.toMatch(/access-secret/u)
   })

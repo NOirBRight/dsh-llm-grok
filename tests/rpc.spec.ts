@@ -270,6 +270,45 @@ describe('Grok authenticated Host Connection RPC', () => {
     expect(result.error?.code).toBe('internal')
   })
 
+  it('answers a billing credential rejection as INVALID_CREDENTIAL', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-llm-grok-rpc-usage-401-'))
+    const path = join(root, 'grok-oauth.json')
+    const billing = await fakeBillingServer([{ status: 401, body: { error: 'invalid token' } }])
+    await writeSession(path, {
+      accessToken: 'access-secret',
+      refreshToken: 'refresh-secret',
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+    })
+    const handler = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => path,
+      issuer: 'http://127.0.0.1:1',
+    }), { billingURL: billing.url })
+
+    const result = await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+    expect(result.ok).toBe(false)
+    expect(result.error?.code).toBe('INVALID_CREDENTIAL')
+    expect(JSON.stringify(result)).not.toMatch(/access-secret|refresh-secret/u)
+  })
+
+  it('keeps a billing 5xx out of the credential class', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-llm-grok-rpc-usage-500-'))
+    const path = join(root, 'grok-oauth.json')
+    const billing = await fakeBillingServer([{ status: 500, body: { error: 'internal' } }])
+    await writeSession(path, {
+      accessToken: 'access-secret',
+      refreshToken: 'refresh-secret',
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+    })
+    const handler = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => path,
+      issuer: 'http://127.0.0.1:1',
+    }), { billingURL: billing.url })
+
+    const result = await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+    expect(result.ok).toBe(false)
+    expect(result.error?.code).toBe('internal')
+  })
+
   it('returns decoded billing windows and never includes tokens', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-llm-grok-rpc-usage-'))
     const path = join(root, 'grok-oauth.json')
@@ -394,6 +433,7 @@ describe('Grok authenticated Host Connection RPC', () => {
 
     const result = await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
     expect(result.ok).toBe(false)
+    expect(result.error?.code).toBe('internal')
     expect(result.error?.message).toMatch(/could not reach/u)
     expect(JSON.stringify(result)).not.toMatch(/access-secret|refresh-secret/u)
   })
