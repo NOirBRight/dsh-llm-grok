@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { clearProviderUsageCache } from 'dsh-llm-providers-ui/usage-readers'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { GrokPluginCard } from '../src/client/GrokPluginCard.tsx'
 import type { GrokPluginCardProps } from '../src/client/GrokPluginCard.tsx'
@@ -10,6 +11,8 @@ import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client
 import type { GrokAuthStartReply, GrokAuthStatus, GrokCatalogModel, GrokSettingsView, GrokUsageReply } from '../src/client-contract.ts'
 
 afterEach(() => { cleanup() })
+// Each case starts with an empty shared cache: the dash cases assert "nothing was ever cached".
+beforeEach(() => { clearProviderUsageCache() })
 
 const settings: GrokSettingsView = {
   streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,

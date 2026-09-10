@@ -353,6 +353,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   const [draft, setDraft] = useState<ModelDraft[] | undefined>(initial)
   const [sourceRevision, setSourceRevision] = useState<number | undefined>(snapshot.revision)
   const [auth, setAuth] = useState<AuthUi>({ kind: 'signed-out' })
+  /** True once a status read has answered: before that, "signed-out" is only the initial state. */
+  const [authAnswered, setAuthAnswered] = useState(false)
   const [pasteCode, setPasteCode] = useState('')
   const [authAttemptId, setAuthAttemptId] = useState<string | undefined>(undefined)
   const [authorizationUrl, setAuthorizationUrl] = useState<string | undefined>(undefined)
@@ -448,6 +450,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
     let cancelled = false
     void readAuthStatus().then((status) => {
       if (cancelled) return
+      setAuthAnswered(true)
       if (status.loggedIn) {
         setAuth({ kind: 'signed-in', ...status.email === undefined ? {} : { email: status.email } })
         return
@@ -665,17 +668,22 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   // answer always wins, and a sign-out drops the entry instead of leaving it stale.
   useEffect(() => {
     if (auth.kind !== 'signed-in') {
-      if (auth.kind === 'signed-out') dropPersistedUsageKeys([USAGE_PROVIDER_KEY])
+      // Only a *known* sign-out may drop the entry: the initial state already reads
+      // signed-out and would otherwise delete the cache the first frame just used.
+      if (authAnswered && auth.kind === 'signed-out') dropPersistedUsageKeys([USAGE_PROVIDER_KEY])
       return
     }
     if (liveQuota !== null) rememberHeadlineQuota(USAGE_PROVIDER_KEY, USAGE_PROVIDER_NAME, liveQuota)
   }, [auth.kind, liveQuota?.remainingPercent, liveQuota?.label])
   // The cache only covers "no answer yet"; a settled failure keeps its unavailable dash.
-  const usageFailed = usage.status === 'error' || usage.status === 'unsupported'
   // No auth gate on the cached value: it must paint on the first frame, before the
   // account read answers. A stale entry cannot linger, because sign-out drops it.
+  // Known signed-out beats the cache: a stored value for another account must not
+  // reappear on the frame before the drop effect runs. Unknown (still loading) does
+  // not, because that is exactly the first frame the cache exists to cover.
+  const cacheUsable = !(authAnswered && auth.kind === 'signed-out')
   const headerQuota = liveQuota
-    ?? (usageFailed ? null : headerQuotaFromCache(peekCachedUsage(USAGE_PROVIDER_KEY)) ?? null)
+    ?? (cacheUsable ? headerQuotaFromCache(peekCachedUsage(USAGE_PROVIDER_KEY)) ?? null : null)
 
   if (snapshot.status === 'unavailable') {
     return (

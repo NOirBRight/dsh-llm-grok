@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 // Collapsed header quota: usage loads collapsed without expansion, expansion never refires, failures stay truthful.
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { GrokPluginCard } from '../src/client/GrokPluginCard.tsx'
 import type { GrokPluginCardProps } from '../src/client/GrokPluginCard.tsx'
 import { en } from '../src/client/locales.ts'
+import { clearProviderUsageCache, rememberHeadlineQuota } from 'dsh-llm-providers-ui/usage-readers'
 import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
 import type { GrokSettingsView, GrokUsageReply } from '../src/client-contract.ts'
 
 afterEach(() => { cleanup() })
+// Each case starts with an empty shared cache: the dash cases assert "nothing was ever cached".
+beforeEach(() => { clearProviderUsageCache() })
 
 const settings: GrokSettingsView = {
   streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
@@ -53,6 +56,18 @@ function props(overrides: Record<string, unknown> = {}): GrokPluginCardProps {
 }
 
 describe('GrokPluginCard collapsed quota', () => {
+  it('paints the shared cached quota before any live answer arrives', async () => {
+    clearProviderUsageCache()
+    rememberHeadlineQuota('llm-grok', 'Grok', { label: 'GrokBuild', remainingPercent: 37 })
+    // The live read never settles: the cached value must be the only source.
+    const fetchUsage = vi.fn(() => new Promise<GrokUsageReply>(() => undefined))
+    render(<GrokPluginCard {...props({ fetchUsage })} />)
+
+    const meter = await screen.findByRole('meter', { name: 'GrokBuild' })
+    expect(meter.getAttribute('aria-valuenow')).toBe('37')
+    clearProviderUsageCache()
+  })
+
   it('shows header quota while collapsed and does not reload on expansion', async () => {
     const fetchUsage = vi.fn(() => Promise.resolve(usageOk))
     render(<GrokPluginCard {...props({ fetchUsage })} />)
