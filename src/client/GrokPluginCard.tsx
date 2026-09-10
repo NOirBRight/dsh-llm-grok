@@ -16,6 +16,7 @@ import type {
   GrokUsageView,
   GrokUsageWindow,
 } from '../client-contract.ts'
+import { GROK_SETTINGS_NAMESPACE } from '../client-contract.ts'
 import { officialDefaultEffort, officialEffortsFor } from '../reasoning.ts'
 import type { GrokSettingsKey } from './locales.ts'
 import { BrandMark } from './BrandMark.tsx'
@@ -29,13 +30,11 @@ import {
   modelDetailStyle,
   fieldStyle,
 } from './model-catalog-ui.tsx'
-import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatUsageClock, providerUiCss, resetLabelOf, useProviderQuotaCache } from './provider-chrome.tsx'
+import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatUsageClock, providerUiCss, providerQuotaHeaderProps, resetLabelOf, useProviderQuotaCache } from './provider-chrome.tsx'
 import type { ProviderQuotaState } from './provider-chrome.tsx'
 import { SortableList } from 'dsh-llm-providers-ui/sortable'
 
 
-/** Provider key this card shares with the Provider Usage sidebar cache. */
-const USAGE_PROVIDER_KEY = 'llm-grok'
 
 /** Display name recorded with the cached headline quota. */
 const USAGE_PROVIDER_NAME = 'Grok'
@@ -682,18 +681,17 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   // showing a stale percent, and only a known sign-out drops the stored entry.
   const withheld = auth.kind === 'signed-out' || auth.kind === 'signing-in'
     || usage.status === 'error' || usage.status === 'unsupported'
-  const headerQuota = useProviderQuotaCache(USAGE_PROVIDER_KEY, USAGE_PROVIDER_NAME, liveQuota, {
+  const headerQuota = useProviderQuotaCache(GROK_SETTINGS_NAMESPACE, USAGE_PROVIDER_NAME, liveQuota, {
     answered: auth.kind !== 'unknown',
     signedOut: auth.kind === 'signed-out',
     withheld,
   })
   // Both the loading frame and the settled frame carry the meter; a settled query that
   // returned no usable quota shows the unavailable dash instead.
-  const quotaProps = headerQuota === null
-    ? (auth.kind === 'signed-in' && (usage.status === 'error' || usage.status === 'unsupported')
-      ? { quota: { label: t('usage') } }
-      : {})
-    : { quota: headerQuota }
+  const quotaProps = providerQuotaHeaderProps(headerQuota, {
+    dashLabel: t('usage'),
+    settled: auth.kind === 'signed-in' && (usage.status === 'error' || usage.status === 'unsupported'),
+  })
 
   if (snapshot.status === 'unavailable') {
     return (
