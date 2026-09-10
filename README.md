@@ -32,7 +32,7 @@ Verified on DeepSeek Harness `0.1.2-alpha.4` and `0.1.2-rc.1` (Cordis `4.0.2`). 
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.10/dsh-llm-providers-ui-0.1.10.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.12-015rc1/dsh-llm-providers-ui-0.1.12.tgz
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.12/dsh-llm-grok-0.3.12.tgz
 dsh web
@@ -90,11 +90,11 @@ xAI Grok subscription login, Responses chat, usage, search, and Imagine. The rel
 
 The dsh-llm-providers-ui package owns the LLM Providers page, navigation, and shared order store. This package owns only its provider card, models, credentials, and Host route. Install the Owner first for Web; headless Host routing works without the Owner.
 
-Owner (Latest):
+Owner (0.1.12-015rc1 candidate — <https://github.com/NOirBRight/dsh-llm-providers-ui/releases/tag/v0.1.12-015rc1>):
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.1.10.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.12-015rc1/dsh-llm-providers-ui-0.1.12.tgz
 ~~~
 
 Provider (Latest):
@@ -108,7 +108,7 @@ Fixed versions (reproducible):
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.10/dsh-llm-providers-ui-0.1.10.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.12-015rc1/dsh-llm-providers-ui-0.1.12.tgz
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.12/dsh-llm-grok-0.3.12.tgz
 ~~~

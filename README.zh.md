@@ -21,7 +21,7 @@ DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由�
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.9/dsh-llm-providers-ui-0.1.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.12-015rc1/dsh-llm-providers-ui-0.1.12.tgz
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/dsh-llm-grok-0.3.11.tgz
 dsh web
@@ -87,11 +87,11 @@ xAI Grok subscription login, Responses chat, usage, search, and Imagine. 正式�
 
 LLM Providers 页面、导航和共享排序由 dsh-llm-providers-ui 独占；本插件只提供卡片、模型和 Host 路由。Web 必须先装 Owner，headless 只使用 Host 路由时可以不装 Owner。
 
-Owner（Latest）：
+Owner（0.1.12-015rc1 候选 — <https://github.com/NOirBRight/dsh-llm-providers-ui/releases/tag/v0.1.12-015rc1>）：
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.1.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.12-015rc1/dsh-llm-providers-ui-0.1.12.tgz
 ~~~
 
 本 Provider（Latest）：
@@ -105,7 +105,7 @@ dsh plugin --profile web add --force \
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.9/dsh-llm-providers-ui-0.1.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.12-015rc1/dsh-llm-providers-ui-0.1.12.tgz
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/dsh-llm-grok-0.3.11.tgz
 ~~~
