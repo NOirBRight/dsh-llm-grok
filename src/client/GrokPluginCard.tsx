@@ -672,8 +672,10 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   }, [auth.kind, liveQuota?.remainingPercent, liveQuota?.label])
   // The cache only covers "no answer yet"; a settled failure keeps its unavailable dash.
   const usageAnswered = usage.status === 'ready' || lastUsage !== undefined
+  // No auth gate on the cached value: it must paint on the first frame, before the
+  // account read answers. A stale entry cannot linger, because sign-out drops it.
   const headerQuota = liveQuota
-    ?? (auth.kind === 'signed-in' && !usageAnswered ? headerQuotaFromCache(peekCachedUsage(USAGE_PROVIDER_KEY)) ?? null : null)
+    ?? (usageAnswered ? null : headerQuotaFromCache(peekCachedUsage(USAGE_PROVIDER_KEY)) ?? null)
 
   if (snapshot.status === 'unavailable') {
     return (
