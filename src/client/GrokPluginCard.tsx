@@ -31,7 +31,14 @@ import {
 } from './model-catalog-ui.tsx'
 import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatUsageClock, providerUiCss, resetLabelOf } from './provider-chrome.tsx'
 import type { ProviderQuotaState } from './provider-chrome.tsx'
+import { dropPersistedUsageKeys, headerQuotaFromCache, peekCachedUsage, rememberHeadlineQuota } from 'dsh-llm-providers-ui/usage-readers'
 import { SortableList } from 'dsh-llm-providers-ui/sortable'
+
+/** Provider key this card shares with the Provider Usage sidebar cache. */
+const USAGE_PROVIDER_KEY = 'llm-grok'
+
+/** Display name recorded with the cached headline quota. */
+const USAGE_PROVIDER_NAME = 'Grok'
 
 /** Dependencies injected by the browser-plugin registration. */
 export interface GrokPluginCardFace {
@@ -653,7 +660,20 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   const modelCount = draft?.length ?? 0
   const headerModels = t('summaryModels').replace('{count}', String(modelCount))
   const headerStatus = auth.kind === 'signed-in' ? t('summaryOn') : t('summaryOff')
-  const headerQuota = headerQuotaOf(usage.status === 'ready' ? usage.usage : lastUsage, t)
+  const liveQuota = headerQuotaOf(usage.status === 'ready' ? usage.usage : lastUsage, t)
+  // One cache shared with the Provider Usage sidebar: first paint reads it, a live
+  // answer always wins, and a sign-out drops the entry instead of leaving it stale.
+  useEffect(() => {
+    if (auth.kind !== 'signed-in') {
+      if (auth.kind === 'signed-out') dropPersistedUsageKeys([USAGE_PROVIDER_KEY])
+      return
+    }
+    if (liveQuota !== null) rememberHeadlineQuota(USAGE_PROVIDER_KEY, USAGE_PROVIDER_NAME, liveQuota)
+  }, [auth.kind, liveQuota?.remainingPercent, liveQuota?.label])
+  // The cache only covers "no answer yet"; a settled failure keeps its unavailable dash.
+  const usageAnswered = usage.status === 'ready' || lastUsage !== undefined
+  const headerQuota = liveQuota
+    ?? (auth.kind === 'signed-in' && !usageAnswered ? headerQuotaFromCache(peekCachedUsage(USAGE_PROVIDER_KEY)) ?? null : null)
 
   if (snapshot.status === 'unavailable') {
     return (
