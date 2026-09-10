@@ -14,6 +14,7 @@ const FIXTURE_ROOT = join(ROOT, 'fixtures', 'alpha4')
 const TARBALL_ROOT = join(FIXTURE_ROOT, 'tarballs')
 const ALPHA4 = '0.1.2-alpha.4'
 const RC1 = '0.1.2-rc.1'
+const RC15 = '0.1.5-rc.1'
 const CORDIS = '4.0.2'
 const CORDIS_RANGE = '>=4.0.2 <5.0.0'
 const OFFICIAL_TAG = 'dsh-v0.1.2-alpha.4'
@@ -130,10 +131,11 @@ function checkAlpha4Manifest(manifest, label) {
       // Fixture devDependencies are never installed into the offline closure (only
       // dependencies/optionalDependencies/peerDependencies feed edge resolution, plus the
       // root devDeps for the owner/type packages), so an exact pin of either verified
-      // runtime is accepted there. Runtime sections stay strict, and Alpha.4 pool purity
+      // runtime is accepted there, plus the exact 0.1.5-rc.1 target-plane pin used to
+      // compile against target host types. Runtime sections stay strict, and Alpha.4 pool purity
       // is still enforced by edge satisfaction below, so an exact-rc.1 runtime edge cannot
       // pull an rc.1 DSH archive into the graph (released fixtures pin devDeps per runtime).
-      const devRuntimePin = section === 'devDependencies' && (range === ALPHA4 || range === RC1)
+      const devRuntimePin = section === 'devDependencies' && (range === ALPHA4 || range === RC1 || range === RC15)
       if (name.startsWith('@deepseek-ai/dsh-') && range !== ALPHA4 && !devRuntimePin && !(satisfies(ALPHA4, range) && satisfies(RC1, range)) && !(capturedOfficialWorkspace && range === 'workspace:^')) fail(label + ' has a DSH range that excludes Alpha.4 or rc.1: ' + name + ' ' + range)
       // Cordis plugins published from the upstream monorepo retain their
       // workspace peer range; the harness packages and this plugin must pin

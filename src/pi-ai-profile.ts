@@ -125,6 +125,7 @@ export function createGrokPiAiProfile(connection: GrokConnectionOptions): Resolv
     requestImageMaxBytes: 1024 * 1024,
     piProvider,
     configuredMaxTokens,
+    modelErrors: new Map(),
     headers,
   }
   return profile
