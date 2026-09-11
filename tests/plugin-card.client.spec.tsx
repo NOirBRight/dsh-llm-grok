@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { clearProviderUsageCache } from 'dsh-llm-providers-ui/usage-readers'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { providerDetailCopy } from 'dsh-llm-providers-ui/provider-detail'
 import { GrokPluginCard } from '../src/client/GrokPluginCard.tsx'
 import type { GrokPluginCardProps } from '../src/client/GrokPluginCard.tsx'
 import { en } from '../src/client/locales.ts'
@@ -309,5 +310,23 @@ describe('GrokPluginCard', () => {
      expect(readAuthAttemptStatus).toHaveBeenCalled()
      // Re-auth re-reads quota for the new session instead of keeping a stale snapshot.
      await waitFor(() => { expect(fetchUsage).toHaveBeenCalledTimes(1) })
+   })
+   it('renders the shared detail template when the settings page asks for it', () => {
+     const onRefresh = vi.fn()
+     const usage = {
+       status: 'ready' as const,
+       fetchedAt: '2026-09-12T00:00:00.000Z',
+       windows: [{ id: 'week', label: 'Week', shortLabel: 'W', remainingPercent: 83, valueText: '83%' }],
+     }
+     const { container } = render(<GrokPluginCard {...props({ mode: 'detail', usage, accountState: 'connected', onRefresh, copy: providerDetailCopy.en })} />)
+
+     expect(container.querySelector('[data-provider-detail]')).not.toBeNull()
+     expect(container.querySelector('[data-c-quota]')).not.toBeNull()
+     expect(container.textContent).toContain('83%')
+     expect(container.textContent).toContain('2 models')
+     const advanced = container.querySelector('details.c-advanced')
+     expect(advanced).not.toBeNull()
+     expect((advanced as HTMLDetailsElement).open).toBe(false)
+     expect(container.textContent).not.toContain(en.usage)
    })
 })

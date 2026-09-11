@@ -12,10 +12,23 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from 'dsh-llm-providers-ui/client'
 import { createGrokUsageReader, dropPersistedUsageKeys } from 'dsh-llm-providers-ui/usage-readers'
 
-/** Register this card, its shared header ownership, and its quota reader. */
-function installProviderDirectory(ctx: ClientContext): void {
+/**
+ * Register this card, its shared header ownership, quota reader, display name,
+ * and active model count so the shared settings page needs no DOM probing.
+ * @param ctx - client context carrying the Provider directory.
+ * @param modelCount - reads the current active model count from plugin state.
+ */
+function installProviderDirectory(ctx: ClientContext, modelCount: () => number | undefined): void {
   ctx.inject(['providerDirectory'], scope => {
-    scope.effect(() => scope.providerDirectory.register({ key: GROK_SETTINGS_NAMESPACE, header: 'shared', usage: createGrokUsageReader() }), 'dsh-llm-grok: provider directory registration')
+    scope.effect(() => scope.providerDirectory.register({
+      key: GROK_SETTINGS_NAMESPACE,
+      name: 'Grok',
+      header: 'shared',
+      // The card renders the shared detail template; the settings page adds only the breadcrumb.
+      detail: 'shared',
+      usage: createGrokUsageReader(),
+      modelCount,
+    }), 'dsh-llm-grok: provider directory registration')
   })
 }
 
@@ -65,7 +78,6 @@ export const inject = ['slots', 'locale', 'connection']
 /** Register localized Grok configuration under Plugin configuration. */
 
 export function apply(ctx: ClientContext): void {
-  installProviderDirectory(ctx)
 
   const localeNamespace = 'settings.grok'
   ctx.effect(
@@ -86,6 +98,9 @@ export function apply(ctx: ClientContext): void {
     set: async () => { throw new Error('Use Grok management settings/save') },
     unset: async () => { throw new Error('Use Grok management settings/save') },
   }
+  // Registered after the snapshot exists so the published count always reads live state.
+  installProviderDirectory(ctx, () => currentSnapshot.value?.models.length)
+
   const publishSettings = (settings: GrokSettingsView, revision: number): void => {
     currentSnapshot = { ...currentSnapshot, status: 'ready', value: settings, revision }
     listeners.forEach(listener => listener())

@@ -34,6 +34,7 @@ import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, Usage
 import type { ProviderQuotaState } from './provider-chrome.tsx'
 import { SortableList } from 'dsh-llm-providers-ui/sortable'
 import { rememberHeadlineQuota } from 'dsh-llm-providers-ui/usage-readers'
+import { ProviderDetail, providerDetailCopy, type ProviderItemSlotContext } from 'dsh-llm-providers-ui/provider-detail'
 
 
 
@@ -81,6 +82,8 @@ export interface GrokPluginCardFace {
 export type GrokPluginCardProps =
   PropsRuntime<'settings.provider.item'>
   & InjectFace<GrokPluginCardFace>
+  // Present only on the settings page; an older host renders the legacy card.
+  & Partial<ProviderItemSlotContext>
 
 type AuthUi =
   | { kind: 'unknown', message?: string }
@@ -753,142 +756,9 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
     )
   }
 
-  return (
-    <li style={cardStyle} data-provider-card="" data-provider-role="llm">
-      <style>{providerUiCss}</style>
-      <button
-        type="button"
-        data-provider-card-header=""
-        aria-expanded={open}
-        aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
-        onClick={() => { setOpen(!open) }}
-      >
-        <ProviderCardHeader
-          title={title}
-          mark={<BrandMark />}
-          summary={headerModels}
-          status={headerStatus}
-          open={open}
-          unsaved={dirty}
-          unsavedLabel={t('unsaved')}
-          role="llm"
-          {...quotaProps}
-        />
-      </button>
-      {open
-        ? (
-          <div style={bodyStyle} data-provider-body="">
-            <p style={hintStyle}>{t('description')}</p>
-            <section style={sectionStyle} aria-label={statusLabel}>
-              <AuthToolbar
-                status={<p style={{ ...statusStyle, margin: 0 }}>{statusLabel}</p>}
-                action={auth.kind === 'signed-in'
-                  ? <button type="button" style={buttonStyle} onClick={() => { void onSignOut() }}>{t('signOut')}</button>
-                  : auth.kind === 'signing-in'
-                    ? <button type="button" style={buttonStyle} onClick={() => { void onCancelSignIn() }}>{t('cancel')}</button>
-                    : <button type="button" style={buttonStyle} onClick={() => { void onSignIn() }}>{t('signIn')}</button>}
-              />
-                    {auth.kind === 'signing-in'
-                      ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {authorizationUrl !== undefined && popupBlocked
-                             ? <a href={authorizationUrl} target="_blank" rel="noopener noreferrer" style={statusStyle}>Open xAI sign-in</a>
-                             : null}
-                           <p style={hintStyle}>{t('pasteCode')}</p>
-                          <label style={labelStyle} htmlFor="grok-oauth-code">{t('pasteCodeLabel')}</label>
-                          <input
-                            id="grok-oauth-code"
-                            style={inputStyle}
-                            value={pasteCode}
-                            autoComplete="off"
-                            spellCheck={false}
-                            aria-label={t('pasteCodeLabel')}
-                            onChange={event => { setPasteCode(event.target.value) }}
-                          />
-                          <button
-                            type="button"
-                            style={buttonStyle}
-                            disabled={pasteCode.trim().length === 0}
-                            onClick={() => { void onPasteCode() }}
-                          >
-                            {t('pasteCodeSubmit')}
-                          </button>
-                        </div>
-                      )
-                      : null}
-            </section>
-            {auth.kind === 'signed-in'
-              ? (
-                <section style={sectionStyle} aria-label={t('usage')}>
-                  <UsageHeader
-                    title={t('usage')}
-                    spinning={usage.status === 'loading' || usage.status === 'idle'}
-                    disabled={usage.status === 'loading'}
-                    refreshLabel={t('usageRefresh')}
-                    busyLabel={t('usageLoading')}
-                    {...usage.status === 'error' ? { error: t('usageRefreshFailed') } : {}}
-                    onRefresh={() => { void loadUsage() }}
-                  />
-                  {(() => {
-                    if (usage.status === 'loading' || usage.status === 'idle') {
-                      return <UsageSkeleton rows={lastUsage?.windows.length ?? 1} />
-                    }
-                    const bars = usage.status === 'ready' ? usage.usage : lastUsage
-                    if (bars !== undefined) {
-                      return (
-                        <>
-                          {bars.windows.map((window, index) => (
-                            <UsageBar
-                              key={window.id + ':' + String(index)}
-                              usedText={t('usageUsed')}
-                              window={window}
-                              t={t}
-                            />
-                          ))}
-                        </>
-                      )
-                    }
-                    if (usage.status === 'unsupported') return <p style={hintStyle}>{t('usageUnsupported')}</p>
-                    if (usage.status === 'error') return <p style={errorStyle}>{usage.message}</p>
-                    return <UsageSkeleton rows={1} />
-                  })()}
-                  <UsageUpdatedAt
-                    at={usageUpdatedAt}
-                    label={usageUpdatedAt === undefined ? '' : t('usageUpdatedAt').replace('{time}', formatUsageClock(usageUpdatedAt))}
-                  />
-                </section>
-              )
-              : null}
-            <section style={sectionStyle} aria-label={t('models')}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <button
-                  type="button"
-                  style={disclosureStyle}
-                  aria-expanded={catalogOpen}
-                  aria-label={t('models')}
-                  onClick={() => { setCatalogOpen(!catalogOpen) }}
-                >
-                  <IconChevron open={catalogOpen} />
-                  <span style={sectionTitleStyle}>{t('models')}</span>
-                  <span style={hintStyle}>{customModels ? t('customized') : t('inherited')}</span>
-                </button>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: 'none' }}>
-                  <button type="button" style={buttonStyle} disabled={disabled} onClick={() => { setModelSort(current => !current) }} aria-pressed={modelSort}>
-                    {modelSort ? t('doneSorting') : t('sortModels')}
-                  </button>
-                  <button
-                    type="button"
-                    style={buttonStyle}
-                    disabled={fetching || disabled}
-                    onClick={() => { void chooseFromAccount() }}
-                  >
-                    {t(fetching ? 'fetchingModels' : 'fetchModels')}
-                  </button>
-                </span>
-              </div>
-              {catalogOpen
-                ? (
-                  <>
+  // Prototype C pieces, shared by the legacy card and the migrated detail.
+  const modelsList = (
+    <>
                     <SortableList
                       items={draft}
                       getId={model => model.rowId}
@@ -1033,10 +903,9 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                     >
                       {t('addModel')}
                     </button>
-                  </>
-                )
-                : null}
-            </section>
+    </>
+  )
+  const capabilitiesSection = (
             <section style={sectionStyle} aria-label={t('capabilities')}>
               <p style={sectionTitleStyle}>{t('capabilities')}</p>
               <Capability
@@ -1051,6 +920,9 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
               />
               <p style={hintStyle}>{t('enableImageGenHelp')}</p>
             </section>
+  )
+  const draftBlock = (
+    <>
             {invalid ? <p style={errorStyle}>{t('invalidModel')}</p> : null}
             {failure === undefined ? null : <p style={errorStyle}>{failure}</p>}
             {notice === undefined ? null : <p style={statusStyle}>{notice}</p>}
@@ -1065,6 +937,217 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                 {t(busy ? 'saving' : 'save')}
               </button>
             </div>
+    </>
+  )
+
+
+  // Prototype C detail: the shared template owns the layout, this card owns Grok's data.
+  if (props.mode === 'detail') {
+    const accountActions = auth.kind === 'signed-in'
+      ? <button type="button" style={buttonStyle} onClick={() => { void onSignOut() }}>{t('signOut')}</button>
+      : auth.kind === 'signing-in'
+        ? <button type="button" style={buttonStyle} onClick={() => { void onCancelSignIn() }}>{t('cancel')}</button>
+        : <button type="button" style={buttonStyle} onClick={() => { void onSignIn() }}>{t('signIn')}</button>
+    const accountBody = auth.kind === 'signing-in'
+      ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {authorizationUrl !== undefined && popupBlocked
+              ? <a href={authorizationUrl} target="_blank" rel="noopener noreferrer" style={statusStyle}>Open xAI sign-in</a>
+              : null}
+            <p style={hintStyle}>{t('pasteCode')}</p>
+            <label style={labelStyle} htmlFor="grok-oauth-code">{t('pasteCodeLabel')}</label>
+            <input
+              id="grok-oauth-code"
+              style={inputStyle}
+              value={pasteCode}
+              autoComplete="off"
+              spellCheck={false}
+              aria-label={t('pasteCodeLabel')}
+              onChange={event => { setPasteCode(event.target.value) }}
+            />
+            <button
+              type="button"
+              style={buttonStyle}
+              disabled={pasteCode.trim().length === 0}
+              onClick={() => { void onPasteCode() }}
+            >
+              {t('pasteCodeSubmit')}
+            </button>
+          </div>
+        )
+      : undefined
+    return (
+      <li style={cardStyle} data-provider-card="" data-provider-role="llm">
+        <ProviderDetail
+          name={USAGE_PROVIDER_NAME}
+          role="llm"
+          copy={props.copy ?? providerDetailCopy.en}
+          notice={t('description')}
+          account={{
+            state: auth.kind === 'signed-in' ? 'connected' : 'unconnected',
+            label: statusLabel,
+            actions: accountActions,
+            ...(accountBody === undefined ? {} : { body: accountBody }),
+          }}
+          quota={{
+            status: props.usage?.status ?? 'loading',
+            windows: props.usage?.windows ?? [],
+            ...(props.onRefresh === undefined ? {} : { onRefresh: props.onRefresh }),
+          }}
+          models={{
+            count: draft === undefined ? 0 : draft.length,
+            allOpen: catalogOpen,
+            onToggleAll: () => { setCatalogOpen(value => !value) },
+            sorting: modelSort,
+            onToggleSorting: () => { setModelSort(value => !value) },
+            onChooseFromAccount: () => { void chooseFromAccount() },
+            chooseDisabled: fetching || disabled,
+            list: modelsList,
+          }}
+          advanced={capabilitiesSection}
+          draft={draftBlock}
+        />
+      </li>
+    )
+  }
+
+  return (
+    <li style={cardStyle} data-provider-card="" data-provider-role="llm">
+      <style>{providerUiCss}</style>
+      <button
+        type="button"
+        data-provider-card-header=""
+        aria-expanded={open}
+        aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
+        onClick={() => { setOpen(!open) }}
+      >
+        <ProviderCardHeader
+          title={title}
+          mark={<BrandMark />}
+          summary={headerModels}
+          status={headerStatus}
+          open={open}
+          unsaved={dirty}
+          unsavedLabel={t('unsaved')}
+          role="llm"
+          {...quotaProps}
+        />
+      </button>
+      {open
+        ? (
+          <div style={bodyStyle} data-provider-body="">
+            <p style={hintStyle}>{t('description')}</p>
+            <section style={sectionStyle} aria-label={statusLabel}>
+              <AuthToolbar
+                status={<p style={{ ...statusStyle, margin: 0 }}>{statusLabel}</p>}
+                action={auth.kind === 'signed-in'
+                  ? <button type="button" style={buttonStyle} onClick={() => { void onSignOut() }}>{t('signOut')}</button>
+                  : auth.kind === 'signing-in'
+                    ? <button type="button" style={buttonStyle} onClick={() => { void onCancelSignIn() }}>{t('cancel')}</button>
+                    : <button type="button" style={buttonStyle} onClick={() => { void onSignIn() }}>{t('signIn')}</button>}
+              />
+                    {auth.kind === 'signing-in'
+                      ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {authorizationUrl !== undefined && popupBlocked
+                             ? <a href={authorizationUrl} target="_blank" rel="noopener noreferrer" style={statusStyle}>Open xAI sign-in</a>
+                             : null}
+                           <p style={hintStyle}>{t('pasteCode')}</p>
+                          <label style={labelStyle} htmlFor="grok-oauth-code">{t('pasteCodeLabel')}</label>
+                          <input
+                            id="grok-oauth-code"
+                            style={inputStyle}
+                            value={pasteCode}
+                            autoComplete="off"
+                            spellCheck={false}
+                            aria-label={t('pasteCodeLabel')}
+                            onChange={event => { setPasteCode(event.target.value) }}
+                          />
+                          <button
+                            type="button"
+                            style={buttonStyle}
+                            disabled={pasteCode.trim().length === 0}
+                            onClick={() => { void onPasteCode() }}
+                          >
+                            {t('pasteCodeSubmit')}
+                          </button>
+                        </div>
+                      )
+                      : null}
+            </section>
+            {auth.kind === 'signed-in'
+              ? (
+                <section style={sectionStyle} aria-label={t('usage')}>
+                  <UsageHeader
+                    title={t('usage')}
+                    spinning={usage.status === 'loading' || usage.status === 'idle'}
+                    disabled={usage.status === 'loading'}
+                    refreshLabel={t('usageRefresh')}
+                    busyLabel={t('usageLoading')}
+                    {...usage.status === 'error' ? { error: t('usageRefreshFailed') } : {}}
+                    onRefresh={() => { void loadUsage() }}
+                  />
+                  {(() => {
+                    if (usage.status === 'loading' || usage.status === 'idle') {
+                      return <UsageSkeleton rows={lastUsage?.windows.length ?? 1} />
+                    }
+                    const bars = usage.status === 'ready' ? usage.usage : lastUsage
+                    if (bars !== undefined) {
+                      return (
+                        <>
+                          {bars.windows.map((window, index) => (
+                            <UsageBar
+                              key={window.id + ':' + String(index)}
+                              usedText={t('usageUsed')}
+                              window={window}
+                              t={t}
+                            />
+                          ))}
+                        </>
+                      )
+                    }
+                    if (usage.status === 'unsupported') return <p style={hintStyle}>{t('usageUnsupported')}</p>
+                    if (usage.status === 'error') return <p style={errorStyle}>{usage.message}</p>
+                    return <UsageSkeleton rows={1} />
+                  })()}
+                  <UsageUpdatedAt
+                    at={usageUpdatedAt}
+                    label={usageUpdatedAt === undefined ? '' : t('usageUpdatedAt').replace('{time}', formatUsageClock(usageUpdatedAt))}
+                  />
+                </section>
+              )
+              : null}
+            <section style={sectionStyle} aria-label={t('models')}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <button
+                  type="button"
+                  style={disclosureStyle}
+                  aria-expanded={catalogOpen}
+                  aria-label={t('models')}
+                  onClick={() => { setCatalogOpen(!catalogOpen) }}
+                >
+                  <IconChevron open={catalogOpen} />
+                  <span style={sectionTitleStyle}>{t('models')}</span>
+                  <span style={hintStyle}>{customModels ? t('customized') : t('inherited')}</span>
+                </button>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: 'none' }}>
+                  <button type="button" style={buttonStyle} disabled={disabled} onClick={() => { setModelSort(current => !current) }} aria-pressed={modelSort}>
+                    {modelSort ? t('doneSorting') : t('sortModels')}
+                  </button>
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={fetching || disabled}
+                    onClick={() => { void chooseFromAccount() }}
+                  >
+                    {t(fetching ? 'fetchingModels' : 'fetchModels')}
+                  </button>
+                </span>
+              </div>
+              {catalogOpen ? modelsList : null}
+            </section>
+            {capabilitiesSection}
+            {draftBlock}
           </div>
         )
         : null}
