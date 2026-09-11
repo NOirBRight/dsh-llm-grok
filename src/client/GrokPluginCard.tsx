@@ -33,7 +33,7 @@ import {
 import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatUsageClock, providerUiCss, providerQuotaHeaderProps, resetLabelOf, useProviderQuotaCache } from './provider-chrome.tsx'
 import type { ProviderQuotaState } from './provider-chrome.tsx'
 import { SortableList } from 'dsh-llm-providers-ui/sortable'
-import { headerQuotaFromCache, peekCachedUsage, rememberHeadlineQuota } from 'dsh-llm-providers-ui/usage-readers'
+import { rememberHeadlineQuota } from 'dsh-llm-providers-ui/usage-readers'
 
 
 
