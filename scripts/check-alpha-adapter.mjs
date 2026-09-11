@@ -120,7 +120,7 @@ try {
   const hostSource = readFileSync(host, 'utf8')
   if (!hostSource.includes('prepareCall(') || !hostSource.includes('imageRequestPricing(')) fail('extracted Host entry omits alpha adapter methods')
   run('node', ['--check', host], rootPath, env)
-  console.log('GrokAdapter alpha.1 contract passed for built and packed Host artifacts')
+  console.log('GrokAdapter Alpha.4 contract passed for built and packed Host artifacts')
 } catch (error) {
   primaryError = error
   throw error

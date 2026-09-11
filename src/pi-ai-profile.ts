@@ -120,11 +120,12 @@ export function createGrokPiAiProfile(connection: GrokConnectionOptions): Resolv
     retryPolicy: connection.retryPolicy,
     /** Mirrors the official aggregate base64 image limit per request. */
     maxRequestImageBytes: 20 * 1024 * 1024,
-    /** Request-image pixel budget used by the alpha.1 attachment normalizer. */
+    /** Request-image pixel budget used by the Alpha.4 attachment normalizer. */
     requestImagePixelBudget: 2048 * 2048,
     requestImageMaxBytes: 1024 * 1024,
     piProvider,
     configuredMaxTokens,
+    modelErrors: new Map(),
     headers,
   }
   return profile

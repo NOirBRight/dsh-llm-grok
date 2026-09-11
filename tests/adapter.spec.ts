@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createUserMessage, LlmError, ReasoningEffortId, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { GrokAdapter, narrowGrokEscalationSchemas, resolveGrokAccessToken } from '../src/adapter.ts'
+import { GrokAdapter, narrowGrokEscalationSchemas, refreshGrokAccessToken, resolveGrokAccessToken } from '../src/adapter.ts'
 import type { GrokAdapterOptions, GrokConnectionOptions } from '../src/adapter.ts'
 import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
 import { resolveAdapterOptions } from '../src/index.ts'
@@ -37,6 +37,7 @@ function adapter(opts: Partial<GrokAdapterOptions> = {}): GrokAdapter {
   return new GrokAdapter({
     options: opts.options ?? (() => connection()),
     resolveApiKey: opts.resolveApiKey ?? (() => Promise.resolve('test-access')),
+    ...opts.refreshApiKey === undefined ? {} : { refreshApiKey: opts.refreshApiKey },
     ...opts.resolveAttachments === undefined ? {} : { resolveAttachments: opts.resolveAttachments },
   })
 }
@@ -371,6 +372,8 @@ describe('resolveAdapterOptions', () => {
     expect(resolveAdapterOptions({
       retryPolicy: { mode: 'normal', maxRetries: 8 },
     }).retryPolicy).toMatchObject({ mode: 'normal', maxRetries: 8 })
+    expect(resolveAdapterOptions({ retryPolicy: { mode: 'normal', maxRetries: 8 } }).retryPolicy)
+      .toMatchObject({ retryableCodes: expect.arrayContaining(['AUTH', 'RATE_LIMIT', 'TRANSPORT']) })
   })
 })
 
@@ -713,5 +716,105 @@ describe('resolveGrokAccessToken', () => {
     })
 
     await expect(resolveGrokAccessToken(runtime)).rejects.toMatchObject({ code: 'AUTH' })
+  })
+
+  it('force-refreshes a still-valid session', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-llm-grok-token-force-'))
+    const path = join(root, 'grok-oauth.json')
+    const auth = await fakeAuthServer({
+      authorizationCode: {
+        accessToken: 'access-one',
+        refreshToken: 'refresh-one',
+        expiresIn: 3600,
+      },
+      refresh: {
+        accessToken: 'access-two',
+        refreshToken: 'refresh-two',
+        expiresIn: 3600,
+      },
+    })
+    await writeSession(path, {
+      accessToken: 'access-live',
+      refreshToken: 'refresh-one',
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+    })
+    const runtime = createGrokAuthRuntime({
+      resolveSessionPath: () => path,
+      issuer: auth.issuer,
+    })
+
+    await expect(refreshGrokAccessToken(runtime)).resolves.toBe('access-two')
+  })
+})
+
+describe('GrokAdapter AUTH retry', () => {
+  it('refreshes and retries a content-less 401 finish', async () => {
+    const server = await fakeChatProxy([
+      { kind: 'json', status: 401, body: { error: { message: 'Authentication required' } } },
+      { kind: 'json', status: 400, body: { error: { message: 'retried' } } },
+    ])
+    let refreshes = 0
+    const a = adapter({
+      options: () => connection({ baseURL: `${server.url}/v1` }),
+      refreshApiKey: async () => {
+        refreshes += 1
+        return 'refreshed'
+      },
+    })
+
+    const finish = (await collect(a.stream(request()))).find(chunk => chunk.type === 'finish')
+
+    expect(refreshes).toBe(1)
+    expect(server.requests).toHaveLength(2)
+    expect(finish).toMatchObject({
+      type: 'finish',
+      reason: { kind: 'error', failure: { code: 'INVALID_REQUEST' } },
+    })
+  })
+
+  it('does not retry 401 when refreshApiKey is omitted', async () => {
+    const server = await fakeChatProxy([
+      { kind: 'json', status: 401, body: { error: { message: 'Authentication required' } } },
+    ])
+    const a = adapter({ options: () => connection({ baseURL: `${server.url}/v1` }) })
+
+    const finish = (await collect(a.stream(request()))).find(chunk => chunk.type === 'finish')
+
+    expect(server.requests).toHaveLength(1)
+    expect(finish).toMatchObject({
+      type: 'finish',
+      reason: { kind: 'error', failure: { code: 'AUTH' } },
+    })
+  })
+
+  it('keeps the AUTH finish when force-refresh throws', async () => {
+    const server = await fakeChatProxy([
+      { kind: 'json', status: 401, body: { error: { message: 'Authentication required' } } },
+    ])
+    const a = adapter({
+      options: () => connection({ baseURL: `${server.url}/v1` }),
+      refreshApiKey: () => Promise.reject(new LlmError('refresh failed', 'AUTH')),
+    })
+
+    const finish = (await collect(a.stream(request()))).find(chunk => chunk.type === 'finish')
+
+    expect(server.requests).toHaveLength(1)
+    expect(finish).toMatchObject({
+      type: 'finish',
+      reason: { kind: 'error', failure: { code: 'AUTH' } },
+    })
+  })
+
+  it('rethrows abort during AUTH refresh instead of yielding AUTH', async () => {
+    const server = await fakeChatProxy([
+      { kind: 'json', status: 401, body: { error: { message: 'Authentication required' } } },
+    ])
+    const a = adapter({
+      options: () => connection({ baseURL: `${server.url}/v1` }),
+      refreshApiKey: () => Promise.reject(Object.assign(new Error('stopped'), { name: 'AbortError' })),
+    })
+
+    await expect(collect(a.stream(request()))).rejects.toMatchObject({ name: 'AbortError' })
+    expect(server.requests).toHaveLength(1)
   })
 })

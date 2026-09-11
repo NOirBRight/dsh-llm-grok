@@ -18,6 +18,11 @@ export interface GrokAdapterOptions {
      * MISSING_CREDENTIAL when no session exists, or AUTH when refresh failed.
      */
     resolveApiKey: () => Promise<string>;
+    /**
+     * Force-refresh the OAuth access token. Used once when a request finishes
+     * AUTH before any model content.
+     */
+    refreshApiKey?: () => Promise<string>;
     /** Resolve the optional durable attachment service at request time. */
     resolveAttachments?: () => AttachmentStore | undefined;
 }
@@ -28,6 +33,12 @@ export interface GrokAdapterOptions {
  * @param runtime - Host OAuth runtime.
  */
 export declare function resolveGrokAccessToken(runtime: GrokOAuthRuntime): Promise<string>;
+/**
+ * Exchange the refresh token even when the access token is not near expiry.
+ * @param runtime - Host OAuth runtime.
+ * @returns the new access token.
+ */
+export declare function refreshGrokAccessToken(runtime: GrokOAuthRuntime): Promise<string>;
 /**
  * Replace pi-ai's generated effort list with official models-v2 order, labels,
  * and the documented default `reasoning.effort`.
@@ -56,7 +67,7 @@ export declare class GrokAdapter extends LlmAdapter {
     /** Prepare one request with Grok's stream transforms applied. */
     prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<{
         model: LlmResolvedModelInfo;
-        stream: (options: GenerateOptions) => AsyncGenerator<StreamChunk, void, unknown>;
+        stream: (options: GenerateOptions) => AsyncGenerator<StreamChunk, any, any>;
     }>;
     /**
      * Declare no provider-specific image pricing so the Host uses neutral estimation.

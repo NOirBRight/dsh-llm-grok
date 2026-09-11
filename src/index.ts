@@ -9,15 +9,16 @@ import type { Context, Fiber } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { ConnectionRpcHandler } from '@deepseek-ai/dsh-client-connection'
-import { resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
-import type { RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
-import { deepEqualJson, installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { LlmError, resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
+import type { ResolvedRetryPolicy, RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
+import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
 import type { SettingsPathOp } from '@deepseek-ai/dsh-settings'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
+import { allowDshRuntime } from './compatibility.ts'
 import type {} from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-tools'
-import { GrokAdapter, resolveGrokAccessToken } from './adapter.ts'
+import { GrokAdapter, refreshGrokAccessToken, resolveGrokAccessToken } from './adapter.ts'
 import { grokImageGenTool } from './image-gen.ts'
 import { installGrokModelSwitchAdapters } from './model-switch-adapter.ts'
 import type { GrokConnectionOptions } from './adapter.ts'
@@ -53,7 +54,13 @@ import { readGrokUsage } from './usage.ts'
 /** Preserve Grok's historical normal retry count across host-line default changes. */
 const DEFAULT_MAX_RETRIES = 2
 
-export { GrokAdapter, resolveGrokAccessToken } from './adapter.ts'
+function withAuthRetries(policy: ResolvedRetryPolicy): ResolvedRetryPolicy {
+  if (policy.mode !== 'normal') return policy
+  if (policy.retryableCodes.includes('AUTH')) return policy
+  return { ...policy, retryableCodes: Object.freeze([...policy.retryableCodes, 'AUTH']) }
+}
+
+export { GrokAdapter, refreshGrokAccessToken, resolveGrokAccessToken } from './adapter.ts'
 export type { GrokAdapterOptions, GrokConnectionOptions } from './adapter.ts'
 export {
   GROK_CATALOG,
@@ -93,6 +100,15 @@ export {
   createGrokPiAiProfile,
 } from './pi-ai-profile.ts'
 export { GROK_SERVER_SEARCH_TOOLS, grokResponsesApi, injectGrokServerSearchTools } from './responses-tools.ts'
+export {
+  GROK_SEARCH_LABEL,
+  GROK_SEARCH_PROVIDER,
+  GrokSearchProvider,
+  grokSearchModels,
+  isSearchableGrokModel,
+  mapGrokSearchResponse,
+} from './search.ts'
+export type { GrokSearchProviderOptions } from './search.ts'
 export {
   isGrokServerSearchToolCallId,
   stripGrokServerSearchToolCalls,
@@ -175,7 +191,7 @@ export {
 export const name = 'llm-grok'
 export const inject = ['llm']
 
-const NS = settingsNamespace(GROK_SETTINGS_NAMESPACE)
+const NS = GROK_SETTINGS_NAMESPACE
 
 /** One resolution's complete request facts. */
 export type ResolvedGrokOptions = GrokConnectionOptions
@@ -222,10 +238,10 @@ export function resolveAdapterOptions(config: Config): ResolvedGrokOptions {
     baseURL: GROK_CHAT_BASE_URL,
     models: resolveModels(config.models),
     streamIdleTimeoutMs,
-    retryPolicy: resolveRetryPolicy(
+    retryPolicy: withAuthRetries(resolveRetryPolicy(
       config.retryPolicy ?? { mode: 'normal', maxRetries: DEFAULT_MAX_RETRIES },
       'llm-grok: retryPolicy',
-    ),
+    )),
   }
 }
 
@@ -268,15 +284,19 @@ export const Config: z<Config> = z.object({
   registerLegacyTools: z.boolean().default(true),
 })
 
-function internalError(message: string) {
+function failure(code: string, message: string) {
   return {
     ok: false as const,
     error: {
-      code: 'internal' as const,
+      code,
       message,
       details: {},
     },
   }
+}
+
+function internalError(message: string) {
+  return failure('internal', message)
 }
 
 /** Optional Host overrides for the authenticated Host Connection handler (local billing in tests). */
@@ -287,6 +307,16 @@ export interface GrokRpcHandlerOptions {
   modelsURL?: string
 }
 
+/**
+ * Map one usage failure onto the wire so it never escapes the handler as a
+ * gateway error. An LlmError keeps the code its throw site chose; a non-LlmError
+ * failure stays internal. The usage path raises only `INVALID_CREDENTIAL`
+ * (`src/usage.ts` on a billing 401/403), which is the one code the shared
+ * provider-UI quota cache treats as an unusable credential, so classifying the
+ * failure belongs to the read that saw the rejecting status.
+ * @param error - thrown value from credential resolution or the billing read.
+ * @param secrets - token material that must never reach the browser.
+ */
 function usageFailure(error: unknown, secrets: readonly string[]) {
   let message = error instanceof Error && error.message.length > 0
     ? error.message
@@ -295,12 +325,16 @@ function usageFailure(error: unknown, secrets: readonly string[]) {
     if (secret.length === 0) continue
     message = message.split(secret).join('[redacted]')
   }
-  return internalError(message)
+  if (!(error instanceof LlmError)) return internalError(message)
+  return failure(error.code, message)
 }
 
 /**
  * Host Connection `/grok` handler. Status, start, and usage replies never include tokens;
- * the alpha.1 Host Connection service applies browser authentication and trusted-host policy.
+ * the Alpha.4 Host Connection service applies browser authentication and trusted-host policy.
+ * Every usage failure is answered as a result rather than thrown, preserving
+ * its LlmError code: an unusable credential answers `INVALID_CREDENTIAL`
+ * so the shared quota cache drops the previous account's entry.
  * @param runtime - Host OAuth runtime (production or a test fake).
  * @param options - optional billing URL override for tests.
  */
@@ -359,9 +393,11 @@ export function createGrokRpcHandler(
     }
     if (endpoint === GROK_USAGE_ENDPOINT) {
       if (decodeGrokEmptyRequest(payload) === undefined) return internalError('invalid Grok usage request')
-      const session = await ensureFreshSession(runtime)
-      if (session === undefined) return { ok: true as const, value: { status: 'logged-out' as const } }
+      let secrets: readonly string[] = []
       try {
+        const session = await ensureFreshSession(runtime)
+        if (session === undefined) return { ok: true as const, value: { status: 'logged-out' as const } }
+        secrets = [session.accessToken, session.refreshToken]
         const value = await readGrokUsage({
           accessToken: session.accessToken,
           ...options?.billingURL === undefined ? {} : { billingURL: options.billingURL },
@@ -371,7 +407,7 @@ export function createGrokRpcHandler(
         })
         return { ok: true as const, value }
       } catch (error: unknown) {
-        return usageFailure(error, [session.accessToken, session.refreshToken])
+        return usageFailure(error, secrets)
       }
     }
     return internalError(`unknown Grok endpoint: ${endpoint}`)
@@ -420,6 +456,8 @@ async function saveDisplayedCatalog(ctx: Context, payload: unknown) {
 }
 
 export function apply(ctx: Context, config: Config): void {
+  if (!allowDshRuntime(ctx.logger, 'dsh-llm-grok', ['@deepseek-ai/dsh-llm'])) return
+
   let current: () => Config = () => config
   let lastRaw: Config | undefined
   let lastGood: ResolvedGrokOptions | undefined
@@ -449,6 +487,7 @@ export function apply(ctx: Context, config: Config): void {
   const adapter = new GrokAdapter({
     options,
     resolveApiKey: () => resolveGrokAccessToken(runtime),
+    refreshApiKey: () => refreshGrokAccessToken(runtime),
     resolveAttachments: () => ctx.get('attachments'),
   })
   ctx.llm.registerConfigurableProviders([
@@ -476,11 +515,13 @@ export function apply(ctx: Context, config: Config): void {
     ), 'llm-grok: register Host Connection RPC')
   })
   ctx.effect(() => () => connectionFiber.dispose(), 'llm-grok: dispose Host Connection injection')
-  installSettingsSection(ctx, NS, Config, config, {
-    setSource: (source) => {
-      current = source as () => Config
-    },
-    onChange: scheduleCapabilities,
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.installSection(ctx, NS, Config, config, {
+      setSource: (source) => {
+        current = source as () => Config
+      },
+      onChange: scheduleCapabilities,
+    })
   })
 
   let stopped = false

@@ -76,7 +76,11 @@ describe('llm-grok real composition', () => {
       { provider: 'grok', displayName: 'Grok', settingsNs: 'llm-grok', settingsPath: [] },
     ])
     expect(ctx.llm.listProviders()).toEqual([{ id: 'grok', name: 'Grok' }])
-    expect(ctx.llm.providerRetryPolicy('grok')).toMatchObject({ mode: 'normal', maxRetries: 8 })
+    expect(ctx.llm.providerRetryPolicy('grok')).toMatchObject({
+      mode: 'normal',
+      maxRetries: 8,
+      retryableCodes: expect.arrayContaining(['AUTH']),
+    })
 
     const schema = Config.toJSON() as { uid: number, refs: Record<string, { dict?: Record<string, unknown> }> }
     const dict = schema.refs[String(schema.uid)]?.dict
