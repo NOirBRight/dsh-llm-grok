@@ -3,10 +3,12 @@
 
 ### Changed
 
-- Adopt the shared provider-ui header from `dsh-llm-providers-ui` 0.1.10; remove the per-provider header fork.
+- Adopt the shared provider-ui header and quota cache from `dsh-llm-providers-ui` 0.1.12; remove the per-provider header fork.
 - Header quota loads collapsed on sign-in with idle dedup so expansion never refires; a failed read shows a truthful unavailable dash, never a fabricated percent.
 - Grok billing parser: a 404 stays `unsupported` while a 200 with an unrecognized body throws (failed read, keeps stale data); percentages validate as 0-100 points; an omitted `credit_usage_percent` decodes to 0% only with a known-typed currentPeriod covering `fetchedAt` and zero-or-omitted money pools; summary id follows the period (`monthly`/`weekly`).
-- Development dependency now points at the final `dsh-llm-providers-ui` 0.1.10 release URL with pinned integrity.
+- Host usage reads that cannot resolve a usable credential answer `INVALID_CREDENTIAL`; the client `fetchUsage` path purges the shared quota cache on that wire code before throwing, and still purges on a decoded `logged-out` reply.
+- Development dependency and install guidance point at the `dsh-llm-providers-ui` `v0.1.12-015rc1d` candidate tarball.
+- Verified runtimes now include DeepSeek Harness `0.1.5-rc.1` alongside Alpha.4 and `0.1.2-rc.1`.
 
 ## [0.3.11] - 2026-09-06
 

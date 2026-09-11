@@ -195,7 +195,12 @@ export function apply(ctx: ClientContext): void {
   const fetchUsage: GrokPluginCardFace['fetchUsage'] = async () => {
     const generation = authGeneration
     const result = await rpc.call(GROK_RPC_CHANNEL, GROK_USAGE_ENDPOINT, {})
-    if (!result.ok) throw new Error(result.error.message)
+    if (!result.ok) {
+      // Wire code is dropped by the Error below; purge here so a refused credential
+      // cannot keep painting the previous account's quota in every bundle copy.
+      if (result.error.code === 'INVALID_CREDENTIAL') dropPersistedUsageKeys([GROK_SETTINGS_NAMESPACE])
+      throw new Error(result.error.message)
+    }
     const decoded = decodeGrokUsageReply(result.value)
     if (decoded === undefined) throw new Error(t('usageFailed'))
     if (decoded.status === 'logged-out' && generation === authGeneration) invalidateUsageCache()

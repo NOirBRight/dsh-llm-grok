@@ -8,7 +8,7 @@ The package root exposes the Cordis plugin contract. The same artifact exports `
 
 ## Compatibility
 
-Verified runtimes are DeepSeek Harness `0.1.2-alpha.4` and `0.1.2-rc.1` on Cordis `4.0.2`; this record is evidence, not an allowlist.
+Verified runtimes are DeepSeek Harness `0.1.2-alpha.4`, `0.1.2-rc.1`, and `0.1.5-rc.1` on Cordis `4.0.2`; this record is evidence, not an allowlist.
 
 Unknown newer runtimes are attempted on a best-effort basis after one warning, and the plugin keeps its normal mount path.
 
@@ -28,13 +28,13 @@ Install `dsh-llm-providers-ui` explicitly in the profile alongside provider plug
 
 ## Installation
 
-Verified on DeepSeek Harness `0.1.2-alpha.4` and `0.1.2-rc.1` (Cordis `4.0.2`). Install directly from GitHub:
+Verified on DeepSeek Harness `0.1.2-alpha.4`, `0.1.2-rc.1`, and `0.1.5-rc.1` (Cordis `4.0.2`). Install directly from GitHub:
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.12-015rc1/dsh-llm-providers-ui-0.1.12.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.12-015rc1d/dsh-llm-providers-ui-0.1.12.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.12/dsh-llm-grok-0.3.12.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.12-015rc1b/dsh-llm-grok-0.3.12.tgz
 dsh web
 ~~~
 
@@ -86,15 +86,15 @@ The composer picker groups sibling catalog rows that share a base id after peeli
 
 ## Release installation (Latest)
 
-xAI Grok subscription login, Responses chat, usage, search, and Imagine. The release artifact targets DeepSeek Harness 0.1.2-alpha.4 and contains built Host/Client files only; it has no sibling-repository source, workstation path, link:, or workspace: dependency.
+xAI Grok subscription login, Responses chat, usage, search, and Imagine. The release artifact targets DeepSeek Harness 0.1.2-alpha.4, 0.1.2-rc.1, and 0.1.5-rc.1 and contains built Host/Client files only; it has no sibling-repository source, workstation path, link:, or workspace: dependency.
 
 The dsh-llm-providers-ui package owns the LLM Providers page, navigation, and shared order store. This package owns only its provider card, models, credentials, and Host route. Install the Owner first for Web; headless Host routing works without the Owner.
 
-Owner (0.1.12-015rc1 candidate — <https://github.com/NOirBRight/dsh-llm-providers-ui/releases/tag/v0.1.12-015rc1>):
+Owner (0.1.12-015rc1d candidate — <https://github.com/NOirBRight/dsh-llm-providers-ui/releases/tag/v0.1.12-015rc1d>):
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.12-015rc1/dsh-llm-providers-ui-0.1.12.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.12-015rc1d/dsh-llm-providers-ui-0.1.12.tgz
 ~~~
 
 Provider (Latest):
@@ -108,9 +108,9 @@ Fixed versions (reproducible):
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.12-015rc1/dsh-llm-providers-ui-0.1.12.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.1.12-015rc1d/dsh-llm-providers-ui-0.1.12.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.12/dsh-llm-grok-0.3.12.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.12-015rc1b/dsh-llm-grok-0.3.12.tgz
 ~~~
 
 Update, uninstall, and verify:
@@ -130,7 +130,7 @@ Configuration: use the plugin section in Settings for Web UI plugins, or the pro
 
 Rollback: rerun the fixed v0.3.7 command, verify the profile list, then restart the Web service once. Inspect journalctl --user -u dsh-web.service and dsh plugin --profile web doctor; never put a source checkout in the production profile.
 
-Release and integrity: [v0.3.11](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.11) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.11/SHA256SUMS).
+Release and integrity: [v0.3.12-015rc1b](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.12-015rc1b) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.12-015rc1b/SHA256SUMS).
 
 ## Independent Model Switch search
 
