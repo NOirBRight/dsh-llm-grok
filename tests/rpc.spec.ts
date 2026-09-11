@@ -241,26 +241,17 @@ describe('Grok authenticated Host Connection RPC', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
-  it('answers a credential-resolution failure instead of letting it escape', async () => {
-    for (const code of ['MISSING_CREDENTIAL', 'AUTH', 'INVALID_CREDENTIAL']) {
-      // Resolving the stored session is the usage branch's first Host-side step;
-      // a throw here must still answer a typed result, never reject the handler.
-      const handler = createGrokRpcHandler(createGrokAuthRuntime({
-        resolveSessionPath: () => { throw new LlmError(`llm-grok: no usable credential (${code})`, code) },
-      }))
-      const result = await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
-      expect(result.ok).toBe(false)
-      expect(result.error?.code).toBe('INVALID_CREDENTIAL')
-      expect(result.error?.message).toBe(`llm-grok: no usable credential (${code})`)
-    }
-  })
-
-  it('keeps a non-credential LlmError code and internalizes other failures', async () => {
+  // Resolving the stored session is the usage branch's first Host-side step, so a
+  // throw there covers "answer a typed result, never reject the handler" for both
+  // error classes: an LlmError keeps its own code, anything else is internal.
+  it('answers a failure thrown while resolving the session, preserving its code', async () => {
     const throttled = createGrokRpcHandler(createGrokAuthRuntime({
       resolveSessionPath: () => { throw new LlmError('llm-grok: the issuer asked for a slower retry', 'RATE_LIMIT') },
     }))
-    expect((await throttled(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)).error?.code)
-      .toBe('RATE_LIMIT')
+    const rejected = await throttled(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+    expect(rejected.ok).toBe(false)
+    expect(rejected.error?.code).toBe('RATE_LIMIT')
+    expect(rejected.error?.message).toBe('llm-grok: the issuer asked for a slower retry')
 
     const broken = createGrokRpcHandler(createGrokAuthRuntime({
       resolveSessionPath: () => { throw new Error('llm-grok: the session file is unreadable') },
