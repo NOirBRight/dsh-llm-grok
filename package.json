@@ -1,7 +1,7 @@
 {
   "name": "dsh-llm-grok",
   "description": "xAI Grok subscription login and chat for DeepSeek Harness",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "publishConfig": {
     "access": "public"
   },
@@ -156,7 +156,7 @@
     "tsdown": "^0.22.2",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8",
-    "dsh-llm-providers-ui": "https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.0/dsh-llm-providers-ui-0.2.0.tgz",
+    "dsh-llm-providers-ui": "https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.1/dsh-llm-providers-ui-0.2.1.tgz",
     "dsh-model-switch": "https://github.com/NOirBRight/dsh-model-switch/releases/download/v0.4.6/dsh-model-switch-0.4.6.tgz"
   }
 }
