@@ -408,6 +408,8 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   }, [auth.kind, authAttemptId, readAuthAttemptStatus, readAuthStatus, t])
 
   const loadUsage = async (): Promise<void> => {
+    // The settings page owns quota in the shared detail; the card self-loads only in the legacy layout.
+    if (props.mode === 'detail') return
     const epoch = ++usageEpoch.current
     setUsage({ status: 'loading' })
     try {
