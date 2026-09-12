@@ -34,7 +34,7 @@ import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, Usage
 import type { ProviderQuotaState } from './provider-chrome.tsx'
 import { SortableList } from 'dsh-llm-providers-ui/sortable'
 import { rememberHeadlineQuota } from 'dsh-llm-providers-ui/usage-readers'
-import { ProviderDetail, providerDetailCopy, type ProviderItemSlotContext } from 'dsh-llm-providers-ui/provider-detail'
+import type { ProviderItemSlotContext } from 'dsh-llm-providers-ui/provider-detail'
 
 
 
@@ -942,7 +942,9 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
 
 
   // Prototype C detail: the shared template owns the layout, this card owns Grok's data.
-  if (props.mode === 'detail') {
+  const SharedDetail = props.template
+  const detailCopy = props.copy
+  if (props.mode === 'detail' && SharedDetail !== undefined && detailCopy !== undefined) {
     const accountActions = auth.kind === 'signed-in'
       ? <button type="button" style={buttonStyle} onClick={() => { void onSignOut() }}>{t('signOut')}</button>
       : auth.kind === 'signing-in'
@@ -978,10 +980,10 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
       : undefined
     return (
       <li style={cardStyle} data-provider-card="" data-provider-role="llm">
-        <ProviderDetail
+        <SharedDetail
           name={USAGE_PROVIDER_NAME}
           role="llm"
-          copy={props.copy ?? providerDetailCopy.en}
+          copy={detailCopy}
           notice={t('description')}
           account={{
             state: auth.kind === 'signed-in' ? 'connected' : 'unconnected',

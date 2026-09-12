@@ -4,7 +4,7 @@ import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client';
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 import type { GrokAuthStartReply, GrokAuthAttemptStatus, GrokAuthStatus, GrokCatalogModel, GrokSaveResult, GrokSettingsView, GrokUsageReply } from '../client-contract.ts';
 import type { GrokSettingsKey } from './locales.ts';
-import { type ProviderItemSlotContext } from 'dsh-llm-providers-ui/provider-detail';
+import type { ProviderItemSlotContext } from 'dsh-llm-providers-ui/provider-detail';
 /** Dependencies injected by the browser-plugin registration. */
 export interface GrokPluginCardFace {
     /** Localized card copy. */
