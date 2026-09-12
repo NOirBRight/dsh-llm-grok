@@ -23,12 +23,7 @@ import { BrandMark } from './BrandMark.tsx'
 import {
   inputStyle,
   rowInputStyle,
-  selectStyle,
-  rowStyle,
-  capabilitiesStyle,
   modelContentStyle,
-  modelDetailStyle,
-  fieldStyle,
 } from './model-catalog-ui.tsx'
 import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatUsageClock, providerUiCss, providerQuotaHeaderProps, resetLabelOf, useProviderQuotaCache } from './provider-chrome.tsx'
 import type { ProviderQuotaState } from './provider-chrome.tsx'
@@ -825,68 +820,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                             >
                               <IconTrash />
                             </button>
-                            {expanded
-                              ? (
-                                <div style={{ ...modelDetailStyle, gridColumn: '1 / -1' }}>
-                                  <div style={rowStyle}>
-                                    <label style={fieldStyle}>
-                                      <span style={labelStyle}>{t('contextWindow')}</span>
-                                      <input
-                                        style={inputStyle}
-                                        inputMode="numeric"
-                                        placeholder={t('contextWindowDefault')}
-                                        value={model.contextWindow}
-                                        disabled={disabled}
-                                        aria-label={t('contextWindow')}
-                                        onChange={(event) => { patchModel(index, { contextWindow: event.target.value }) }}
-                                      />
-                                    </label>
-                                  </div>
-                                  <div style={capabilitiesStyle}>
-                                    <Capability
-                                      label={t('vision')}
-                                      checked={model.vision === true}
-                                      disabled={disabled}
-                                      onChange={(vision) => { patchModel(index, { vision }) }}
-                                    />
-                                    <Capability
-                                      label={t('thinking')}
-                                      checked={model.thinking === true}
-                                      disabled={disabled}
-                                      onChange={(thinking) => {
-                                        if (!thinking) patchModel(index, { thinking, defaultReasoningEffort: undefined })
-                                        else patchModel(index, { thinking })
-                                      }}
-                                    />
-                                    {(() => {
-                                      const settings = modelSettingsOf(model)
-                                      const efforts = settings.thinking === true ? officialEffortsFor(settings) : []
-                                      if (efforts.length === 0) return null
-                                      const suggested = officialDefaultEffort(settings)
-                                      return (
-                                        <label style={{ ...labelStyle, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                          {t('defaultEffort')}
-                                          <select
-                                            style={selectStyle}
-                                            value={model.defaultReasoningEffort ?? suggested}
-                                            disabled={disabled}
-                                            aria-label={t('defaultEffort')}
-                                            onChange={(event) => {
-                                              const effort = efforts.find(entry => entry.value === event.target.value)
-                                              patchModel(index, { defaultReasoningEffort: effort?.value })
-                                            }}
-                                          >
-                                            {efforts.map(effort => (
-                                              <option key={effort.value} value={effort.value}>{effort.label ?? effort.value}</option>
-                                            ))}
-                                          </select>
-                                        </label>
-                                      )
-                                    })()}
-                                  </div>
-                                </div>
-                              )
-                              : null}
+                            {expanded ? modelExtra(model, index) : null}
                           </div>
                         )
                       }}
@@ -941,6 +875,68 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   )
 
 
+  /** Provider-specific fields for one expanded model row; shared by both layouts. */
+  const modelExtra = (model: ModelDraft, index: number): ReactNode => (
+    <div className="c-extra-grid">
+      <label className="c-field">
+        <span className="c-field-label">{t('contextWindow')}</span>
+        <input
+          className="c-input"
+          inputMode="numeric"
+          placeholder={t('contextWindowDefault')}
+          value={model.contextWindow}
+          disabled={disabled}
+          aria-label={t('contextWindow')}
+          onChange={(event) => { patchModel(index, { contextWindow: event.target.value }) }}
+        />
+      </label>
+      <div className="c-extra-checks">
+        <label>
+          <input type="checkbox" checked={model.vision === true} disabled={disabled} onChange={(event) => { patchModel(index, { vision: event.target.checked }) }} />
+          {t('vision')}
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={model.thinking === true}
+            disabled={disabled}
+            onChange={(event) => {
+              const thinking = event.target.checked
+              if (!thinking) patchModel(index, { thinking, defaultReasoningEffort: undefined })
+              else patchModel(index, { thinking })
+            }}
+          />
+          {t('thinking')}
+        </label>
+      </div>
+      {(() => {
+        const settings = modelSettingsOf(model)
+        const efforts = settings.thinking === true ? officialEffortsFor(settings) : []
+        if (efforts.length === 0) return null
+        const suggested = officialDefaultEffort(settings)
+        return (
+          <label className="c-field">
+            <span className="c-field-label">{t('defaultEffort')}</span>
+            <select
+              className="c-input"
+              value={model.defaultReasoningEffort ?? suggested}
+              disabled={disabled}
+              aria-label={t('defaultEffort')}
+              onChange={(event) => {
+                const effort = efforts.find(entry => entry.value === event.target.value)
+                patchModel(index, { defaultReasoningEffort: effort?.value })
+              }}
+            >
+              {efforts.map(effort => (
+                <option key={effort.value} value={effort.value}>{effort.label ?? effort.value}</option>
+              ))}
+            </select>
+          </label>
+        )
+      })()}
+    </div>
+  )
+
   // Prototype C detail: the shared template owns the layout, this card owns Grok's data.
   const SharedDetail = props.template
   const detailCopy = props.copy
@@ -983,6 +979,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
         <SharedDetail
           name={USAGE_PROVIDER_NAME}
           role="llm"
+          mark={<BrandMark />}
           copy={detailCopy}
           notice={t('description')}
           account={{
@@ -1004,7 +1001,43 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
             onToggleSorting: () => { setModelSort(value => !value) },
             onChooseFromAccount: () => { void chooseFromAccount() },
             chooseDisabled: fetching || disabled,
-            list: modelsList,
+            items: draft.map(model => ({
+              rowId: model.rowId,
+              id: model.id,
+              ...(model.name === undefined ? {} : { name: model.name }),
+            })),
+            expanded: [...expandedModels],
+            onPatch: (rowId, patch) => {
+              const index = draft.findIndex(model => model.rowId === rowId)
+              if (index >= 0) patchModel(index, patch)
+            },
+            onRemove: (rowId) => {
+              const index = draft.findIndex(model => model.rowId === rowId)
+              if (index >= 0) patchDraft(draft.filter((_, at) => at !== index))
+            },
+            onToggle: (rowId) => {
+              setExpandedModels((current) => {
+                const next = new Set(current)
+                if (!next.delete(rowId)) next.add(rowId)
+                return next
+              })
+            },
+            onReorder: (rowIds) => {
+              const byId = new Map(draft.map(model => [model.rowId, model]))
+              const next = rowIds.map(rowId => byId.get(rowId)).filter((model): model is ModelDraft => model !== undefined)
+              if (next.length === draft.length) patchDraft(next)
+            },
+            onAdd: () => {
+              const model: ModelDraft = { rowId: newModelRowId(), id: '', contextWindow: '' }
+              patchDraft([...draft, model])
+              setExpandedModels(current => new Set(current).add(model.rowId))
+            },
+            addDisabled: disabled,
+            extra: (row) => {
+              const index = draft.findIndex(model => model.rowId === row.rowId)
+              const model = draft[index]
+              return index < 0 || model === undefined ? null : modelExtra(model, index)
+            },
           }}
           advanced={capabilitiesSection}
           draft={draftBlock}
