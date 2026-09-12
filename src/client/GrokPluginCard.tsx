@@ -249,24 +249,6 @@ function messageOf(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.length > 0 ? error.message : fallback
 }
 
-function Capability({ label, checked, disabled, onChange }: {
-  label: string
-  checked: boolean
-  disabled: boolean
-  onChange: (checked: boolean) => void
-}): ReactNode {
-  return (
-    <label style={{ ...labelStyle, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => { onChange(event.target.checked) }}
-      />
-      {label}
-    </label>
-  )
-}
 
 function IconChevron({ open }: { open: boolean }): ReactNode {
   return (
@@ -840,20 +822,22 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
     </>
   )
   const capabilitiesSection = (
-            <section style={sectionStyle} aria-label={t('capabilities')}>
-              <p style={sectionTitleStyle}>{t('capabilities')}</p>
-              <Capability
-                label={t('enableImageGen')}
-                checked={enableImageGen}
-                disabled={disabled}
-                onChange={(checked) => {
-                  setEnableImageGen(checked)
-                  setFailure(undefined)
-                  setNotice(undefined)
-                }}
-              />
-              <p style={hintStyle}>{t('enableImageGenHelp')}</p>
-            </section>
+    <div className="c-control">
+      <label className="c-checkbox-field">
+        <input
+          type="checkbox"
+          checked={enableImageGen}
+          disabled={disabled}
+          onChange={(event) => {
+            setEnableImageGen(event.target.checked)
+            setFailure(undefined)
+            setNotice(undefined)
+          }}
+        />
+        {t('enableImageGen')}
+      </label>
+      <p className="c-field-hint">{t('enableImageGenHelp')}</p>
+    </div>
   )
   const draftBlock = (
     <>
