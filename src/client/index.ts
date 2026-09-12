@@ -9,13 +9,26 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
-import { createGrokUsageReader } from 'dsh-llm-providers-ui/usage-readers'
+import type {} from 'dsh-llm-providers-ui/client'
+import { createGrokUsageReader, dropPersistedUsageKeys } from 'dsh-llm-providers-ui/usage-readers'
 
-/** Register this card and its quota reader on the shared Provider directory. */
-function installProviderDirectory(ctx: ClientContext): void {
+/**
+ * Register this card, its shared header ownership, quota reader, display name,
+ * and active model count so the shared settings page needs no DOM probing.
+ * @param ctx - client context carrying the Provider directory.
+ * @param modelCount - reads the current active model count from plugin state.
+ */
+function installProviderDirectory(ctx: ClientContext, modelCount: () => number | undefined): void {
   ctx.inject(['providerDirectory'], scope => {
-    const directory = (scope as unknown as { providerDirectory: { register(entry: { key: string, usage: unknown }): () => void } }).providerDirectory
-    scope.effect(() => directory.register({ key: GROK_SETTINGS_NAMESPACE, usage: createGrokUsageReader() }), 'dsh-llm-grok: provider directory registration')
+    scope.effect(() => scope.providerDirectory.register({
+      key: GROK_SETTINGS_NAMESPACE,
+      name: 'Grok',
+      header: 'shared',
+      // The card renders the shared detail template; the settings page adds only the breadcrumb.
+      detail: 'shared',
+      usage: createGrokUsageReader(),
+      modelCount,
+    }), 'dsh-llm-grok: provider directory registration')
   })
 }
 
@@ -51,11 +64,6 @@ import type { GrokSettingsKey } from './locales.ts'
 
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
-  interface SlotMap {
-    'settings.provider.item': { kind: 'keyed'; scope: 'root' }
-  }
-}
-declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** Grok Plugin configuration copy. */
     'settings.grok': GrokSettingsKey
@@ -70,7 +78,6 @@ export const inject = ['slots', 'locale', 'connection']
 /** Register localized Grok configuration under Plugin configuration. */
 
 export function apply(ctx: ClientContext): void {
-  installProviderDirectory(ctx)
 
   const localeNamespace = 'settings.grok'
   ctx.effect(
@@ -91,6 +98,9 @@ export function apply(ctx: ClientContext): void {
     set: async () => { throw new Error('Use Grok management settings/save') },
     unset: async () => { throw new Error('Use Grok management settings/save') },
   }
+  // Registered after the snapshot exists so the published count always reads live state.
+  installProviderDirectory(ctx, () => currentSnapshot.value?.models.length)
+
   const publishSettings = (settings: GrokSettingsView, revision: number): void => {
     currentSnapshot = { ...currentSnapshot, status: 'ready', value: settings, revision }
     listeners.forEach(listener => listener())
@@ -135,11 +145,22 @@ export function apply(ctx: ClientContext): void {
     }
   }
 
+  let authGeneration = 0
+  /** Purge every bundle copy, even without providerDirectory. Stale reads check currency first. */
+  const invalidateUsageCache = (): void => {
+    dropPersistedUsageKeys([GROK_SETTINGS_NAMESPACE])
+    try { ctx.get('providerDirectory')?.invalidateUsage(GROK_SETTINGS_NAMESPACE) } catch { /* providerDirectory is optional in lab */ }
+  }
+
   const completeAuth: GrokPluginCardFace['completeAuth'] = async (code, attemptId) => {
     const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_COMPLETE_ENDPOINT, { code, ...attemptId === undefined ? {} : { attemptId } })
     if (!result.ok) return { ok: false, retryable: true, message: result.error.message }
     const decoded = decodeGrokAuthStartReply(result.value)
     if (decoded === undefined) return { ok: false, retryable: true, message: t('signInFailed') }
+    if (decoded.ok === true) {
+      authGeneration += 1
+      invalidateUsageCache()
+    }
     return decoded
   }
 
@@ -148,6 +169,10 @@ export function apply(ctx: ClientContext): void {
     if (!result.ok) throw new Error(result.error.message)
     const decoded = decodeGrokAuthAttemptStatus(result.value)
     if (decoded === undefined) throw new Error(t('statusFailed'))
+    if (decoded.state === 'succeeded') {
+      authGeneration += 1
+      invalidateUsageCache()
+    }
     return decoded
   }
 
@@ -157,10 +182,12 @@ export function apply(ctx: ClientContext): void {
   }
 
   const readAuthStatus: GrokPluginCardFace['readAuthStatus'] = async () => {
+    const generation = authGeneration
     const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_STATUS_ENDPOINT, {})
     if (!result.ok) throw new Error(result.error.message)
     const decoded = decodeGrokAuthStatus(result.value)
     if (decoded === undefined) throw new Error(t('statusFailed'))
+    if (decoded.loggedIn === false && generation === authGeneration) invalidateUsageCache()
     return decoded
   }
 
@@ -168,6 +195,8 @@ export function apply(ctx: ClientContext): void {
     const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_LOGOUT_ENDPOINT, {})
     if (!result.ok) throw new Error(result.error.message)
     if (decodeGrokAuthLogoutReply(result.value) === undefined) throw new Error(t('signOutFailed'))
+    authGeneration += 1
+    invalidateUsageCache()
   }
 
   const fetchModels: GrokPluginCardFace['fetchModels'] = async () => {
@@ -179,10 +208,17 @@ export function apply(ctx: ClientContext): void {
   }
 
   const fetchUsage: GrokPluginCardFace['fetchUsage'] = async () => {
+    const generation = authGeneration
     const result = await rpc.call(GROK_RPC_CHANNEL, GROK_USAGE_ENDPOINT, {})
-    if (!result.ok) throw new Error(result.error.message)
+    if (!result.ok) {
+      // Wire code is dropped by the Error below; purge here so a refused credential
+      // cannot keep painting the previous account's quota in every bundle copy.
+      if (result.error.code === 'INVALID_CREDENTIAL') dropPersistedUsageKeys([GROK_SETTINGS_NAMESPACE])
+      throw new Error(result.error.message)
+    }
     const decoded = decodeGrokUsageReply(result.value)
     if (decoded === undefined) throw new Error(t('usageFailed'))
+    if (decoded.status === 'logged-out' && generation === authGeneration) invalidateUsageCache()
     return decoded
   }
 

@@ -19,6 +19,7 @@ import {
   decodeGrokSaveResult,
   decodeGrokUsageReply,
 } from '../src/client-contract.ts'
+import { LlmError } from '@deepseek-ai/dsh-llm'
 import { apply, Config, createGrokRpcHandler, inject } from '../src/index.ts'
 import { createGrokAuthRuntime } from '../src/oauth.ts'
 import { readSession, resolveGrokSessionPath, writeSession } from '../src/session.ts'
@@ -240,6 +241,65 @@ describe('Grok authenticated Host Connection RPC', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
+  // Resolving the stored session is the usage branch's first Host-side step, so a
+  // throw there covers "answer a typed result, never reject the handler" for both
+  // error classes: an LlmError keeps its own code, anything else is internal.
+  it('answers a failure thrown while resolving the session, preserving its code', async () => {
+    const throttled = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => { throw new LlmError('llm-grok: the issuer asked for a slower retry', 'RATE_LIMIT') },
+    }))
+    const rejected = await throttled(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+    expect(rejected.ok).toBe(false)
+    expect(rejected.error?.code).toBe('RATE_LIMIT')
+    expect(rejected.error?.message).toBe('llm-grok: the issuer asked for a slower retry')
+
+    const broken = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => { throw new Error('llm-grok: the session file is unreadable') },
+    }))
+    const result = await broken(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+    expect(result.ok).toBe(false)
+    expect(result.error?.code).toBe('internal')
+  })
+
+  it('answers a billing credential rejection as INVALID_CREDENTIAL', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-llm-grok-rpc-usage-401-'))
+    const path = join(root, 'grok-oauth.json')
+    const billing = await fakeBillingServer([{ status: 401, body: { error: 'invalid token' } }])
+    await writeSession(path, {
+      accessToken: 'access-secret',
+      refreshToken: 'refresh-secret',
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+    })
+    const handler = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => path,
+      issuer: 'http://127.0.0.1:1',
+    }), { billingURL: billing.url })
+
+    const result = await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+    expect(result.ok).toBe(false)
+    expect(result.error?.code).toBe('INVALID_CREDENTIAL')
+    expect(JSON.stringify(result)).not.toMatch(/access-secret|refresh-secret/u)
+  })
+
+  it('keeps a billing 5xx out of the credential class', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-llm-grok-rpc-usage-500-'))
+    const path = join(root, 'grok-oauth.json')
+    const billing = await fakeBillingServer([{ status: 500, body: { error: 'internal' } }])
+    await writeSession(path, {
+      accessToken: 'access-secret',
+      refreshToken: 'refresh-secret',
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+    })
+    const handler = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => path,
+      issuer: 'http://127.0.0.1:1',
+    }), { billingURL: billing.url })
+
+    const result = await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+    expect(result.ok).toBe(false)
+    expect(result.error?.code).toBe('internal')
+  })
+
   it('returns decoded billing windows and never includes tokens', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-llm-grok-rpc-usage-'))
     const path = join(root, 'grok-oauth.json')
@@ -277,12 +337,11 @@ describe('Grok authenticated Host Connection RPC', () => {
     expect(JSON.stringify(result)).not.toMatch(/access-secret|refresh-secret|Bearer/u)
   })
 
-  it('returns unsupported when billing is missing or unrecognized', async () => {
+  it('returns unsupported only when billing is missing (404)', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-llm-grok-rpc-usage-unsup-'))
     const path = join(root, 'grok-oauth.json')
     const billing = await fakeBillingServer([
       { status: 404, body: { error: 'not found' } },
-      { status: 200, body: { quota: 1 } },
     ])
     await writeSession(path, {
       accessToken: 'access-secret',
@@ -298,10 +357,56 @@ describe('Grok authenticated Host Connection RPC', () => {
       ok: true,
       value: { status: 'unsupported' },
     })
-    expect(await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)).toEqual({
-      ok: true,
-      value: { status: 'unsupported' },
+  })
+
+  it('returns an error (not unsupported) when billing answers unrecognized 200 JSON', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-llm-grok-rpc-usage-unknown-'))
+    const path = join(root, 'grok-oauth.json')
+    const billing = await fakeBillingServer([
+      { status: 200, body: { quota: 1 } },
+    ])
+    await writeSession(path, {
+      accessToken: 'access-secret',
+      refreshToken: 'refresh-secret',
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
     })
+    const handler = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => path,
+      issuer: 'http://127.0.0.1:1',
+    }), { billingURL: billing.url })
+
+    const result = await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+    expect(result.ok).toBe(false)
+    expect(result.error?.message).toMatch(/unrecognized billing surface/u)
+    expect(JSON.stringify(result)).not.toMatch(/access-secret|refresh-secret/u)
+  })
+
+  it('returns an error (not quota) when billing answers an out-of-range percent', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-llm-grok-rpc-usage-range-'))
+    const path = join(root, 'grok-oauth.json')
+    const billing = await fakeBillingServer([{
+      status: 200,
+      body: {
+        config: {
+          currentPeriod: { type: 'USAGE_PERIOD_TYPE_WEEKLY', start: '2026-09-06T16:26:18.098562+00:00', end: '2026-09-13T16:26:18.098562+00:00' },
+          creditUsagePercent: -5,
+        },
+      },
+    }])
+    await writeSession(path, {
+      accessToken: 'access-secret',
+      refreshToken: 'refresh-secret',
+      expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+    })
+    const handler = createGrokRpcHandler(createGrokAuthRuntime({
+      resolveSessionPath: () => path,
+      issuer: 'http://127.0.0.1:1',
+    }), { billingURL: billing.url })
+
+    const result = await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
+    expect(result.ok).toBe(false)
+    expect(result.error?.message).toMatch(/unrecognized billing surface/u)
+    expect(JSON.stringify(result)).not.toMatch(/access-secret|refresh-secret/u)
   })
 
   it('returns a transport error without token material', async () => {
@@ -319,6 +424,7 @@ describe('Grok authenticated Host Connection RPC', () => {
 
     const result = await handler(GROK_USAGE_ENDPOINT, {}, new AbortController().signal)
     expect(result.ok).toBe(false)
+    expect(result.error?.code).toBe('internal')
     expect(result.error?.message).toMatch(/could not reach/u)
     expect(JSON.stringify(result)).not.toMatch(/access-secret|refresh-secret/u)
   })

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
 import type { GrokSettingsView } from '../src/client-contract.ts'
 import { apply, inject } from '../src/client/index.ts'
+import { clearProviderUsageCache, peekCachedUsage, rememberHeadlineQuota } from 'dsh-llm-providers-ui/usage-readers'
 
 const value: GrokSettingsView = {
   streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
@@ -146,6 +147,141 @@ describe('Grok client plugin registration', () => {
     expect(open).toHaveBeenCalledWith('about:blank', '_blank')
     expect(popup.close).toHaveBeenCalledTimes(1)
     open.mockRestore()
+    await fiber.dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('purges persisted quota on logout without a provider directory', async () => {
+    rememberHeadlineQuota('llm-grok', 'Grok', { label: 'W', remainingPercent: 50 })
+    expect(peekCachedUsage('llm-grok')).not.toBeUndefined()
+    const ctx = new Context()
+    await ctx.plugin(FakeSlots).await()
+    const slots = ctx.get('slots') as FakeSlots
+    ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
+    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => endpoint === 'auth/logout'
+      ? { ok: true, value: { ok: true } }
+      : { ok: true, value: { loggedIn: false } } } } as never)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    const face = (slots.entries('settings.provider.item')[0] as { inject?: () => { logout: () => Promise<unknown> } }).inject?.()
+    await face?.logout()
+    expect(peekCachedUsage('llm-grok')).toBeUndefined()
+    clearProviderUsageCache()
+    await fiber.dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('purges persisted quota on sign-in success signals without a provider directory', async () => {
+    const ctx = new Context()
+    await ctx.plugin(FakeSlots).await()
+    const slots = ctx.get('slots') as FakeSlots
+    ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
+    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => {
+      if (endpoint === 'auth/complete') return { ok: true, value: { ok: true } }
+      if (endpoint === 'auth/attempt-status') return { ok: true, value: { attemptId: 'attempt-1', state: 'succeeded' } }
+      return { ok: true, value: { loggedIn: false } }
+    } } } as never)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    const face = (slots.entries('settings.provider.item')[0] as { inject?: () => {
+      completeAuth: (code: string) => Promise<unknown>
+      readAuthAttemptStatus: (attemptId: string) => Promise<unknown>
+      readAuthStatus: () => Promise<unknown>
+    } }).inject?.()
+    rememberHeadlineQuota('llm-grok', 'Grok', { label: 'W', remainingPercent: 50 })
+    await face?.completeAuth('code-1')
+    expect(peekCachedUsage('llm-grok')).toBeUndefined()
+    rememberHeadlineQuota('llm-grok', 'Grok', { label: 'W', remainingPercent: 50 })
+    await face?.readAuthAttemptStatus('attempt-1')
+    expect(peekCachedUsage('llm-grok')).toBeUndefined()
+    rememberHeadlineQuota('llm-grok', 'Grok', { label: 'W', remainingPercent: 50 })
+    await face?.readAuthStatus()
+    expect(peekCachedUsage('llm-grok')).toBeUndefined()
+    clearProviderUsageCache()
+    await fiber.dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('purges seeded quota on a logged-out usage response without waiting for auth/status', async () => {
+    const ctx = new Context()
+    await ctx.plugin(FakeSlots).await()
+    const slots = ctx.get('slots') as FakeSlots
+    ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
+    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => endpoint === 'usage/read'
+      ? { ok: true, value: { status: 'logged-out' } }
+      : { ok: true, value: { loggedIn: false } } } } as never)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    rememberHeadlineQuota('llm-grok', 'Grok', { label: 'W', remainingPercent: 50 })
+    expect(peekCachedUsage('llm-grok')).not.toBeUndefined()
+    const face = (slots.entries('settings.provider.item')[0] as { inject?: () => { fetchUsage: () => Promise<unknown> } }).inject?.()
+    await expect(face?.fetchUsage()).resolves.toEqual({ status: 'logged-out' })
+    expect(peekCachedUsage('llm-grok')).toBeUndefined()
+    clearProviderUsageCache()
+    await fiber.dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('ignores a stale signed-out status that resolves after a new login', async () => {
+    let resolveOld: ((value: unknown) => void) | undefined
+    let statusCalls = 0
+    const ctx = new Context()
+    await ctx.plugin(FakeSlots).await()
+    const slots = ctx.get('slots') as FakeSlots
+    ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
+    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => {
+      if (endpoint === 'auth/complete') return { ok: true, value: { ok: true } }
+      if (endpoint === 'auth/status') {
+        statusCalls += 1
+        if (statusCalls === 1) return new Promise<unknown>(resolve => { resolveOld = resolve })
+      }
+      return { ok: true, value: { loggedIn: false } }
+    } } } as never)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    const face = (slots.entries('settings.provider.item')[0] as { inject?: () => {
+      completeAuth: (code: string) => Promise<unknown>
+      readAuthStatus: () => Promise<unknown>
+    } }).inject?.()
+    const old = face?.readAuthStatus()
+    await face?.completeAuth('code-1')
+    rememberHeadlineQuota('llm-grok', 'Grok', { label: 'W', remainingPercent: 71 })
+    resolveOld?.({ ok: true, value: { loggedIn: false } })
+    await expect(old).resolves.toMatchObject({ loggedIn: false })
+    expect(peekCachedUsage('llm-grok')?.windows[0]?.remainingPercent).toBe(71)
+    clearProviderUsageCache()
+    await fiber.dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('ignores stale logged-out usage that resolves after an account switch', async () => {
+    let resolveOld: ((value: unknown) => void) | undefined
+    let usageCalls = 0
+    const ctx = new Context()
+    await ctx.plugin(FakeSlots).await()
+    const slots = ctx.get('slots') as FakeSlots
+    ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
+    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => {
+      if (endpoint === 'auth/complete') return { ok: true, value: { ok: true } }
+      if (endpoint === 'usage/read') {
+        usageCalls += 1
+        if (usageCalls === 1) return new Promise<unknown>(resolve => { resolveOld = resolve })
+      }
+      return { ok: true, value: { loggedIn: false } }
+    } } } as never)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    const face = (slots.entries('settings.provider.item')[0] as { inject?: () => {
+      completeAuth: (code: string) => Promise<unknown>
+      fetchUsage: () => Promise<unknown>
+    } }).inject?.()
+    const old = face?.fetchUsage()
+    await face?.completeAuth('code-1')
+    rememberHeadlineQuota('llm-grok', 'Grok', { label: 'W', remainingPercent: 71 })
+    resolveOld?.({ ok: true, value: { status: 'logged-out' } })
+    await expect(old).resolves.toEqual({ status: 'logged-out' })
+    expect(peekCachedUsage('llm-grok')?.windows[0]?.remainingPercent).toBe(71)
+    clearProviderUsageCache()
     await fiber.dispose()
     await ctx.fiber.dispose()
   })

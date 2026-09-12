@@ -9,7 +9,7 @@ import type { Context, Fiber } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { ConnectionRpcHandler } from '@deepseek-ai/dsh-client-connection'
-import { resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
+import { LlmError, resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
 import type { ResolvedRetryPolicy, RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
 import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
 import type { SettingsPathOp } from '@deepseek-ai/dsh-settings'
@@ -284,15 +284,19 @@ export const Config: z<Config> = z.object({
   registerLegacyTools: z.boolean().default(true),
 })
 
-function internalError(message: string) {
+function failure(code: string, message: string) {
   return {
     ok: false as const,
     error: {
-      code: 'internal' as const,
+      code,
       message,
       details: {},
     },
   }
+}
+
+function internalError(message: string) {
+  return failure('internal', message)
 }
 
 /** Optional Host overrides for the authenticated Host Connection handler (local billing in tests). */
@@ -303,6 +307,16 @@ export interface GrokRpcHandlerOptions {
   modelsURL?: string
 }
 
+/**
+ * Map one usage failure onto the wire so it never escapes the handler as a
+ * gateway error. An LlmError keeps the code its throw site chose; a non-LlmError
+ * failure stays internal. The usage path raises only `INVALID_CREDENTIAL`
+ * (`src/usage.ts` on a billing 401/403), which is the one code the shared
+ * provider-UI quota cache treats as an unusable credential, so classifying the
+ * failure belongs to the read that saw the rejecting status.
+ * @param error - thrown value from credential resolution or the billing read.
+ * @param secrets - token material that must never reach the browser.
+ */
 function usageFailure(error: unknown, secrets: readonly string[]) {
   let message = error instanceof Error && error.message.length > 0
     ? error.message
@@ -311,12 +325,16 @@ function usageFailure(error: unknown, secrets: readonly string[]) {
     if (secret.length === 0) continue
     message = message.split(secret).join('[redacted]')
   }
-  return internalError(message)
+  if (!(error instanceof LlmError)) return internalError(message)
+  return failure(error.code, message)
 }
 
 /**
  * Host Connection `/grok` handler. Status, start, and usage replies never include tokens;
  * the Alpha.4 Host Connection service applies browser authentication and trusted-host policy.
+ * Every usage failure is answered as a result rather than thrown, preserving
+ * its LlmError code: an unusable credential answers `INVALID_CREDENTIAL`
+ * so the shared quota cache drops the previous account's entry.
  * @param runtime - Host OAuth runtime (production or a test fake).
  * @param options - optional billing URL override for tests.
  */
@@ -375,9 +393,11 @@ export function createGrokRpcHandler(
     }
     if (endpoint === GROK_USAGE_ENDPOINT) {
       if (decodeGrokEmptyRequest(payload) === undefined) return internalError('invalid Grok usage request')
-      const session = await ensureFreshSession(runtime)
-      if (session === undefined) return { ok: true as const, value: { status: 'logged-out' as const } }
+      let secrets: readonly string[] = []
       try {
+        const session = await ensureFreshSession(runtime)
+        if (session === undefined) return { ok: true as const, value: { status: 'logged-out' as const } }
+        secrets = [session.accessToken, session.refreshToken]
         const value = await readGrokUsage({
           accessToken: session.accessToken,
           ...options?.billingURL === undefined ? {} : { billingURL: options.billingURL },
@@ -387,7 +407,7 @@ export function createGrokRpcHandler(
         })
         return { ok: true as const, value }
       } catch (error: unknown) {
-        return usageFailure(error, [session.accessToken, session.refreshToken])
+        return usageFailure(error, secrets)
       }
     }
     return internalError(`unknown Grok endpoint: ${endpoint}`)

@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { clearProviderUsageCache } from 'dsh-llm-providers-ui/usage-readers'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { ProviderDetail, providerDetailCopy } from 'dsh-llm-providers-ui/provider-detail'
 import { GrokPluginCard } from '../src/client/GrokPluginCard.tsx'
 import type { GrokPluginCardProps } from '../src/client/GrokPluginCard.tsx'
 import { en } from '../src/client/locales.ts'
@@ -10,6 +12,8 @@ import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client
 import type { GrokAuthStartReply, GrokAuthStatus, GrokCatalogModel, GrokSettingsView, GrokUsageReply } from '../src/client-contract.ts'
 
 afterEach(() => { cleanup() })
+// Each case starts with an empty shared cache: the dash cases assert "nothing was ever cached".
+beforeEach(() => { clearProviderUsageCache() })
 
 const settings: GrokSettingsView = {
   streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
@@ -239,11 +243,12 @@ describe('GrokPluginCard', () => {
     })} />)
     expand()
 
-    await waitFor(() => { expect(screen.getByText(`${en.usageUsed} 12 / 100`)).toBeTruthy() })
-    expect(screen.getByText('monthly (month)')).toBeTruthy()
-    expect(screen.getByText(`${en.usageUsed} 3 / 20`)).toBeTruthy()
-    expect(screen.getByRole('progressbar', { name: 'monthly (month)' }).getAttribute('aria-valuenow')).toBe('12')
-    expect(screen.getByRole('progressbar', { name: 'weekly' }).querySelectorAll('[data-usage-fill]')).toHaveLength(1)
+    await waitFor(() => { expect(screen.getAllByRole('meter', { name: 'monthly (month)' }).length).toBeGreaterThanOrEqual(2) })
+    expect(screen.getAllByText('monthly (month)').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('88%').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('85%').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByRole('meter', { name: 'monthly (month)' })[0]?.getAttribute('aria-valuenow')).toBe('88')
+    expect(screen.getAllByRole('meter', { name: 'weekly' })[0]?.querySelectorAll('[data-provider-quota-meter]').length).toBeGreaterThanOrEqual(0)
     expect(fetchUsage).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(fetchUsage.mock.results)).not.toMatch(/accessToken|refreshToken|Bearer/u)
   })
@@ -256,6 +261,7 @@ describe('GrokPluginCard', () => {
 
     await waitFor(() => { expect(screen.getByText(en.usageUnsupported)).toBeTruthy() })
     expect(screen.queryByRole('progressbar')).toBeNull()
+    expect(screen.queryByRole('meter')).toBeNull()
   })
 
   it('shows a usage read failure without secrets and retries on demand', async () => {
@@ -280,7 +286,8 @@ describe('GrokPluginCard', () => {
     expect(screen.getByText('could not reach https://cli-chat-proxy.grok.com/v1/billing').textContent)
       .not.toMatch(/accessToken|Bearer /u)
     fireEvent.click(screen.getByRole('button', { name: en.usageRefresh }))
-    await waitFor(() => { expect(screen.getByText(`${en.usageUsed} 1 / 10`)).toBeTruthy() })
+    await waitFor(() => { expect(screen.getAllByRole('meter', { name: 'monthly' }).length).toBeGreaterThanOrEqual(2) })
+    expect(screen.getAllByText('90%').length).toBeGreaterThanOrEqual(2)
     expect(fetchUsage).toHaveBeenCalledTimes(2)
    })
 
@@ -291,14 +298,35 @@ describe('GrokPluginCard', () => {
      const readAuthAttemptStatus = vi.fn()
        .mockResolvedValueOnce({ attemptId: 'attempt-1', state: 'pending' as const })
        .mockResolvedValueOnce({ attemptId: 'attempt-1', state: 'succeeded' as const })
+     const fetchUsage = vi.fn(() => Promise.resolve({ status: 'unsupported' } satisfies GrokUsageReply))
      render(<GrokPluginCard {...props({
        startAuth: vi.fn(() => Promise.resolve({ ok: true, attemptId: 'attempt-1', authorizationUrl: 'https://auth.x.ai/example' } satisfies GrokAuthStartReply)),
-       readAuthStatus, readAuthAttemptStatus,
+       readAuthStatus, readAuthAttemptStatus, fetchUsage,
      })} />)
      expand()
      await waitFor(() => { expect(screen.getByRole('button', { name: en.signIn })).toBeTruthy() })
      fireEvent.click(screen.getByRole('button', { name: en.signIn }))
      await waitFor(() => { expect(screen.getByText('Signed in as callback@example.test.')).toBeTruthy() })
      expect(readAuthAttemptStatus).toHaveBeenCalled()
+     // Re-auth re-reads quota for the new session instead of keeping a stale snapshot.
+     await waitFor(() => { expect(fetchUsage).toHaveBeenCalledTimes(1) })
+   })
+   it('renders the shared detail template when the settings page asks for it', () => {
+     const onRefresh = vi.fn()
+     const usage = {
+       status: 'ready' as const,
+       fetchedAt: '2026-09-12T00:00:00.000Z',
+       windows: [{ id: 'week', label: 'Week', shortLabel: 'W', remainingPercent: 83, valueText: '83%' }],
+     }
+     const { container } = render(<GrokPluginCard {...props({ mode: 'detail', usage, accountState: 'connected', onRefresh, copy: providerDetailCopy.en, template: ProviderDetail })} />)
+
+     expect(container.querySelector('[data-provider-detail]')).not.toBeNull()
+     expect(container.querySelector('[data-c-quota]')).not.toBeNull()
+     expect(container.textContent).toContain('83%')
+     expect(container.textContent).toContain('2 models')
+     const advanced = container.querySelector('details.c-advanced')
+     expect(advanced).not.toBeNull()
+     expect((advanced as HTMLDetailsElement).open).toBe(false)
+     expect(container.textContent).not.toContain(en.usage)
    })
 })

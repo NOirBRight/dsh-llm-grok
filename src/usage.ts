@@ -4,12 +4,21 @@
  * The Host calls `GET …/v1/billing?format=credits` with the stored access
  * token. The browser only receives the decoded window view.
  *
- * A missing or unrecognized billing surface is `unsupported`, not a failure:
- * usage is advisory information, never a blocker.
+ * A missing billing surface (404) is `unsupported`, not a failure.
+ * A 401/403 means the billing surface rejected the stored credential, so the
+ * read fails as {@link INVALID_CREDENTIAL_CODE} and the shared quota cache
+ * drops the previous account's entry instead of keeping it.
+ * A 200 with an unrecognized body throws: the capability exists but the
+ * read failed, so the sidebar shows an error (keeping stale data), never
+ * `unsupported` (capability absent). One documented exception: the official
+ * GetGrokCreditsConfig shape omits zero-valued proto3 scalars, so a valid,
+ * still-open currentPeriod with credit_usage_percent omitted decodes to 0%
+ * used. Usage is advisory, never a blocker.
  *
  * @module dsh-llm-grok/usage
  */
 
+import { INVALID_CREDENTIAL_CODE, LlmError } from '@deepseek-ai/dsh-llm'
 import type { GrokUsageView, GrokUsageWindow } from './client-contract.ts'
 
 import { GROK_CLI_REQUEST_HEADERS } from './cli-identity.ts'
@@ -110,6 +119,11 @@ function resetFromConfig(config: Record<string, unknown>): string | undefined {
   return isoInstant(current?.['end'] ?? config['billingPeriodEnd'])
 }
 
+/** Credits percentages are 0–100 points; out-of-range values are malformed, never quota. */
+function isPercentPoints(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100
+}
+
 function percentWindow(
   id: string,
   percent: number,
@@ -117,8 +131,8 @@ function percentWindow(
   resetsAt: string | undefined,
 ): GrokUsageWindow {
   // Official grok.com usage shows 1% when the wire value is 1.0 — the scale is
-  // already percent points, not a 0–1 fraction.
-  const used = Math.min(100, Math.max(0, Math.round(percent * 10) / 10))
+  // already percent points, not a 0–1 fraction. Callers guarantee 0–100.
+  const used = Math.round(percent * 10) / 10
   return {
     id,
     used,
@@ -129,7 +143,31 @@ function percentWindow(
   }
 }
 
-/** Credits flavor: weekly window + per-product usagePercent (0–1). */
+/** Proto3 accepts omitted values and empty zero-valued Cent messages; malformed amounts are not zero. */
+function isZeroOrOmittedAmount(value: unknown): boolean {
+  return value === undefined || value === null || moneyVal(value) === 0
+    || (isRecord(value) && Object.keys(value).length === 0)
+}
+
+/**
+ * Gate for the proto3 zero-omission decode (official BillingConfig:
+ * https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-shell/src/extensions/billing.rs).
+ * Only a known-typed currentPeriod with start <= fetchedAt < end lets an
+ * omitted credit_usage_percent decode to 0% used.
+ */
+function hasValidCurrentPeriod(config: Record<string, unknown>, fetchedAt: string): boolean {
+  const current = config['currentPeriod']
+  if (!isRecord(current)) return false
+  const type = current['type']
+  if (type !== 'USAGE_PERIOD_TYPE_WEEKLY' && type !== 'USAGE_PERIOD_TYPE_MONTHLY') return false
+  const start = isoInstant(current['start'])
+  const end = isoInstant(current['end'])
+  if (start === undefined || end === undefined) return false
+  const at = Date.parse(fetchedAt)
+  return Date.parse(start) <= at && at < Date.parse(end)
+}
+
+/** Credits: current-period and per-product usage in percentage points. */
 function parseCreditsConfig(config: Record<string, unknown>, fetchedAt: string): GrokUsageView | undefined {
   const period = periodFromConfig(config)
   const resetsAt = resetFromConfig(config)
@@ -141,14 +179,24 @@ function parseCreditsConfig(config: Record<string, unknown>, fetchedAt: string):
       const product = entry['product']
       const percent = entry['usagePercent']
       if (typeof product !== 'string' || product.length === 0) continue
-      if (typeof percent !== 'number' || !Number.isFinite(percent)) continue
+      if (!isPercentPoints(percent)) continue
       windows.push(percentWindow(product, percent, period, resetsAt))
     }
   }
   if (windows.length === 0) {
     const percent = config['creditUsagePercent']
-    if (typeof percent === 'number' && Number.isFinite(percent)) {
-      windows.push(percentWindow('weekly', percent, period, resetsAt))
+    const summaryId = period === 'month' ? 'monthly' : 'weekly'
+    if (isPercentPoints(percent)) {
+      windows.push(percentWindow(summaryId, percent, period, resetsAt))
+    } else if (
+      (percent === undefined || percent === null)
+      && (products === undefined || products === null || (Array.isArray(products) && products.length === 0))
+      // Every money-like pool must read zero-or-omitted: a paid on-demand,
+      // prepaid, or legacy budget never decodes to full quota.
+      && ['monthlyLimit', 'used', 'onDemandCap', 'onDemandUsed', 'prepaidBalance'].every(key => isZeroOrOmittedAmount(config[key]))
+      && hasValidCurrentPeriod(config, fetchedAt)
+    ) {
+      windows.push(percentWindow(summaryId, 0, period, resetsAt))
     }
   }
   return windows.length === 0 ? undefined : { fetchedAt, windows }
@@ -183,7 +231,8 @@ function parseCliBillingConfig(value: unknown, fetchedAt: string): GrokUsageView
 
 /**
  * Convert the proxy billing JSON into the secret-free snapshot the card renders.
- * Unknown bodies and windows that cannot be read return undefined (unsupported).
+ * Unknown bodies and windows that cannot be read return undefined; the
+ * caller throws on undefined (a failed read), never `unsupported`.
  * @param value - opaque JSON returned by the billing endpoint.
  * @param fetchedAt - ISO-8601 instant the Host read the body.
  */
@@ -203,8 +252,12 @@ export function parseGrokBilling(value: unknown, fetchedAt: string): GrokUsageVi
 
 /**
  * Read the account's current billing windows with a Host-held access token.
- * 404 and unrecognized JSON are `unsupported`. Transport failures throw a
- * message that never includes the token.
+ * Only 404 is `unsupported` (no billing surface). A 401/403 is the billing
+ * surface rejecting the stored credential, so it fails as a {@link LlmError}
+ * carrying {@link INVALID_CREDENTIAL_CODE}. Unrecognized 200 JSON (except the
+ * documented zero-omitted credits shape), non-JSON bodies, transport failures,
+ * and other non-2xx statuses throw a non-LlmError whose message never includes
+ * the token, so callers keep them out of the credential-failure class.
  * @param request - access token and optional test overrides.
  */
 export async function readGrokUsage(
@@ -241,9 +294,12 @@ export async function readGrokUsage(
     await response.body?.cancel()
     return { status: 'unsupported' }
   }
-  if (response.status === 403) {
+  if (response.status === 401 || response.status === 403) {
     await response.body?.cancel()
-    throw new Error('This session cannot read Grok CLI billing. Sign out and sign in again.')
+    throw new LlmError(
+      'This session cannot read Grok CLI billing. Sign out and sign in again.',
+      INVALID_CREDENTIAL_CODE,
+    )
   }
   if (!response.ok) {
     await response.body?.cancel()
@@ -268,8 +324,11 @@ export async function readGrokUsage(
   try {
     body = JSON.parse(text) as unknown
   } catch {
-    return { status: 'unsupported' }
+    throw new Error(redactSecrets(`${url} answered with a body that is not JSON`, secrets))
   }
   const usage = parseGrokBilling(body, fetchedAt)
-  return usage === undefined ? { status: 'unsupported' } : { status: 'ok', usage }
+  if (usage === undefined) {
+    throw new Error(redactSecrets(`${url} answered with an unrecognized billing surface`, secrets))
+  }
+  return { status: 'ok', usage }
 }

@@ -1,31 +1,12 @@
-/** Grok / xAI mark: full-size ring with a sharp diagonal spike. */
+/** Grok silhouette redrawn from the supplied reference; currentColor supports both themes. */
 import type { ReactNode } from 'react'
 
-const SIZE = 18
-
-/** Same optical size as the other 18px provider marks; 1 unit = 1 device pixel. */
+/** Optical provider mark; the source silhouette is retained in grok.svg. */
 export function BrandMark(): ReactNode {
   return (
-    <svg
-      width={SIZE}
-      height={SIZE}
-      viewBox="0 0 18 18"
-      aria-hidden="true"
-      shapeRendering="geometricPrecision"
-      style={{ display: 'block', flex: 'none' }}
-    >
-      <circle
-        cx="9"
-        cy="9"
-        r="6.75"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.5"
-      />
-      <path
-        fill="currentColor"
-        d="M1.55 16.45 7.65 10.35a1.2 1.2 0 0 1 1.7 0L16.45 1.55 10.35 7.65a1.2 1.2 0 0 1-1.7 0z"
-      />
+    <svg width={18} height={18} viewBox="0 0 562 545" aria-hidden="true" fill="currentColor" style={{ display: 'block', flex: 'none' }}>
+      <path d="M411 105C376 80 334 66 289 66C173 66 79 160 79 276C79 306 85 329 95 353C117 407 87 451 0 542L178 383C150 355 134 318 134 277C134 192 203 123 289 123C310 123 330 127 348 134Z" />
+      <path d="M167 448L230 418C248 426 268 430 289 430C374 430 443 361 443 277C443 256 439 234 431 214C427 206 416 204 407 210L217 349L562 2C480 103 475 144 494 229C518 333 468 422 391 459C319 494 235 498 167 448Z" />
     </svg>
   )
 }

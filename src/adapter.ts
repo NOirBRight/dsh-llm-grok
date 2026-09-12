@@ -374,4 +374,5 @@ export class GrokAdapter extends LlmAdapter {
   override imageRequestPricing(_provider: string, _model: string): undefined {
     return undefined
   }
+
 }

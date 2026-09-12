@@ -1,4 +1,24 @@
+## v0.3.13
+
+- 详情页改用共享模板 `ProviderDetail`（由设置页通过 slot 上下文下发，插件不再自带模板与样式）。
+- 模型行交给模板渲染：`items`（行数据）+ `extra`（该行的上下文窗口、能力勾选、默认思考等级等私有字段），插件不再画行卡片；行内字段固定列槽、排序态只读并收起、单层圆角。
+- 详情模式下插件不再自行请求额度（`props.mode === 'detail'` 时直接返回），额度由设置页的共享缓存提供，右上角刷新走 `props.onRefresh`。
+- 高级设置按原型：分隔线区块 + 折叠箭头 + 右侧说明，选项为「复选框 + 缩进说明」。
+- 移动端：工具栏与标题同一行（无换行、无溢出），窄屏自动收紧。
+- 依赖 `dsh-llm-providers-ui` 升级到 `0.2.0`（破坏性接口：必须使用 slot 下发的 `template`/`copy` 与 `items`/`extra`）。
+
 # Changelog
+## [0.3.12] - 2026-09-07
+
+### Changed
+
+- Adopt the shared provider-ui header and quota cache from `dsh-llm-providers-ui` 0.1.12; remove the per-provider header fork.
+- Header quota loads collapsed on sign-in with idle dedup so expansion never refires; a failed read shows a truthful unavailable dash, never a fabricated percent.
+- Grok billing parser: a 404 stays `unsupported` while a 200 with an unrecognized body throws (failed read, keeps stale data); percentages validate as 0-100 points; an omitted `credit_usage_percent` decodes to 0% only with a known-typed currentPeriod covering `fetchedAt` and zero-or-omitted money pools; summary id follows the period (`monthly`/`weekly`).
+- Host usage reads that cannot resolve a usable credential answer `INVALID_CREDENTIAL`; the client `fetchUsage` path purges the shared quota cache on that wire code before throwing, and still purges on a decoded `logged-out` reply.
+- Development dependency and install guidance point at the `dsh-llm-providers-ui` `v0.1.12-015rc1d` candidate tarball.
+- Verified runtimes now include DeepSeek Harness `0.1.5-rc.1` alongside Alpha.4 and `0.1.2-rc.1`.
+
 ## [0.3.11] - 2026-09-06
 
 ### Added
@@ -30,6 +50,22 @@
 
 - Declare Store `dsh.compatibility.dshReleases` for DSH `0.1.2-alpha.4`; Alpha.5 is unverified and Alpha.1–Alpha.3 remain incompatible.
 - Target the Alpha.4 Host/Client peer set and keep published artifacts under the Store runtime-source byte bound
+
+## 0.3.6
+
+- Settings → LLM Providers: drag cards to reorder; chat picker follows `llm-providers.order` via dsh-llm-providers-ui.
+
+
+## 0.3.5
+
+- Fix sandbox escalation-schema leak: filter `sandbox_permissions` enum to strictly wider modes than the current DSH file policy before delegating to pi-ai/provider — scans DSH context-injection `options.messages` newest-to-oldest first, then falls back to `options.system` (handles stale system due to appended injection). Applies to both direct `stream` and `prepareCall` stream paths, before pi-ai/server-search tool injection. Preserves immutability and always-on `web_search`/`x_search`. Regression covered: stale `workspace-write` system + latest `danger-full-access` message removes escalation fields.
+
+
+## 0.3.4
+
+- Support the DSH 0.1.2-alpha.1 Host image-pricing call with neutral heuristic pricing
+- Restore published-RC and alpha1 client build compatibility
+- Add frozen-install CI and built-adapter release checks
 
 ## 0.3.6
 

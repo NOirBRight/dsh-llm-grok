@@ -16,21 +16,26 @@ import type {
   GrokUsageView,
   GrokUsageWindow,
 } from '../client-contract.ts'
+import { GROK_SETTINGS_NAMESPACE } from '../client-contract.ts'
 import { officialDefaultEffort, officialEffortsFor } from '../reasoning.ts'
 import type { GrokSettingsKey } from './locales.ts'
 import { BrandMark } from './BrandMark.tsx'
 import {
   inputStyle,
   rowInputStyle,
-  selectStyle,
-  rowStyle,
-  capabilitiesStyle,
   modelContentStyle,
-  modelDetailStyle,
-  fieldStyle,
 } from './model-catalog-ui.tsx'
-import { AuthToolbar, ProviderCardHeader, UsageHeader, UsageResetAt, UsageSkeleton, UsageUpdatedAt, formatProviderSummary, formatUsageClock, providerHeaderStyle, resetLabelOf } from './provider-chrome.tsx'
+import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatUsageClock, providerUiCss, providerQuotaHeaderProps, resetLabelOf, useProviderQuotaCache } from './provider-chrome.tsx'
+import type { ProviderQuotaState } from './provider-chrome.tsx'
 import { SortableList } from 'dsh-llm-providers-ui/sortable'
+import { rememberHeadlineQuota } from 'dsh-llm-providers-ui/usage-readers'
+import type { ProviderItemSlotContext } from 'dsh-llm-providers-ui/provider-detail'
+
+
+
+
+/** Display name recorded with the cached headline quota. */
+const USAGE_PROVIDER_NAME = 'Grok'
 
 /** Dependencies injected by the browser-plugin registration. */
 export interface GrokPluginCardFace {
@@ -72,8 +77,11 @@ export interface GrokPluginCardFace {
 export type GrokPluginCardProps =
   PropsRuntime<'settings.provider.item'>
   & InjectFace<GrokPluginCardFace>
+  // Present only on the settings page; an older host renders the legacy card.
+  & Partial<ProviderItemSlotContext>
 
 type AuthUi =
+  | { kind: 'unknown', message?: string }
   | { kind: 'signed-out', message?: string }
   | { kind: 'signing-in' }
   | { kind: 'signed-in', email?: string }
@@ -107,7 +115,6 @@ const cardStyle: CSSProperties = {
   borderRadius: 10,
   background: 'var(--dsw-alias-bg-module-platform)',
 }
-const headerStyle = providerHeaderStyle
 const bodyStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
@@ -127,14 +134,7 @@ const hintStyle: CSSProperties = { margin: 0, fontSize: 12, color: 'var(--dsw-al
 const labelStyle: CSSProperties = { fontSize: 13, color: 'var(--dsw-alias-label-secondary)' }
 const statusStyle: CSSProperties = { margin: 0, fontSize: 13, color: 'var(--dsw-alias-label-secondary)' }
 const errorStyle: CSSProperties = { ...statusStyle, color: 'var(--dsw-alias-state-error-primary)' }
-const barTrackStyle: CSSProperties = {
-  boxSizing: 'border-box',
-  height: 14,
-  display: 'flex',
-  overflow: 'hidden',
-  borderRadius: 999,
-  background: 'color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent)',
-}
+/* Selected-A quota meters come from the shared ProviderQuotaMeter; no local bar track. */
 const buttonStyle: CSSProperties = {
   alignSelf: 'flex-start',
   minHeight: 34,
@@ -249,24 +249,6 @@ function messageOf(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.length > 0 ? error.message : fallback
 }
 
-function Capability({ label, checked, disabled, onChange }: {
-  label: string
-  checked: boolean
-  disabled: boolean
-  onChange: (checked: boolean) => void
-}): ReactNode {
-  return (
-    <label style={{ ...labelStyle, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => { onChange(event.target.checked) }}
-      />
-      {label}
-    </label>
-  )
-}
 
 function IconChevron({ open }: { open: boolean }): ReactNode {
   return (
@@ -290,54 +272,54 @@ function IconTrash(): ReactNode {
   )
 }
 
-/** One quota window: used/limit numbers and a solid meter. */
+/** Remaining quota for one window; null when the wire value cannot name a remaining percent (never synthetic). */
+function remainingOf(quota: GrokUsageWindow): number | undefined {
+  if (quota.unit === 'percent') {
+    const remaining = 100 - quota.used
+    return Number.isFinite(remaining) && remaining >= 0 && remaining <= 100 ? remaining : undefined
+  }
+  if (quota.limit <= 0) return undefined
+  const remaining = (1 - quota.used / quota.limit) * 100
+  return Number.isFinite(remaining) && remaining >= 0 && remaining <= 100 ? remaining : undefined
+}
+
+/** One quota window as a segmented remaining meter. */
 function UsageBar({ usedText, window: quota, t }: {
   usedText: string
   window: GrokUsageWindow
   t: GrokPluginCardFace['t']
 }): ReactNode {
-  const ratio = quota.limit > 0 ? quota.used / quota.limit : quota.used > 0 ? 1 : 0
-  const percent = Math.round(ratio * 1000) / 10
-  const fill = Math.min(100, Math.max(0, percent))
+  void usedText
+  const remaining = remainingOf(quota)
+  if (remaining === undefined) return null
   const label = quota.period === undefined || quota.resetsAt !== undefined
     ? quota.id
     : quota.id + ' (' + quota.period + ')'
+  const detail = resetLabelOf(quota.resetsAt, usageResetCopy(t))
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-        <span style={labelStyle}>{label}</span>
-        <span style={hintStyle}>
-          {quota.unit === 'percent'
-            ? String(quota.used) + '%'
-            : usedText + ' ' + String(quota.used) + ' / ' + String(quota.limit)}
-        </span>
-      </div>
-      <div
-        style={barTrackStyle}
-        role="progressbar"
-        aria-label={label}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(fill)}
-      >
-        <span
-          data-usage-fill="true"
-          style={{
-            width: String(fill) + '%',
-            height: '100%',
-            flex: 'none',
-            background: 'var(--dsw-alias-state-business-primary)',
-            transition: 'width 200ms ease',
-          }}
-        />
-      </div>
-      <UsageResetAt label={resetLabelOf(quota.resetsAt, usageResetCopy(t))} />
-    </div>
+    <ProviderQuotaMeter
+      remainingPercent={remaining}
+      label={label}
+      {...detail === undefined ? {} : { detail }}
+    />
   )
 }
 
 function usageResetCopy(t: GrokPluginCardFace['t']): { at: string, atDays: string } {
   return { at: t('usageResetAt'), atDays: t('usageResetAtDays') }
+}
+
+/** Headline remaining quota from real usage; null when no window is available (never synthetic). */
+function headerQuotaOf(usage: GrokUsageView | undefined, t: GrokPluginCardFace['t']): ProviderQuotaState | null {
+  const window = usage?.windows[0]
+  if (window === undefined) return null
+  const remaining = remainingOf(window)
+  if (remaining === undefined) return null
+  const label = window.period === undefined || window.resetsAt !== undefined
+    ? window.id
+    : window.id + ' (' + window.period + ')'
+  const detail = resetLabelOf(window.resetsAt, usageResetCopy(t))
+  return { remainingPercent: remaining, label, ...detail === undefined ? {} : { detail } }
 }
 
 /** Render the single-package Grok contribution under Plugin configuration. */
@@ -352,18 +334,20 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   const [source, setSource] = useState<ModelDraft[] | undefined>(initial)
   const [draft, setDraft] = useState<ModelDraft[] | undefined>(initial)
   const [sourceRevision, setSourceRevision] = useState<number | undefined>(snapshot.revision)
-  const [auth, setAuth] = useState<AuthUi>({ kind: 'signed-out' })
+  const [auth, setAuth] = useState<AuthUi>({ kind: 'unknown' })
   const [pasteCode, setPasteCode] = useState('')
   const [authAttemptId, setAuthAttemptId] = useState<string | undefined>(undefined)
   const [authorizationUrl, setAuthorizationUrl] = useState<string | undefined>(undefined)
   const [popupBlocked, setPopupBlocked] = useState(false)
   const authAttemptRef = useRef<string | undefined>(undefined)
+  const usageEpoch = useRef(0)
   const [usage, setUsage] = useState<UsageState>({ status: 'idle' })
   const [lastUsage, setLastUsage] = useState<GrokUsageView | undefined>(undefined)
   const [usageUpdatedAt, setUsageUpdatedAt] = useState<Date | undefined>(undefined)
   const [enableImageGen, setEnableImageGen] = useState(snapshot.value?.enableImageGen === true)
   const [sourceEnableImageGen, setSourceEnableImageGen] = useState(snapshot.value?.enableImageGen === true)
   const [catalogOpen, setCatalogOpen] = useState(false)
+  const [modelSort, setModelSort] = useState(false)
   const [expandedModels, setExpandedModels] = useState<ReadonlySet<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [fetching, setFetching] = useState(false)
@@ -391,6 +375,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   }, [dirty, snapshot.revision, snapshot.status, snapshot.value, sourceRevision])
 
   useEffect(() => { authAttemptRef.current = authAttemptId }, [authAttemptId])
+  useEffect(() => () => { usageEpoch.current++ }, [])
   useEffect(() => () => {
     const attemptId = authAttemptRef.current
     if (attemptId !== undefined) void cancelAuth(attemptId).catch(() => undefined)
@@ -408,6 +393,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
           const loggedIn = await readAuthStatus()
           if (!stopped && loggedIn.loggedIn) {
             setAuth({ kind: 'signed-in', ...loggedIn.email === undefined ? {} : { email: loggedIn.email } })
+            setUsage({ status: 'idle' })
             setAuthAttemptId(undefined); setAuthorizationUrl(undefined); setPopupBlocked(false)
           }
         } else if (status.state !== 'pending') {
@@ -422,10 +408,16 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   }, [auth.kind, authAttemptId, readAuthAttemptStatus, readAuthStatus, t])
 
   const loadUsage = async (): Promise<void> => {
+    // The settings page owns quota in the shared detail; the card self-loads only in the legacy layout.
+    if (props.mode === 'detail') return
+    const epoch = ++usageEpoch.current
     setUsage({ status: 'loading' })
     try {
       const read = await fetchUsage()
+      if (epoch !== usageEpoch.current) return
       if (read.status === 'logged-out') {
+        setLastUsage(undefined)
+        setUsageUpdatedAt(undefined)
         setAuth({ kind: 'signed-out' })
         setUsage({ status: 'idle' })
         return
@@ -435,39 +427,43 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
         return
       }
       setLastUsage(read.usage)
+      rememberHeadlineQuota('llm-grok', 'Grok', headerQuotaOf(read.usage, t))
       setUsageUpdatedAt(new Date())
       setUsage({ status: 'ready', usage: read.usage })
     } catch (error: unknown) {
+      if (epoch !== usageEpoch.current) return
       setUsage({ status: 'error', message: messageOf(error, t('usageFailed')) })
     }
   }
 
   useEffect(() => {
     let cancelled = false
+    const epoch = usageEpoch.current
     void readAuthStatus().then((status) => {
-      if (cancelled) return
+      if (cancelled || epoch !== usageEpoch.current) return
       if (status.loggedIn) {
         setAuth({ kind: 'signed-in', ...status.email === undefined ? {} : { email: status.email } })
         return
       }
+      usageEpoch.current++
       setAuth({ kind: 'signed-out' })
       setLastUsage(undefined)
       setUsageUpdatedAt(undefined)
       setUsage({ status: 'idle' })
     }).catch(() => {
-      if (!cancelled) {
-        setAuth({ kind: 'signed-out', message: t('statusFailed') })
+      if (!cancelled && epoch === usageEpoch.current) {
+        setAuth({ kind: 'unknown', message: t('statusFailed') })
         setUsage({ status: 'idle' })
       }
     })
     return () => { cancelled = true }
   }, [readAuthStatus, t])
 
+  // Header quota loads collapsed on sign-in; idle status dedups so expansion never refires.
   useEffect(() => {
-    if (!open || auth.kind !== 'signed-in') return
-    setUsage({ status: 'loading' })
+    if (auth.kind !== 'signed-in' || usage.status !== 'idle') return
     void loadUsage()
-  }, [open, auth.kind])
+  }, [auth.kind, usage.status])
 
   const patchDraft = (models: ModelDraft[]): void => {
     setDraft(models)
@@ -502,6 +498,9 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   }
 
   const onSignIn = async (): Promise<void> => {
+    usageEpoch.current++
+    setLastUsage(undefined)
+    setUsageUpdatedAt(undefined)
     setAuth({ kind: 'signing-in' })
     setPasteCode('')
     setAuthorizationUrl(undefined)
@@ -542,6 +541,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
       }
       const status = await readAuthStatus()
       setAuthAttemptId(undefined)
+      if (status.loggedIn) setUsage({ status: 'idle' })
       setAuth(status.loggedIn
         ? { kind: 'signed-in', ...status.email === undefined ? {} : { email: status.email } }
         : { kind: 'signed-out', message: t('signInFailed') })
@@ -559,13 +559,16 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   }
 
   const onSignOut = async (): Promise<void> => {
+    usageEpoch.current++
     try {
       await logout()
+      usageEpoch.current++
       setAuth({ kind: 'signed-out' })
       setLastUsage(undefined)
       setUsageUpdatedAt(undefined)
       setUsage({ status: 'idle' })
     } catch {
+      setUsage({ status: 'idle' })
       setAuth(current => current.kind === 'signed-in'
         ? current
         : { kind: 'signed-out', message: t('signOutFailed') })
@@ -649,23 +652,39 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
     }
   }
 
-  const statusLabel = signingIn
+  const statusLabel = auth.kind === 'unknown' ? auth.message ?? t('loading') : signingIn
     ? t('signingIn')
     : auth.kind === 'signed-in'
       ? formatSignedIn(t, auth.email)
       : auth.message ?? t('signedOut')
   const modelCount = draft?.length ?? 0
-  const headerSummary = formatProviderSummary(
-    auth.kind === 'signed-in' ? t('summaryOn') : t('summaryOff'),
-    t('summaryModels').replace('{count}', String(modelCount)),
-  )
+  const headerModels = t('summaryModels').replace('{count}', String(modelCount))
+  const headerStatus = auth.kind === 'unknown' ? auth.message ?? t('loading') : auth.kind === 'signed-in' ? t('summaryOn') : t('summaryOff')
+  const liveQuota = headerQuotaOf(usage.status === 'ready' ? usage.usage : lastUsage, t)
+  // The account read settles into "unknown" while it is still pending, so a cached
+  // meter paints on the first frame; a settled failure withholds the meter instead of
+  // showing a stale percent, and only a known sign-out drops the stored entry.
+  const withheld = auth.kind === 'signed-out' || auth.kind === 'signing-in'
+    || usage.status === 'error' || usage.status === 'unsupported'
+  const headerQuota = useProviderQuotaCache(GROK_SETTINGS_NAMESPACE, USAGE_PROVIDER_NAME, liveQuota, {
+    answered: auth.kind !== 'unknown',
+    signedOut: auth.kind === 'signed-out',
+    withheld,
+  })
+  // Both the loading frame and the settled frame carry the meter; a settled query that
+  // returned no usable quota shows the unavailable dash instead.
+  const quotaProps = providerQuotaHeaderProps(headerQuota, {
+    dashLabel: t('usage'),
+    settled: auth.kind === 'signed-in' && (usage.status === 'error' || usage.status === 'unsupported'),
+  })
 
   if (snapshot.status === 'unavailable') {
     return (
-      <li style={cardStyle}>
+      <li style={cardStyle} data-provider-card="" data-provider-role="llm">
+        <style>{providerUiCss}</style>
         <button
           type="button"
-          style={headerStyle}
+          data-provider-card-header=""
           aria-expanded={open}
           aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
           onClick={() => { setOpen(!open) }}
@@ -673,13 +692,15 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
           <ProviderCardHeader
             title={title}
             mark={<BrandMark />}
-            summary={headerSummary}
+            summary={headerModels}
+            status={headerStatus}
             open={open}
+            role="llm"
           />
         </button>
         {open
           ? (
-            <div style={bodyStyle}>
+            <div style={bodyStyle} data-provider-body="">
               <p style={statusStyle} role="status">{t('remoteAccess')}</p>
             </div>
           )
@@ -690,10 +711,11 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
 
   if (snapshot.status !== 'ready' || draft === undefined) {
     return (
-      <li style={cardStyle}>
+      <li style={cardStyle} data-provider-card="" data-provider-role="llm">
+        <style>{providerUiCss}</style>
         <button
           type="button"
-          style={headerStyle}
+          data-provider-card-header=""
           aria-expanded={open}
           aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
           onClick={() => { setOpen(!open) }}
@@ -701,20 +723,319 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
           <ProviderCardHeader
             title={title}
             mark={<BrandMark />}
-            summary={headerSummary}
+            summary={t('loading')}
+            status=""
             open={open}
+            role="llm"
+            {...quotaProps}
           />
         </button>
-        {open ? <div style={bodyStyle}><p style={statusStyle}>{t('loading')}</p></div> : null}
+        {open ? <div style={bodyStyle} data-provider-body=""><p style={statusStyle}>{t('loading')}</p></div> : null}
       </li>
     )
   }
 
+  // Prototype C pieces, shared by the legacy card and the migrated detail.
+  const modelsList = (
+    <>
+                    <SortableList
+                      items={draft}
+                      getId={model => model.rowId}
+                      disabled={disabled}
+                      sorting={modelSort}
+                      moveButtons={modelSort}
+                      dragLabel={(model, index) => {
+                        const label = model.id.trim().length > 0 ? model.id.trim() : String(index + 1)
+                        return t('dragModel') + ': ' + label
+                      }}
+                      moveUpLabel={(model, index) => {
+                        const label = model.id.trim().length > 0 ? model.id.trim() : String(index + 1)
+                        return t('moveUp') + ': ' + label
+                      }}
+                      moveDownLabel={(model, index) => {
+                        const label = model.id.trim().length > 0 ? model.id.trim() : String(index + 1)
+                        return t('moveDown') + ': ' + label
+                      }}
+                      onReorder={patchDraft}
+                      renderItem={(model, index) => {
+                        const expanded = expandedModels.has(model.rowId)
+                        const label = model.id.trim().length > 0 ? model.id.trim() : String(index + 1)
+                        return (
+                          <div data-model-row={label} data-provider-model="" style={modelContentStyle}>
+                            <input
+                              style={rowInputStyle}
+                              value={model.id}
+                              placeholder={t('modelId')}
+                              aria-label={t('modelId') + ' ' + String(index + 1)}
+                              disabled={disabled}
+                              onChange={(event) => { patchModel(index, { id: event.target.value }) }}
+                            />
+                            <input
+                              style={rowInputStyle}
+                              value={model.name ?? ''}
+                              placeholder={t('modelName')}
+                              aria-label={t('modelName') + ' ' + String(index + 1)}
+                              disabled={disabled}
+                              onChange={(event) => { patchModel(index, { name: event.target.value || undefined }) }}
+                            />
+                            <button
+                              type="button"
+                              style={iconButtonStyle}
+                              aria-label={t('modelDetails') + ': ' + label}
+                              aria-expanded={expanded}
+                              title={t('modelDetails')}
+                              onClick={() => {
+                                setExpandedModels((current) => {
+                                  const next = new Set(current)
+                                  if (!next.delete(model.rowId)) next.add(model.rowId)
+                                  return next
+                                })
+                              }}
+                            >
+                              <IconChevron open={expanded} />
+                            </button>
+                            <button
+                              type="button"
+                              style={iconButtonStyle}
+                              aria-label={t('remove') + ' ' + label}
+                              title={t('remove')}
+                              disabled={disabled}
+                              onClick={() => { patchDraft(draft.filter((_, at) => at !== index)) }}
+                            >
+                              <IconTrash />
+                            </button>
+                            {expanded ? modelExtra(model, index) : null}
+                          </div>
+                        )
+                      }}
+                    />
+                    <button
+                      type="button"
+                      style={{ ...buttonStyle, alignSelf: 'flex-start' }}
+                      disabled={disabled}
+                      onClick={() => {
+                        const model: ModelDraft = { rowId: newModelRowId(), id: '', contextWindow: '' }
+                        patchDraft([...draft, model])
+                        setExpandedModels(current => new Set(current).add(model.rowId))
+                      }}
+                    >
+                      {t('addModel')}
+                    </button>
+    </>
+  )
+  const capabilitiesSection = (
+    <div className="c-control">
+      <label className="c-checkbox-field">
+        <input
+          type="checkbox"
+          checked={enableImageGen}
+          disabled={disabled}
+          onChange={(event) => {
+            setEnableImageGen(event.target.checked)
+            setFailure(undefined)
+            setNotice(undefined)
+          }}
+        />
+        {t('enableImageGen')}
+      </label>
+      <p className="c-field-hint">{t('enableImageGenHelp')}</p>
+    </div>
+  )
+  const draftBlock = (
+    <>
+            {invalid ? <p style={errorStyle}>{t('invalidModel')}</p> : null}
+            {failure === undefined ? null : <p style={errorStyle}>{failure}</p>}
+            {notice === undefined ? null : <p style={statusStyle}>{notice}</p>}
+            <div style={actionsStyle}>
+              <button type="button" style={buttonStyle} disabled={!dirty || busy} onClick={discard}>{t('discard')}</button>
+              <button
+                type="button"
+                style={primaryButtonStyle}
+                disabled={!dirty || invalid || disabled}
+                onClick={() => { void save() }}
+              >
+                {t(busy ? 'saving' : 'save')}
+              </button>
+            </div>
+    </>
+  )
+
+
+  /** Provider-specific fields for one expanded model row; shared by both layouts. */
+  const modelExtra = (model: ModelDraft, index: number): ReactNode => (
+    <div className="c-extra-grid">
+      <label className="c-field">
+        <span className="c-field-label">{t('contextWindow')}</span>
+        <input
+          className="c-input"
+          inputMode="numeric"
+          placeholder={t('contextWindowDefault')}
+          value={model.contextWindow}
+          disabled={disabled}
+          aria-label={t('contextWindow')}
+          onChange={(event) => { patchModel(index, { contextWindow: event.target.value }) }}
+        />
+      </label>
+      <div className="c-extra-checks">
+        <label>
+          <input type="checkbox" checked={model.vision === true} disabled={disabled} onChange={(event) => { patchModel(index, { vision: event.target.checked }) }} />
+          {t('vision')}
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={model.thinking === true}
+            disabled={disabled}
+            onChange={(event) => {
+              const thinking = event.target.checked
+              if (!thinking) patchModel(index, { thinking, defaultReasoningEffort: undefined })
+              else patchModel(index, { thinking })
+            }}
+          />
+          {t('thinking')}
+        </label>
+      </div>
+      {(() => {
+        const settings = modelSettingsOf(model)
+        const efforts = settings.thinking === true ? officialEffortsFor(settings) : []
+        if (efforts.length === 0) return null
+        const suggested = officialDefaultEffort(settings)
+        return (
+          <label className="c-field">
+            <span className="c-field-label">{t('defaultEffort')}</span>
+            <select
+              className="c-input"
+              value={model.defaultReasoningEffort ?? suggested}
+              disabled={disabled}
+              aria-label={t('defaultEffort')}
+              onChange={(event) => {
+                const effort = efforts.find(entry => entry.value === event.target.value)
+                patchModel(index, { defaultReasoningEffort: effort?.value })
+              }}
+            >
+              {efforts.map(effort => (
+                <option key={effort.value} value={effort.value}>{effort.label ?? effort.value}</option>
+              ))}
+            </select>
+          </label>
+        )
+      })()}
+    </div>
+  )
+
+  // Prototype C detail: the shared template owns the layout, this card owns Grok's data.
+  const SharedDetail = props.template
+  const detailCopy = props.copy
+  if (props.mode === 'detail' && SharedDetail !== undefined && detailCopy !== undefined) {
+    const accountActions = auth.kind === 'signed-in'
+      ? <button type="button" style={buttonStyle} onClick={() => { void onSignOut() }}>{t('signOut')}</button>
+      : auth.kind === 'signing-in'
+        ? <button type="button" style={buttonStyle} onClick={() => { void onCancelSignIn() }}>{t('cancel')}</button>
+        : <button type="button" style={buttonStyle} onClick={() => { void onSignIn() }}>{t('signIn')}</button>
+    const accountBody = auth.kind === 'signing-in'
+      ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {authorizationUrl !== undefined && popupBlocked
+              ? <a href={authorizationUrl} target="_blank" rel="noopener noreferrer" style={statusStyle}>Open xAI sign-in</a>
+              : null}
+            <p style={hintStyle}>{t('pasteCode')}</p>
+            <label style={labelStyle} htmlFor="grok-oauth-code">{t('pasteCodeLabel')}</label>
+            <input
+              id="grok-oauth-code"
+              style={inputStyle}
+              value={pasteCode}
+              autoComplete="off"
+              spellCheck={false}
+              aria-label={t('pasteCodeLabel')}
+              onChange={event => { setPasteCode(event.target.value) }}
+            />
+            <button
+              type="button"
+              style={buttonStyle}
+              disabled={pasteCode.trim().length === 0}
+              onClick={() => { void onPasteCode() }}
+            >
+              {t('pasteCodeSubmit')}
+            </button>
+          </div>
+        )
+      : undefined
+    return (
+        <SharedDetail
+          name={USAGE_PROVIDER_NAME}
+          role="llm"
+          mark={<BrandMark />}
+          copy={detailCopy}
+          notice={t('description')}
+          account={{
+            state: auth.kind === 'signed-in' ? 'connected' : 'unconnected',
+            label: statusLabel,
+            actions: accountActions,
+            ...(accountBody === undefined ? {} : { body: accountBody }),
+          }}
+          quota={{
+            status: props.usage?.status ?? 'loading',
+            windows: props.usage?.windows ?? [],
+            ...(props.onRefresh === undefined ? {} : { onRefresh: props.onRefresh }),
+          }}
+          models={{
+            count: draft === undefined ? 0 : draft.length,
+            allOpen: catalogOpen,
+            onToggleAll: () => { setCatalogOpen(value => !value) },
+            sorting: modelSort,
+            onToggleSorting: () => { setModelSort(value => !value) },
+            onChooseFromAccount: () => { void chooseFromAccount() },
+            chooseDisabled: fetching || disabled,
+            items: draft.map(model => ({
+              rowId: model.rowId,
+              id: model.id,
+              ...(model.name === undefined ? {} : { name: model.name }),
+            })),
+            expanded: [...expandedModels],
+            onPatch: (rowId, patch) => {
+              const index = draft.findIndex(model => model.rowId === rowId)
+              if (index >= 0) patchModel(index, patch)
+            },
+            onRemove: (rowId) => {
+              const index = draft.findIndex(model => model.rowId === rowId)
+              if (index >= 0) patchDraft(draft.filter((_, at) => at !== index))
+            },
+            onToggle: (rowId) => {
+              setExpandedModels((current) => {
+                const next = new Set(current)
+                if (!next.delete(rowId)) next.add(rowId)
+                return next
+              })
+            },
+            onReorder: (rowIds) => {
+              const byId = new Map(draft.map(model => [model.rowId, model]))
+              const next = rowIds.map(rowId => byId.get(rowId)).filter((model): model is ModelDraft => model !== undefined)
+              if (next.length === draft.length) patchDraft(next)
+            },
+            onAdd: () => {
+              const model: ModelDraft = { rowId: newModelRowId(), id: '', contextWindow: '' }
+              patchDraft([...draft, model])
+              setExpandedModels(current => new Set(current).add(model.rowId))
+            },
+            addDisabled: disabled,
+            extra: (row) => {
+              const index = draft.findIndex(model => model.rowId === row.rowId)
+              const model = draft[index]
+              return index < 0 || model === undefined ? null : modelExtra(model, index)
+            },
+          }}
+          advanced={capabilitiesSection}
+          draft={draftBlock}
+        />
+    )
+  }
+
   return (
-    <li style={cardStyle}>
+    <li style={cardStyle} data-provider-card="" data-provider-role="llm">
+      <style>{providerUiCss}</style>
       <button
         type="button"
-        style={headerStyle}
+        data-provider-card-header=""
         aria-expanded={open}
         aria-label={t(open ? 'collapse' : 'expand') + ': ' + title}
         onClick={() => { setOpen(!open) }}
@@ -722,15 +1043,18 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
         <ProviderCardHeader
           title={title}
           mark={<BrandMark />}
-          summary={headerSummary}
+          summary={headerModels}
+          status={headerStatus}
           open={open}
           unsaved={dirty}
           unsavedLabel={t('unsaved')}
+          role="llm"
+          {...quotaProps}
         />
       </button>
       {open
         ? (
-          <div style={bodyStyle}>
+          <div style={bodyStyle} data-provider-body="">
             <p style={hintStyle}>{t('description')}</p>
             <section style={sectionStyle} aria-label={statusLabel}>
               <AuthToolbar
@@ -825,184 +1149,24 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                   <span style={sectionTitleStyle}>{t('models')}</span>
                   <span style={hintStyle}>{customModels ? t('customized') : t('inherited')}</span>
                 </button>
-                <button
-                  type="button"
-                  style={buttonStyle}
-                  disabled={fetching || disabled}
-                  onClick={() => { void chooseFromAccount() }}
-                >
-                  {t(fetching ? 'fetchingModels' : 'fetchModels')}
-                </button>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: 'none' }}>
+                  <button type="button" style={buttonStyle} disabled={disabled} onClick={() => { setModelSort(current => !current) }} aria-pressed={modelSort}>
+                    {modelSort ? t('doneSorting') : t('sortModels')}
+                  </button>
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={fetching || disabled}
+                    onClick={() => { void chooseFromAccount() }}
+                  >
+                    {t(fetching ? 'fetchingModels' : 'fetchModels')}
+                  </button>
+                </span>
               </div>
-              {catalogOpen
-                ? (
-                  <>
-                    <SortableList
-                      items={draft}
-                      getId={model => model.rowId}
-                      disabled={disabled}
-                      dragLabel={(model, index) => {
-                        const label = model.id.trim().length > 0 ? model.id.trim() : String(index + 1)
-                        return t('dragModel') + ': ' + label
-                      }}
-                      onReorder={patchDraft}
-                      renderItem={(model, index) => {
-                        const expanded = expandedModels.has(model.rowId)
-                        const label = model.id.trim().length > 0 ? model.id.trim() : String(index + 1)
-                        return (
-                          <div data-model-row={label} style={modelContentStyle}>
-                            <input
-                              style={rowInputStyle}
-                              value={model.id}
-                              placeholder={t('modelId')}
-                              aria-label={t('modelId') + ' ' + String(index + 1)}
-                              disabled={disabled}
-                              onChange={(event) => { patchModel(index, { id: event.target.value }) }}
-                            />
-                            <input
-                              style={rowInputStyle}
-                              value={model.name ?? ''}
-                              placeholder={t('modelName')}
-                              aria-label={t('modelName') + ' ' + String(index + 1)}
-                              disabled={disabled}
-                              onChange={(event) => { patchModel(index, { name: event.target.value || undefined }) }}
-                            />
-                            <button
-                              type="button"
-                              style={iconButtonStyle}
-                              aria-label={t('modelDetails') + ': ' + label}
-                              aria-expanded={expanded}
-                              title={t('modelDetails')}
-                              onClick={() => {
-                                setExpandedModels((current) => {
-                                  const next = new Set(current)
-                                  if (!next.delete(model.rowId)) next.add(model.rowId)
-                                  return next
-                                })
-                              }}
-                            >
-                              <IconChevron open={expanded} />
-                            </button>
-                            <button
-                              type="button"
-                              style={iconButtonStyle}
-                              aria-label={t('remove') + ' ' + label}
-                              title={t('remove')}
-                              disabled={disabled}
-                              onClick={() => { patchDraft(draft.filter((_, at) => at !== index)) }}
-                            >
-                              <IconTrash />
-                            </button>
-                            {expanded
-                              ? (
-                                <div style={{ ...modelDetailStyle, gridColumn: '1 / -1' }}>
-                                  <div style={rowStyle}>
-                                    <label style={fieldStyle}>
-                                      <span style={labelStyle}>{t('contextWindow')}</span>
-                                      <input
-                                        style={inputStyle}
-                                        inputMode="numeric"
-                                        placeholder={t('contextWindowDefault')}
-                                        value={model.contextWindow}
-                                        disabled={disabled}
-                                        aria-label={t('contextWindow')}
-                                        onChange={(event) => { patchModel(index, { contextWindow: event.target.value }) }}
-                                      />
-                                    </label>
-                                  </div>
-                                  <div style={capabilitiesStyle}>
-                                    <Capability
-                                      label={t('vision')}
-                                      checked={model.vision === true}
-                                      disabled={disabled}
-                                      onChange={(vision) => { patchModel(index, { vision }) }}
-                                    />
-                                    <Capability
-                                      label={t('thinking')}
-                                      checked={model.thinking === true}
-                                      disabled={disabled}
-                                      onChange={(thinking) => {
-                                        if (!thinking) patchModel(index, { thinking, defaultReasoningEffort: undefined })
-                                        else patchModel(index, { thinking })
-                                      }}
-                                    />
-                                    {(() => {
-                                      const settings = modelSettingsOf(model)
-                                      const efforts = settings.thinking === true ? officialEffortsFor(settings) : []
-                                      if (efforts.length === 0) return null
-                                      const suggested = officialDefaultEffort(settings)
-                                      return (
-                                        <label style={{ ...labelStyle, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                          {t('defaultEffort')}
-                                          <select
-                                            style={selectStyle}
-                                            value={model.defaultReasoningEffort ?? suggested}
-                                            disabled={disabled}
-                                            aria-label={t('defaultEffort')}
-                                            onChange={(event) => {
-                                              const effort = efforts.find(entry => entry.value === event.target.value)
-                                              patchModel(index, { defaultReasoningEffort: effort?.value })
-                                            }}
-                                          >
-                                            {efforts.map(effort => (
-                                              <option key={effort.value} value={effort.value}>{effort.label ?? effort.value}</option>
-                                            ))}
-                                          </select>
-                                        </label>
-                                      )
-                                    })()}
-                                  </div>
-                                </div>
-                              )
-                              : null}
-                          </div>
-                        )
-                      }}
-                    />
-                    <button
-                      type="button"
-                      style={{ ...buttonStyle, alignSelf: 'flex-start' }}
-                      disabled={disabled}
-                      onClick={() => {
-                        const model: ModelDraft = { rowId: newModelRowId(), id: '', contextWindow: '' }
-                        patchDraft([...draft, model])
-                        setExpandedModels(current => new Set(current).add(model.rowId))
-                      }}
-                    >
-                      {t('addModel')}
-                    </button>
-                  </>
-                )
-                : null}
+              {catalogOpen ? modelsList : null}
             </section>
-            <section style={sectionStyle} aria-label={t('capabilities')}>
-              <p style={sectionTitleStyle}>{t('capabilities')}</p>
-              <Capability
-                label={t('enableImageGen')}
-                checked={enableImageGen}
-                disabled={disabled}
-                onChange={(checked) => {
-                  setEnableImageGen(checked)
-                  setFailure(undefined)
-                  setNotice(undefined)
-                }}
-              />
-              <p style={hintStyle}>{t('enableImageGenHelp')}</p>
-            </section>
-            {invalid ? <p style={errorStyle}>{t('invalidModel')}</p> : null}
-            {failure === undefined ? null : <p style={errorStyle}>{failure}</p>}
-            {notice === undefined ? null : <p style={statusStyle}>{notice}</p>}
-            <div style={actionsStyle}>
-              <button type="button" style={buttonStyle} disabled={!dirty || busy} onClick={discard}>{t('discard')}</button>
-              <button
-                type="button"
-                style={primaryButtonStyle}
-                disabled={!dirty || invalid || disabled}
-                onClick={() => { void save() }}
-              >
-                {t(busy ? 'saving' : 'save')}
-              </button>
-            </div>
+            {capabilitiesSection}
+            {draftBlock}
           </div>
         )
         : null}
