@@ -961,7 +961,6 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
         )
       : undefined
     return (
-      <li style={cardStyle} data-provider-card="" data-provider-role="llm">
         <SharedDetail
           name={USAGE_PROVIDER_NAME}
           role="llm"
@@ -1028,7 +1027,6 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
           advanced={capabilitiesSection}
           draft={draftBlock}
         />
-      </li>
     )
   }
 
