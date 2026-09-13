@@ -136,6 +136,10 @@ function checkAlpha4Manifest(manifest, label) {
       // is still enforced by edge satisfaction below, so an exact-rc.1 runtime edge cannot
       // pull an rc.1 DSH archive into the graph (released fixtures pin devDeps per runtime).
       const devRuntimePin = section === 'devDependencies' && (range === ALPHA4 || range === RC1 || range === RC15)
+      if ((label === 'source package' || label === 'packed package') && name.startsWith('@deepseek-ai/dsh-') && (section === 'peerDependencies' || section === 'dependencies' || section === 'optionalDependencies')) {
+        if (section !== 'peerDependencies' || range !== '*') fail(label + ' DSH package ' + name + ' must be a * peer, got ' + section + ' ' + range)
+        continue
+      }
       if (name.startsWith('@deepseek-ai/dsh-') && range !== ALPHA4 && !devRuntimePin && !(satisfies(ALPHA4, range) && satisfies(RC1, range)) && !(capturedOfficialWorkspace && range === 'workspace:^')) fail(label + ' has a DSH range that excludes Alpha.4 or rc.1: ' + name + ' ' + range)
       // Cordis plugins published from the upstream monorepo retain their
       // workspace peer range; the harness packages and this plugin must pin
@@ -152,7 +156,8 @@ function verifyFixture() {
   if (!Array.isArray(provenance.packages) || !Array.isArray(provenance.edges)) fail('fixture provenance has no package or edge list')
   const root = readJson(join(ROOT, 'package.json'))
   const rootArchiveName = archiveName(root.name, root.version)
-  const names = readdirSync(TARBALL_ROOT).filter(value => value.endsWith('.tgz') && value !== rootArchiveName).sort()
+  const rootPrefix = (root.name.startsWith('@') ? root.name.slice(1).replaceAll('/', '-') : root.name) + '-'
+  const names = readdirSync(TARBALL_ROOT).filter(value => value.endsWith('.tgz') && !(value.startsWith(rootPrefix) && value.endsWith('.tgz'))).sort()
   const records = [...provenance.packages].sort((left, right) => String(left.file).localeCompare(String(right.file)))
   if (names.length !== records.length || names.some((name, index) => name !== records[index].file)) fail('fixture archives and provenance records differ')
   const byIdentity = new Map()
