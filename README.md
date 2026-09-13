@@ -25,7 +25,7 @@ Install `dsh-llm-providers-ui` explicitly in the profile alongside provider plug
 
 ## Installation
 
-Verified on DeepSeek Harness `0.1.2-alpha.4`, `0.1.2-rc.1`, and `0.1.5-rc.1` (Cordis `4.0.2`). Install directly from GitHub:
+Verified on DeepSeek Harness `0.1.2-alpha.4`, `0.1.2-rc.1`, `0.1.5-rc.1`, and `0.1.5-rc.2` (Cordis `4.0.2`). Install directly from GitHub:
 
 ~~~sh
 dsh plugin --profile web add --force \
@@ -83,7 +83,7 @@ The composer picker groups sibling catalog rows that share a base id after peeli
 
 ## Release installation (Latest)
 
-xAI Grok subscription login, Responses chat, usage, search, and Imagine. The release artifact targets DeepSeek Harness 0.1.2-alpha.4, 0.1.2-rc.1, and 0.1.5-rc.1 and contains built Host/Client files only; it has no sibling-repository source, workstation path, link:, or workspace: dependency.
+xAI Grok subscription login, Responses chat, usage, search, and Imagine. The release artifact targets DeepSeek Harness 0.1.2-alpha.4, 0.1.2-rc.1, 0.1.5-rc.1, and 0.1.5-rc.2 and contains built Host/Client files only; it has no sibling-repository source, workstation path, link:, or workspace: dependency.
 
 The dsh-llm-providers-ui package owns the LLM Providers page, navigation, and shared order store. This package owns only its provider card, models, credentials, and Host route. Install the Owner first for Web; headless Host routing works without the Owner.
 
