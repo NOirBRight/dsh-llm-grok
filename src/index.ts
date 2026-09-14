@@ -521,6 +521,7 @@ export function apply(ctx: Context, config: Config): void {
         current = source as () => Config
       },
       onChange: scheduleCapabilities,
+      validate: value => { resolveAdapterOptions(value) },
     })
   })
 

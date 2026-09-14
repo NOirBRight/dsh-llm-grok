@@ -18,17 +18,26 @@ import { createGrokUsageReader, dropPersistedUsageKeys } from 'dsh-llm-providers
  * @param ctx - client context carrying the Provider directory.
  * @param modelCount - reads the current active model count from plugin state.
  */
-function installProviderDirectory(ctx: ClientContext, modelCount: () => number | undefined): void {
+function installProviderDirectory(
+  ctx: ClientContext,
+  modelCount: () => number | undefined,
+  extras: { catalogId: string, account: () => { state: 'connected' | 'configured' | 'unconnected' | 'unknown' } },
+): void {
   ctx.inject(['providerDirectory'], scope => {
-    scope.effect(() => scope.providerDirectory.register({
-      key: GROK_SETTINGS_NAMESPACE,
-      name: 'Grok',
-      header: 'shared',
-      // The card renders the shared detail template; the settings page adds only the breadcrumb.
-      detail: 'shared',
-      usage: createGrokUsageReader(),
-      modelCount,
-    }), 'dsh-llm-grok: provider directory registration')
+    scope.effect(() => {
+      const declaration = Object.assign({
+        key: GROK_SETTINGS_NAMESPACE,
+        name: 'Grok',
+        header: 'shared' as const,
+        detail: 'shared' as const,
+        usage: createGrokUsageReader(),
+        modelCount,
+      }, {
+        catalogId: extras.catalogId,
+        account: extras.account,
+      })
+      return scope.providerDirectory.register(declaration as Parameters<typeof scope.providerDirectory.register>[0])
+    }, 'dsh-llm-grok: provider directory registration')
   })
 }
 
@@ -99,9 +108,20 @@ export function apply(ctx: ClientContext): void {
     unset: async () => { throw new Error('Use Grok management settings/save') },
   }
   // Registered after the snapshot exists so the published count always reads live state.
-  installProviderDirectory(ctx, () => currentSnapshot.value?.models.length)
+  const account = { state: 'unknown' as 'connected' | 'configured' | 'unconnected' | 'unknown' }
+  let closed = false
+  const publishAccount = (state: typeof account.state): void => {
+    if (closed || account.state === state) return
+    account.state = state
+    try { ctx.get('providerDirectory')?.update(GROK_SETTINGS_NAMESPACE) } catch { /* providerDirectory is optional in lab */ }
+  }
+  installProviderDirectory(ctx, () => currentSnapshot.value?.models.length, {
+    catalogId: 'grok',
+    account: () => ({ state: account.state }),
+  })
 
   const publishSettings = (settings: GrokSettingsView, revision: number): void => {
+    if (closed) return
     currentSnapshot = { ...currentSnapshot, status: 'ready', value: settings, revision }
     listeners.forEach(listener => listener())
   }
@@ -112,10 +132,6 @@ export function apply(ctx: ClientContext): void {
     if (decoded === undefined) throw new Error('invalid Grok settings/read response')
     publishSettings(decoded.settings, decoded.revision)
   }
-  void refreshSettings().catch(() => {
-    currentSnapshot = { ...currentSnapshot, status: 'unavailable' }
-    listeners.forEach(listener => listener())
-  })
 
   const startAuth: GrokPluginCardFace['startAuth'] = async () => {
     const popup = typeof window === 'undefined' ? null : window.open('about:blank', '_blank')
@@ -160,18 +176,22 @@ export function apply(ctx: ClientContext): void {
     if (decoded.ok === true) {
       authGeneration += 1
       invalidateUsageCache()
+      publishAccount('connected')
     }
     return decoded
   }
 
   const readAuthAttemptStatus: GrokPluginCardFace['readAuthAttemptStatus'] = async (attemptId) => {
+    const generation = authGeneration
     const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_ATTEMPT_STATUS_ENDPOINT, { attemptId })
     if (!result.ok) throw new Error(result.error.message)
     const decoded = decodeGrokAuthAttemptStatus(result.value)
     if (decoded === undefined) throw new Error(t('statusFailed'))
+    if (generation !== authGeneration || closed) return decoded
     if (decoded.state === 'succeeded') {
       authGeneration += 1
       invalidateUsageCache()
+      publishAccount('connected')
     }
     return decoded
   }
@@ -187,7 +207,9 @@ export function apply(ctx: ClientContext): void {
     if (!result.ok) throw new Error(result.error.message)
     const decoded = decodeGrokAuthStatus(result.value)
     if (decoded === undefined) throw new Error(t('statusFailed'))
-    if (decoded.loggedIn === false && generation === authGeneration) invalidateUsageCache()
+    if (generation !== authGeneration || closed) return decoded
+    if (decoded.loggedIn === false) invalidateUsageCache()
+    publishAccount(decoded.loggedIn === true ? 'connected' : 'unconnected')
     return decoded
   }
 
@@ -197,6 +219,7 @@ export function apply(ctx: ClientContext): void {
     if (decodeGrokAuthLogoutReply(result.value) === undefined) throw new Error(t('signOutFailed'))
     authGeneration += 1
     invalidateUsageCache()
+    publishAccount('unconnected')
   }
 
   const fetchModels: GrokPluginCardFace['fetchModels'] = async () => {
@@ -236,6 +259,16 @@ export function apply(ctx: ClientContext): void {
     publishSettings(accepted.settings, accepted.revision)
     return accepted
   }
+
+  ctx.effect(() => {
+    void refreshSettings().catch(() => {
+      if (closed) return
+      currentSnapshot = { ...currentSnapshot, status: 'unavailable' }
+      listeners.forEach(listener => listener())
+    })
+    void readAuthStatus().catch(() => { /* overview stays unknown until a later card read */ })
+    return () => { closed = true }
+  }, 'dsh-llm-grok: account snapshot')
 
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',

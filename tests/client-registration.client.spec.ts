@@ -2,7 +2,7 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
-import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
+import { GROK_AUTH_ATTEMPT_STATUS_ENDPOINT, GROK_AUTH_LOGOUT_ENDPOINT, GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
 import type { GrokSettingsView } from '../src/client-contract.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { clearProviderUsageCache, peekCachedUsage, rememberHeadlineQuota } from 'dsh-llm-providers-ui/usage-readers'
@@ -282,6 +282,80 @@ describe('Grok client plugin registration', () => {
     await expect(old).resolves.toEqual({ status: 'logged-out' })
     expect(peekCachedUsage('llm-grok')?.windows[0]?.remainingPercent).toBe(71)
     clearProviderUsageCache()
+    await fiber.dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('does not publish a stale signed-out account after a later login', async () => {
+    let resolveOld: ((value: unknown) => void) | undefined
+    let statusCalls = 0
+    let account = (): { state: string } => ({ state: 'unknown' })
+    const ctx = new Context()
+    await ctx.plugin(FakeSlots).await()
+    ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
+    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => {
+      if (endpoint === 'auth/complete') return { ok: true, value: { ok: true } }
+      if (endpoint === 'auth/status') {
+        statusCalls += 1
+        if (statusCalls === 1) return new Promise<unknown>(resolve => { resolveOld = resolve })
+      }
+      return { ok: true, value: { loggedIn: false } }
+    } } } as never)
+    ctx.provide('providerDirectory', {
+      register: (declaration: { account?: () => { state: string } }) => {
+        if (declaration.account !== undefined) account = declaration.account
+        return () => undefined
+      },
+      update: () => undefined,
+      invalidateUsage: () => undefined,
+    } as never)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    const slots = ctx.get('slots') as FakeSlots
+    const face = (slots.entries('settings.provider.item')[0] as { inject?: () => { completeAuth: (code: string) => Promise<unknown> } }).inject?.()
+    await face?.completeAuth('code-1')
+    expect(account()).toEqual({ state: 'connected' })
+    resolveOld?.({ ok: true, value: { loggedIn: false } })
+    await Promise.resolve()
+    expect(account()).toEqual({ state: 'connected' })
+    await fiber.dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('does not restore an account when an earlier sign-in poll finishes after logout', async () => {
+    let resolveAttempt: ((value: unknown) => void) | undefined
+    let account = (): { state: string } => ({ state: 'unknown' })
+    const ctx = new Context()
+    await ctx.plugin(FakeSlots).await()
+    const slots = ctx.get('slots') as FakeSlots
+    ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
+    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => {
+      if (endpoint === GROK_AUTH_ATTEMPT_STATUS_ENDPOINT) return new Promise<unknown>(resolve => { resolveAttempt = resolve })
+      if (endpoint === GROK_AUTH_LOGOUT_ENDPOINT) return { ok: true, value: { ok: true } }
+      if (endpoint === 'auth/status') return { ok: true, value: { loggedIn: false } }
+      if (endpoint === 'settings/read') return { ok: true, value: { settings: value, revision: 1 } }
+      return { ok: true, value: {} }
+    } } } as never)
+    ctx.provide('providerDirectory', {
+      register: (declaration: { account?: () => { state: string } }) => {
+        if (declaration.account !== undefined) account = declaration.account
+        return () => undefined
+      },
+      update: () => undefined,
+      invalidateUsage: () => undefined,
+    } as never)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    const face = (slots.entries('settings.provider.item')[0] as { inject?: () => {
+      readAuthAttemptStatus: (attemptId: string) => Promise<unknown>
+      logout: () => Promise<void>
+    } }).inject?.()
+    const poll = face?.readAuthAttemptStatus('attempt-1')
+    await face?.logout()
+    expect(account()).toEqual({ state: 'unconnected' })
+    resolveAttempt?.({ ok: true, value: { attemptId: 'attempt-1', state: 'succeeded' } })
+    await expect(poll).resolves.toEqual({ attemptId: 'attempt-1', state: 'succeeded' })
+    expect(account()).toEqual({ state: 'unconnected' })
     await fiber.dispose()
     await ctx.fiber.dispose()
   })

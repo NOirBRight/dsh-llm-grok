@@ -28,7 +28,6 @@ import {
 import { AuthToolbar, ProviderCardHeader, ProviderQuotaMeter, UsageHeader, UsageSkeleton, UsageUpdatedAt, formatUsageClock, providerUiCss, providerQuotaHeaderProps, resetLabelOf, useProviderQuotaCache } from './provider-chrome.tsx'
 import type { ProviderQuotaState } from './provider-chrome.tsx'
 import { SortableList } from 'dsh-llm-providers-ui/sortable'
-import { rememberHeadlineQuota } from 'dsh-llm-providers-ui/usage-readers'
 import type { ProviderItemSlotContext } from 'dsh-llm-providers-ui/provider-detail'
 
 
@@ -427,7 +426,6 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
         return
       }
       setLastUsage(read.usage)
-      rememberHeadlineQuota('llm-grok', 'Grok', headerQuotaOf(read.usage, t))
       setUsageUpdatedAt(new Date())
       setUsage({ status: 'ready', usage: read.usage })
     } catch (error: unknown) {
