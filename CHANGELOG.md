@@ -1,5 +1,9 @@
 ## v0.3.17
 
+## 0.3.18
+
+- Declare `webServer` on the Host `inject` list (and nested Connection scope) so settings/auth RPC mounts on DSH 0.1.6+ inject enforcement.
+
 Register catalogId/unknown against providers-ui 0.2.9.
 
 ## v0.3.16

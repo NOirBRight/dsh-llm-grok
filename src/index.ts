@@ -189,7 +189,7 @@ export {
 } from './image-gen-client.ts'
 
 export const name = 'llm-grok'
-export const inject = ['llm']
+export const inject = ['llm', 'webServer']
 
 const NS = GROK_SETTINGS_NAMESPACE
 
@@ -503,7 +503,7 @@ export function apply(ctx: Context, config: Config): void {
     registeredPolicy = policy
   }
 
-  const connectionFiber = ctx.inject(['connection'], (connectionCtx) => {
+  const connectionFiber = ctx.inject(['connection', 'webServer'], (connectionCtx) => {
     const inner = createGrokRpcHandler(runtime)
     connectionCtx.effect(() => connectionCtx.connection.rpc.handle(
       GROK_RPC_CHANNEL,

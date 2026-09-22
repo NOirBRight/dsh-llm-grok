@@ -82,12 +82,14 @@ async function generate(context: Context, args: Record<string, unknown>) {
 describe('grok_image_gen', () => {
   it('does not register the tool when enableImageGen is off', async () => {
     const context = await bootRuntime()
+  context.provide('webServer', { register: () => () => {} } as never)
     await context.plugin(Grok, { enableImageGen: false })
     expect(context.tools.get(GROK_IMAGE_GEN_TOOL_NAME)).toBeUndefined()
   })
 
   it('registers grok_image_gen when enableImageGen is on', async () => {
     const context = await bootRuntime()
+  context.provide('webServer', { register: () => () => {} } as never)
     await context.plugin(Grok, { enableImageGen: true })
     expect(context.tools.get(GROK_IMAGE_GEN_TOOL_NAME)?.name).toBe('grok_image_gen')
   })

@@ -53,6 +53,7 @@ async function bench() {
       call: async () => ({ ok: true, value: { loggedIn: false } }),
     },
   } as never)
+  ctx.provide('webServer', { register: () => () => {} } as never)
   return { ctx, slots }
 }
 
@@ -88,6 +89,7 @@ describe('Grok client plugin registration', () => {
         },
       },
     } as never)
+      ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
 
@@ -140,6 +142,7 @@ describe('Grok client plugin registration', () => {
     ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => endpoint === 'settings/read'
       ? { ok: true, value: { settings: value, revision: 1 } }
       : { ok: true, value: { ok: true, authorizationUrl: 7 } } } } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     const face = (slots.entries('settings.provider.item')[0] as { inject?: () => { startAuth: () => Promise<unknown> } }).inject?.()
@@ -161,6 +164,7 @@ describe('Grok client plugin registration', () => {
     ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => endpoint === 'auth/logout'
       ? { ok: true, value: { ok: true } }
       : { ok: true, value: { loggedIn: false } } } } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     const face = (slots.entries('settings.provider.item')[0] as { inject?: () => { logout: () => Promise<unknown> } }).inject?.()
@@ -181,6 +185,7 @@ describe('Grok client plugin registration', () => {
       if (endpoint === 'auth/attempt-status') return { ok: true, value: { attemptId: 'attempt-1', state: 'succeeded' } }
       return { ok: true, value: { loggedIn: false } }
     } } } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     const face = (slots.entries('settings.provider.item')[0] as { inject?: () => {
@@ -210,6 +215,7 @@ describe('Grok client plugin registration', () => {
     ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => endpoint === 'usage/read'
       ? { ok: true, value: { status: 'logged-out' } }
       : { ok: true, value: { loggedIn: false } } } } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     rememberHeadlineQuota('llm-grok', 'Grok', { label: 'W', remainingPercent: 50 })
@@ -237,6 +243,7 @@ describe('Grok client plugin registration', () => {
       }
       return { ok: true, value: { loggedIn: false } }
     } } } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     const face = (slots.entries('settings.provider.item')[0] as { inject?: () => {
@@ -269,6 +276,7 @@ describe('Grok client plugin registration', () => {
       }
       return { ok: true, value: { loggedIn: false } }
     } } } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     const face = (slots.entries('settings.provider.item')[0] as { inject?: () => {
@@ -301,6 +309,7 @@ describe('Grok client plugin registration', () => {
       }
       return { ok: true, value: { loggedIn: false } }
     } } } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     ctx.provide('providerDirectory', {
       register: (declaration: { account?: () => { state: string } }) => {
         if (declaration.account !== undefined) account = declaration.account
@@ -336,6 +345,7 @@ describe('Grok client plugin registration', () => {
       if (endpoint === 'settings/read') return { ok: true, value: { settings: value, revision: 1 } }
       return { ok: true, value: {} }
     } } } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     ctx.provide('providerDirectory', {
       register: (declaration: { account?: () => { state: string } }) => {
         if (declaration.account !== undefined) account = declaration.account

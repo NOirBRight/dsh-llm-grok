@@ -54,6 +54,7 @@ describe('Grok authenticated Host Connection RPC', () => {
     const dispose = vi.fn(async () => { await pending })
     const handle = vi.fn((_channel: string, _handler: Handler) => dispose)
     ctx.provide('connection', { rpc: { handle } } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})
     await fiber.await()
 
@@ -80,6 +81,7 @@ describe('Grok authenticated Host Connection RPC', () => {
     const logged = vi.spyOn(ctx.logger, 'error').mockImplementation(() => undefined)
     const handle = vi.fn(() => { throw failure })
     ctx.provide('connection', { rpc: { handle } } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})
     await fiber.await()
     expect(logged).toHaveBeenCalledWith(failure)
@@ -492,6 +494,7 @@ describe('Grok settings/save RPC', () => {
     const handle = vi.fn((_channel: string, _handler: Handler) =>
       () => Promise.resolve())
     ctx.provide('connection', { rpc: { handle } } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     ctx.provide('settings', settings as never)
     const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})
     await fiber.await()
@@ -527,6 +530,7 @@ describe('Grok settings/save RPC', () => {
     const handle = vi.fn((_channel: string, _handler: Handler) =>
       () => Promise.resolve())
     ctx.provide('connection', { rpc: { handle } } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})
     await fiber.await()
     const handler = handle.mock.calls[0]?.[1]

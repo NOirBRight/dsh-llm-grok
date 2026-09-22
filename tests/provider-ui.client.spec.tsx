@@ -131,6 +131,7 @@ describe('Grok provider directory shared header', () => {
     ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
     const rpc = { call: async () => ({ ok: true, value: { settings, revision: 1 } }) }
     ctx.provide('connection', { rpc } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     await waitFor(() => { expect(register).toHaveBeenCalled() })
@@ -166,6 +167,7 @@ describe('Grok provider directory shared header', () => {
       return { ok: true, value: { settings, revision: 1 } }
     }) }
     ctx.provide('connection', { rpc } as never)
+    ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     const face = slots.entries('settings.provider.item')[0]?.inject?.() as { logout: () => Promise<void>, completeAuth: (code: string) => Promise<{ ok: boolean }> }

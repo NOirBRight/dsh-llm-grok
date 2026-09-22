@@ -45,6 +45,7 @@ async function loadComposition(): Promise<{ ctx: Context }> {
   const ctx = new Context()
   context = ctx
   ctx.baseUrl = pathToFileURL(root).href + '/'
+  ctx.provide('webServer', { register: () => () => {} } as never)
   await ctx.plugin(Loader)
   ctx.loader.builtins.include = Include
   const modules = new Map<string, unknown>([
@@ -71,7 +72,7 @@ describe('llm-grok real composition', () => {
     const { ctx } = await loadComposition()
 
     expect(LlmGrok.name).toBe('llm-grok')
-    expect(LlmGrok.inject).toEqual(['llm'])
+    expect(LlmGrok.inject).toEqual(['llm', 'webServer'])
     expect(ctx.llm.listConfigurableProviders()).toEqual([
       { provider: 'grok', displayName: 'Grok', settingsNs: 'llm-grok', settingsPath: [] },
     ])
