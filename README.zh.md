@@ -12,7 +12,7 @@ DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由�
 
 `package.json#dsh.compatibility.dshReleases` 里的已验证宿主是证据，不是允许列表。未知的新宿主告警一次后仍按正常路径挂载。只有复现过的故障才会加入 blocklist。
 
-`catalogId` 与未解析的 `unknown` 账户状态在运行时挂上。已发布的 `dsh-llm-providers-ui` 0.2.8 不含这些字段，并把 `unknown` 当成未连接；只有更新的 Owner 才会生效。
+`catalogId` 与未解析的 `unknown` 账户状态在运行时挂上。已发布的旧版 `dsh-llm-providers-ui` 0.2.8 不含这些字段，并把 `unknown` 当成未连接；需安装 0.2.12 或更新版 Owner 才会生效。
 
 ## 安装
 
@@ -20,9 +20,9 @@ DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由�
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.9/dsh-llm-providers-ui-0.2.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.12/dsh-llm-providers-ui-0.2.12.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.17/dsh-llm-grok-0.3.17.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.19/dsh-llm-grok-0.3.19.tgz
 dsh web
 ~~~
 
@@ -90,18 +90,18 @@ Latest（Owner + 本插件；Web 必须一起装）：
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.12.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.17.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.19.tgz
 ~~~
 
 固定版本（可复现）：
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.9/dsh-llm-providers-ui-0.2.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.12/dsh-llm-providers-ui-0.2.12.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.17/dsh-llm-grok-0.3.17.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.19/dsh-llm-grok-0.3.19.tgz
 ~~~
 
 更新、卸载与验证：
@@ -109,9 +109,9 @@ dsh plugin --profile web add --force \
 ~~~sh
 # 更新 Owner + 本插件到 Latest
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.12.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.17.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.19.tgz
 # 验证加载与版本
 dsh plugin --profile web list
 dsh plugin --profile web doctor
@@ -121,9 +121,9 @@ dsh plugin --profile web remove dsh-llm-grok
 
 配置入口：Web 使用「设置」中的本插件页面；Host-only 插件使用 profile 的 dsh.profile.bundles 配置。先复制本 README 的最小 YAML/JSON 示例，再填写凭据或后端地址。
 
-回滚：重新执行固定版本 v0.3.17 命令，确认插件列表后只重启一次 Web 服务。失败时查看 journalctl --user -u dsh-web.service 与 dsh plugin --profile web doctor，不要把源码 checkout 写入 production profile。
+回滚：重新安装上一稳定版 [v0.3.18](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.18/dsh-llm-grok-0.3.18.tgz)，确认插件列表后只重启一次 Web 服务。失败时查看 journalctl --user -u dsh-web.service 与 dsh plugin --profile web doctor，不要把源码 checkout 写入 production profile。
 
-Release 与完整性：[v0.3.17](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.17) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.17/SHA256SUMS)。
+Release 与完整性：[v0.3.19](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.19) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.19/SHA256SUMS)。
 
 ## 独立 Model Switch 搜索
 
@@ -131,4 +131,4 @@ Host 通过现有 Model Switch 注册表同时注册 Search 与 Image adapter，
 
 这需要协同的 Model Switch 动态搜索实现（`dsh-model-switch` 0.4.7；本 adapter 按 0.4.6 注册表契约构建）。注册 adapter 不会切换全局 Web 路由：显式配置 `web.searchProvider: model-switch`（保留其余 Web 配置），再在 Model Switch 中选择 provider/model。`web_fetch` 不变，不注册替代 web 工具。ProviderDirectory 延迟 role/usage 集成保持不变。
 
-验证：`pnpm test`（143 通过）、`pnpm run build`；3082 官方 Web 先后用 `grok-4.6` 与 `grok-4.5` 选中，均返回真实来源。lab 组成与证据见 Model Switch 集成审计。
+验证：`pnpm test`（198 通过）、`pnpm run build`；3082 官方 Web 先后用 `grok-4.6` 与 `grok-4.5` 选中，均返回真实来源。lab 组成与证据见 Model Switch 集成审计。

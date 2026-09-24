@@ -124,11 +124,11 @@ importers:
         specifier: ~18.3.1
         version: 18.3.7(@types/react@18.3.31)
       dsh-llm-providers-ui:
-        specifier: https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.11/dsh-llm-providers-ui-0.2.11.tgz
-        version: https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.11/dsh-llm-providers-ui-0.2.11.tgz(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-client-connection@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-scope@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))))(@deepseek-ai/dsh-client-locale@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-renderer@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-settings@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-slots@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-settings@0.1.7-alpha.2(3440e56d4d573886f7d98a9fad6f6ae0))(@deepseek-ai/schemastery@3.18.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.12/dsh-llm-providers-ui-0.2.12.tgz
+        version: https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.12/dsh-llm-providers-ui-0.2.12.tgz(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-client-connection@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-scope@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))))(@deepseek-ai/dsh-client-locale@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-renderer@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-settings@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-slots@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-settings@0.1.7-alpha.2(3440e56d4d573886f7d98a9fad6f6ae0))(@deepseek-ai/schemastery@3.18.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       dsh-model-switch:
-        specifier: https://github.com/NOirBRight/dsh-model-switch/releases/download/v0.4.13/dsh-model-switch-0.4.13.tgz
-        version: https://github.com/NOirBRight/dsh-model-switch/releases/download/v0.4.13/dsh-model-switch-0.4.13.tgz(7acd38b45e952383b7a508cd3c50049f)
+        specifier: https://github.com/NOirBRight/dsh-model-switch/releases/download/v0.4.14/dsh-model-switch-0.4.14.tgz
+        version: https://github.com/NOirBRight/dsh-model-switch/releases/download/v0.4.14/dsh-model-switch-0.4.14.tgz(7acd38b45e952383b7a508cd3c50049f)
       jsdom:
         specifier: ^29.1.1
         version: 29.1.1
@@ -358,9 +358,6 @@ packages:
         optional: true
       '@deepseek-ai/cordis-plugin-loader':
         optional: true
-
-  '@deepseek-ai/cosmokit@1.8.4':
-    resolution: {integrity: sha512-zOX7hFKtUQNY6GlZi1OCGY+bp6swWDf8aFNbCSAonVKEpEb5Tc2m3moUtNZscT7ksflIcVn+qgqYZo9QKUF+fQ==}
 
   '@deepseek-ai/cosmokit@1.8.5':
     resolution: {integrity: sha512-LXsrlem9z8dq4sLflj2yuCuYX7KqhdzF5hZly3eZyuTo8d6oDSOXuEgC5DbQWKW+lksm6zmOutQLsP/ma6wR6A==}
@@ -661,9 +658,6 @@ packages:
     peerDependencies:
       '@deepseek-ai/cordis': ~4.0.4
       '@deepseek-ai/dsh-llm': 0.1.7-alpha.2
-
-  '@deepseek-ai/schemastery@3.18.3':
-    resolution: {integrity: sha512-plZIZADuGLT/3PoYmUaEDZd0vG1rVahU89MevnxXsyQhFEi2D6DUuTJel7FUb3cUM9aCzqGMN99sHJe1RIushA==}
 
   '@deepseek-ai/schemastery@3.18.4':
     resolution: {integrity: sha512-SSXO6tYuyrIqKVbmOnIq0s+riUywYzouFMcnBluHF9n4KMo2G8HvEzhCYj6pj2617/glOjbJuVInJ9hfONsjkg==}
@@ -1457,21 +1451,21 @@ packages:
   dom-accessibility-api@0.5.16:
     resolution: {integrity: sha512-X7BJ2yElsnOJ30pZF4uIIDfBEVgF4XEBxL9Bxhy6dnrm5hkzqmsWHGTiHqRiITNhMyFLyAiWndIJP7Z1NTteDg==}
 
-  dsh-llm-providers-ui@https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.11/dsh-llm-providers-ui-0.2.11.tgz:
-    resolution: {tarball: https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.11/dsh-llm-providers-ui-0.2.11.tgz}
-    version: 0.2.11
+  dsh-llm-providers-ui@https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.12/dsh-llm-providers-ui-0.2.12.tgz:
+    resolution: {tarball: https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.12/dsh-llm-providers-ui-0.2.12.tgz}
+    version: 0.2.12
     engines: {node: ^22.19.0 || >=24.0.0}
     peerDependencies:
-      '@deepseek-ai/cordis': '>=4.0.2 <5.0.0'
-      '@deepseek-ai/dsh-client-connection': '*'
-      '@deepseek-ai/dsh-client-locale': '*'
-      '@deepseek-ai/dsh-client-ui-renderer': '*'
-      '@deepseek-ai/dsh-client-ui-session': '*'
-      '@deepseek-ai/dsh-client-ui-settings': '*'
-      '@deepseek-ai/dsh-client-ui-sidebar': '*'
-      '@deepseek-ai/dsh-client-ui-slots': '*'
-      '@deepseek-ai/dsh-settings': '*'
-      '@deepseek-ai/schemastery': ^3.18.1
+      '@deepseek-ai/cordis': ~4.0.4
+      '@deepseek-ai/dsh-client-connection': '>=0.1.7-alpha.2 <0.1.8'
+      '@deepseek-ai/dsh-client-locale': '>=0.1.7-alpha.2 <0.1.8'
+      '@deepseek-ai/dsh-client-ui-renderer': '>=0.1.7-alpha.2 <0.1.8'
+      '@deepseek-ai/dsh-client-ui-session': '>=0.1.7-alpha.2 <0.1.8'
+      '@deepseek-ai/dsh-client-ui-settings': '>=0.1.7-alpha.2 <0.1.8'
+      '@deepseek-ai/dsh-client-ui-sidebar': '>=0.1.7-alpha.2 <0.1.8'
+      '@deepseek-ai/dsh-client-ui-slots': '>=0.1.7-alpha.2 <0.1.8'
+      '@deepseek-ai/dsh-settings': '>=0.1.7-alpha.2 <0.1.8'
+      '@deepseek-ai/schemastery': ~3.18.4
       react: ^18.2.0
       react-dom: ^18.2.0
     peerDependenciesMeta:
@@ -1492,44 +1486,44 @@ packages:
       '@deepseek-ai/dsh-settings':
         optional: true
 
-  dsh-model-switch@https://github.com/NOirBRight/dsh-model-switch/releases/download/v0.4.13/dsh-model-switch-0.4.13.tgz:
-    resolution: {tarball: https://github.com/NOirBRight/dsh-model-switch/releases/download/v0.4.13/dsh-model-switch-0.4.13.tgz}
-    version: 0.4.13
+  dsh-model-switch@https://github.com/NOirBRight/dsh-model-switch/releases/download/v0.4.14/dsh-model-switch-0.4.14.tgz:
+    resolution: {tarball: https://github.com/NOirBRight/dsh-model-switch/releases/download/v0.4.14/dsh-model-switch-0.4.14.tgz}
+    version: 0.4.14
     engines: {node: ^22.19.0 || >=24.0.0}
     peerDependencies:
-      '@deepseek-ai/cordis': '>=4.0.2 <5.0.0'
-      '@deepseek-ai/dsh-agent': '*'
-      '@deepseek-ai/dsh-agent-default-model': '*'
-      '@deepseek-ai/dsh-api-remotes': '*'
-      '@deepseek-ai/dsh-api-session-controller': '*'
-      '@deepseek-ai/dsh-client-connection': '*'
-      '@deepseek-ai/dsh-client-locale': '*'
-      '@deepseek-ai/dsh-client-ui-commands': '*'
-      '@deepseek-ai/dsh-client-ui-conversation': '*'
-      '@deepseek-ai/dsh-client-ui-model-selection': '*'
-      '@deepseek-ai/dsh-client-ui-primitives': '*'
-      '@deepseek-ai/dsh-client-ui-renderer': '*'
-      '@deepseek-ai/dsh-client-ui-settings': '*'
-      '@deepseek-ai/dsh-client-ui-sidebar': '*'
-      '@deepseek-ai/dsh-client-ui-slots': '*'
-      '@deepseek-ai/dsh-client-ui-user-questions': '*'
-      '@deepseek-ai/dsh-client-ui-workspace': '*'
-      '@deepseek-ai/dsh-compaction': '*'
-      '@deepseek-ai/dsh-compaction-basic': '*'
-      '@deepseek-ai/dsh-credentials': '*'
-      '@deepseek-ai/dsh-launch-environment': '*'
-      '@deepseek-ai/dsh-llm': '*'
-      '@deepseek-ai/dsh-permission-presets': '*'
-      '@deepseek-ai/dsh-plan-mode': '*'
-      '@deepseek-ai/dsh-session': '*'
-      '@deepseek-ai/dsh-settings': '*'
-      '@deepseek-ai/dsh-subagent': '*'
-      '@deepseek-ai/dsh-system-prompt': '*'
-      '@deepseek-ai/dsh-token-meter': '*'
-      '@deepseek-ai/dsh-tools': '*'
-      '@deepseek-ai/dsh-util-time': '*'
-      '@deepseek-ai/dsh-web': '*'
-      '@deepseek-ai/dsh-web-search-deepseek': '*'
+      '@deepseek-ai/cordis': ~4.0.4
+      '@deepseek-ai/dsh-agent': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-agent-default-model': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-api-remotes': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-api-session-controller': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-client-connection': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-client-locale': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-client-ui-commands': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-client-ui-conversation': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-client-ui-model-selection': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-client-ui-primitives': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-client-ui-renderer': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-client-ui-settings': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-client-ui-sidebar': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-client-ui-slots': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-client-ui-user-questions': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-client-ui-workspace': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-compaction': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-compaction-basic': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-credentials': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-launch-environment': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-llm': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-permission-presets': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-plan-mode': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-session': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-settings': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-subagent': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-system-prompt': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-token-meter': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-tools': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-util-time': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-web': 0.1.7-alpha.2
+      '@deepseek-ai/dsh-web-search-deepseek': 0.1.7-alpha.2
       react: ^18.2.0
       react-dom: ^18.2.0
     peerDependenciesMeta:
@@ -2605,8 +2599,6 @@ snapshots:
       '@deepseek-ai/cordis-plugin-include': 1.0.9(@deepseek-ai/cordis-plugin-loader@1.0.5)(@deepseek-ai/cordis@4.0.4)
       '@deepseek-ai/cordis-plugin-loader': 1.0.5(@deepseek-ai/cordis@4.0.4)(node-addon-require-builtin@0.1.6)
 
-  '@deepseek-ai/cosmokit@1.8.4': {}
-
   '@deepseek-ai/cosmokit@1.8.5': {}
 
   '@deepseek-ai/dsh-agent@0.1.7-alpha.2(f6373fbb650642e334325b83884d4465)':
@@ -2924,11 +2916,6 @@ snapshots:
       '@deepseek-ai/cordis': 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)
       '@deepseek-ai/dsh-llm': 0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4)
       '@deepseek-ai/schemastery': 3.18.4
-
-  '@deepseek-ai/schemastery@3.18.3':
-    dependencies:
-      '@deepseek-ai/cosmokit': 1.8.4
-      '@standard-schema/spec': 1.1.0
 
   '@deepseek-ai/schemastery@3.18.4':
     dependencies:
@@ -3514,7 +3501,7 @@ snapshots:
 
   dom-accessibility-api@0.5.16: {}
 
-  dsh-llm-providers-ui@https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.11/dsh-llm-providers-ui-0.2.11.tgz(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-client-connection@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-scope@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))))(@deepseek-ai/dsh-client-locale@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-renderer@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-settings@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-slots@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-settings@0.1.7-alpha.2(3440e56d4d573886f7d98a9fad6f6ae0))(@deepseek-ai/schemastery@3.18.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  dsh-llm-providers-ui@https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.12/dsh-llm-providers-ui-0.2.12.tgz(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-client-connection@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-scope@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-invariants@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))))(@deepseek-ai/dsh-client-locale@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-renderer@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-settings@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-client-ui-slots@0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4))(@deepseek-ai/dsh-settings@0.1.7-alpha.2(3440e56d4d573886f7d98a9fad6f6ae0))(@deepseek-ai/schemastery@3.18.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@deepseek-ai/cordis': 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)
       '@deepseek-ai/schemastery': 3.18.4
@@ -3528,10 +3515,10 @@ snapshots:
       '@deepseek-ai/dsh-client-ui-slots': 0.1.7-alpha.2(@deepseek-ai/cordis@4.0.4)
       '@deepseek-ai/dsh-settings': 0.1.7-alpha.2(3440e56d4d573886f7d98a9fad6f6ae0)
 
-  dsh-model-switch@https://github.com/NOirBRight/dsh-model-switch/releases/download/v0.4.13/dsh-model-switch-0.4.13.tgz(7acd38b45e952383b7a508cd3c50049f):
+  dsh-model-switch@https://github.com/NOirBRight/dsh-model-switch/releases/download/v0.4.14/dsh-model-switch-0.4.14.tgz(7acd38b45e952383b7a508cd3c50049f):
     dependencies:
       '@deepseek-ai/cordis': 4.0.4(@deepseek-ai/cordis-plugin-include@1.0.9)(@deepseek-ai/cordis-plugin-loader@1.0.5)
-      '@deepseek-ai/schemastery': 3.18.3
+      '@deepseek-ai/schemastery': 3.18.4
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
     optionalDependencies:
