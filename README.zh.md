@@ -8,21 +8,21 @@ DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由�
 
 ## 兼容性
 
-宿主 DSH peer 和编译依赖精确面向官方 `0.1.7-alpha.2`；Cordis 为 `~4.0.4`。本版没有验收其他宿主版本。
+DSH 宿主 peer 和编译依赖范围接受 `0.1.7-alpha.2` 及之后的发行版；Cordis peer 接受 `>=4.0.4 <5.0.0`。
 
 `package.json#dsh.compatibility.dshReleases` 里的已验证宿主是证据，不是允许列表。未知的新宿主告警一次后仍按正常路径挂载。只有复现过的故障才会加入 blocklist。
 
-`catalogId` 与未解析的 `unknown` 账户状态在运行时挂上。已发布的旧版 `dsh-llm-providers-ui` 0.2.8 不含这些字段，并把 `unknown` 当成未连接；需安装 0.2.12 或更新版 Owner 才会生效。
+`catalogId` 与未解析的 `unknown` 账户状态在运行时挂上。已发布的旧版 `dsh-llm-providers-ui` 0.2.8 不含这些字段，并把 `unknown` 当成未连接；需安装 0.2.13 或更新版 Owner 才会生效。
 
 ## 安装
 
-已在官方 DeepSeek Harness `0.1.7-alpha.2` 验证。直接从 GitHub 安装：
+已在官方 DeepSeek Harness `0.1.7-alpha.2` 和 `0.1.7-rc.1` 验证。直接从 GitHub 安装：
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.12/dsh-llm-providers-ui-0.2.12.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.13/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.19/dsh-llm-grok-0.3.19.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.20/dsh-llm-grok-0.3.20.tgz
 dsh web
 ~~~
 
@@ -82,7 +82,7 @@ Composer picker 会按剥掉 Fast 后缀（`-fast`）和通用上下文后缀（
 
 ## 正式版安装（Latest）
 
-xAI Grok subscription login, Responses chat, usage, search, and Imagine. 正式成品按上方兼容性记录运行；发布包只包含构建后的 Host/Client 产物，不包含兄弟仓库源码、本机路径或 link:/workspace: 依赖。
+xAI Grok subscription login, Responses chat, usage, search, and Imagine. 正式成品面向官方 DeepSeek Harness `0.1.7-rc.1`；发布包只包含构建后的 Host/Client 产物，不包含兄弟仓库源码、本机路径或 link:/workspace: 依赖。
 
 LLM Providers 页面、导航和共享排序由 dsh-llm-providers-ui 独占；本插件只提供卡片、模型和 Host 路由。Web 必须先装 Owner，headless 只使用 Host 路由时可以不装 Owner。
 
@@ -90,18 +90,18 @@ Latest（Owner + 本插件；Web 必须一起装）：
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.12.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.19.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.20.tgz
 ~~~
 
 固定版本（可复现）：
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.12/dsh-llm-providers-ui-0.2.12.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.13/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.19/dsh-llm-grok-0.3.19.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.20/dsh-llm-grok-0.3.20.tgz
 ~~~
 
 更新、卸载与验证：
@@ -109,9 +109,9 @@ dsh plugin --profile web add --force \
 ~~~sh
 # 更新 Owner + 本插件到 Latest
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.12.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.19.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.20.tgz
 # 验证加载与版本
 dsh plugin --profile web list
 dsh plugin --profile web doctor
@@ -123,7 +123,7 @@ dsh plugin --profile web remove dsh-llm-grok
 
 回滚：重新安装上一稳定版 [v0.3.18](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.18/dsh-llm-grok-0.3.18.tgz)，确认插件列表后只重启一次 Web 服务。失败时查看 journalctl --user -u dsh-web.service 与 dsh plugin --profile web doctor，不要把源码 checkout 写入 production profile。
 
-Release 与完整性：[v0.3.19](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.19) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.19/SHA256SUMS)。
+Release 与完整性：[v0.3.20](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.20) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.20/SHA256SUMS)。
 
 ## 独立 Model Switch 搜索
 

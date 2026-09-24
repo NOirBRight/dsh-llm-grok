@@ -1,3 +1,7 @@
+## v0.3.20
+
+- Verify compatibility with official DeepSeek Harness `0.1.7-rc.1` and accept DSH package versions from `0.1.7-alpha.2` onward.
+
 ## v0.3.17
 
 ## 0.3.18
