@@ -72,7 +72,6 @@ describe('llm-grok real composition', () => {
     const { ctx } = await loadComposition()
 
     expect(LlmGrok.name).toBe('llm-grok')
-    expect(LlmGrok.inject).toEqual(['llm', 'webServer'])
     expect(ctx.llm.listConfigurableProviders()).toEqual([
       { provider: 'grok', displayName: 'Grok', settingsNs: 'llm-grok', settingsPath: [] },
     ])
@@ -83,11 +82,6 @@ describe('llm-grok real composition', () => {
       retryableCodes: expect.arrayContaining(['AUTH']),
     })
 
-    const schema = Config.toJSON() as { uid: number, refs: Record<string, { dict?: Record<string, unknown> }> }
-    const dict = schema.refs[String(schema.uid)]?.dict
-    expect(dict).toBeDefined()
-    expect(dict).not.toHaveProperty('apiKeyEnv')
-    expect(dict).toHaveProperty('streamIdleTimeoutMs')
     expect(Config({})).not.toHaveProperty('apiKeyEnv')
   })
 

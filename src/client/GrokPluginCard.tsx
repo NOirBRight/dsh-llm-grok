@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {
@@ -10,8 +10,7 @@ import type {
   GrokAuthAttemptStatus,
   GrokAuthStatus,
   GrokCatalogModel,
-  GrokSaveResult,
-  GrokSettingsView,
+  GrokSettingsForm,
   GrokUsageReply,
   GrokUsageView,
   GrokUsageWindow,
@@ -42,7 +41,7 @@ export interface GrokPluginCardFace {
   t: (key: GrokSettingsKey) => string
   hooks: {
     /** Reactive Host-owned settings section. */
-    grokSettings: SettingsScope<GrokSettingsView>
+    grokSettings: ConfigForm<GrokSettingsForm>
   }
   /** Begin Host PKCE; the browser never receives tokens. */
   startAuth: () => Promise<GrokAuthStartReply>
@@ -61,7 +60,7 @@ export interface GrokPluginCardFace {
   /** Read the signed-in account catalog (picker candidates, not the displayed set). */
   fetchModels: () => Promise<readonly GrokCatalogModel[]>
   /** Atomically store the displayed catalog. */
-  saveConfiguration: (settings: GrokSettingsView) => Promise<GrokSaveResult>
+  saveConfiguration: (settings: GrokSettingsForm, expectedRevision: number) => Promise<{ settings: GrokSettingsForm, revision: number }>
   /** Open the frame-level picker immediately with the current selected ids. */
   beginModelPicker: (initiallyPicked: ReadonlySet<string>, onAdopt: (models: readonly GrokCatalogModel[]) => void) => void
   /** Populate the open picker with account candidates. */
@@ -324,7 +323,7 @@ function headerQuotaOf(usage: GrokUsageView | undefined, t: GrokPluginCardFace['
 /** Render the single-package Grok contribution under Plugin configuration. */
 export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   const { t, startAuth, completeAuth, cancelAuth, readAuthStatus, readAuthAttemptStatus, logout, fetchUsage, fetchModels } = props
-  const snapshot = props.useGrokSettings((value: SettingsScopeSnapshot<GrokSettingsView>) => value)
+  const snapshot = props.useGrokSettings((value: ConfigFormSnapshot<GrokSettingsForm>) => value)
   const [open, setOpen] = useState(false)
   const initial = useMemo(
     () => snapshot.value === undefined ? undefined : snapshot.value.models.map(modelDraftOf),
@@ -626,7 +625,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
   }
 
   const save = async (): Promise<void> => {
-    if (draft === undefined || snapshot.value === undefined || invalid) return
+    if (draft === undefined || snapshot.value === undefined || sourceRevision === undefined || invalid) return
     setBusy(true)
     setFailure(undefined)
     setNotice(undefined)
@@ -635,7 +634,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
         ...snapshot.value,
         models: draft.map(modelSettingsOf),
         enableImageGen,
-      })
+      }, sourceRevision)
       const next = accepted.settings.models.map(modelDraftOf)
       setSource(next)
       setDraft(next)

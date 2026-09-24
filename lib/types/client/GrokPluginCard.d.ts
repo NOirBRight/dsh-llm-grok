@@ -1,8 +1,8 @@
 /** Grok Plugin configuration card: Host-owned xAI login, usage, and an editable displayed catalog. */
 import type { ReactNode } from 'react';
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client';
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client';
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
-import type { GrokAuthStartReply, GrokAuthAttemptStatus, GrokAuthStatus, GrokCatalogModel, GrokSaveResult, GrokSettingsView, GrokUsageReply } from '../client-contract.ts';
+import type { GrokAuthStartReply, GrokAuthAttemptStatus, GrokAuthStatus, GrokCatalogModel, GrokSettingsForm, GrokUsageReply } from '../client-contract.ts';
 import type { GrokSettingsKey } from './locales.ts';
 import type { ProviderItemSlotContext } from 'dsh-llm-providers-ui/provider-detail';
 /** Dependencies injected by the browser-plugin registration. */
@@ -11,7 +11,7 @@ export interface GrokPluginCardFace {
     t: (key: GrokSettingsKey) => string;
     hooks: {
         /** Reactive Host-owned settings section. */
-        grokSettings: SettingsScope<GrokSettingsView>;
+        grokSettings: ConfigForm<GrokSettingsForm>;
     };
     /** Begin Host PKCE; the browser never receives tokens. */
     startAuth: () => Promise<GrokAuthStartReply>;
@@ -30,7 +30,10 @@ export interface GrokPluginCardFace {
     /** Read the signed-in account catalog (picker candidates, not the displayed set). */
     fetchModels: () => Promise<readonly GrokCatalogModel[]>;
     /** Atomically store the displayed catalog. */
-    saveConfiguration: (settings: GrokSettingsView) => Promise<GrokSaveResult>;
+    saveConfiguration: (settings: GrokSettingsForm, expectedRevision: number) => Promise<{
+        settings: GrokSettingsForm;
+        revision: number;
+    }>;
     /** Open the frame-level picker immediately with the current selected ids. */
     beginModelPicker: (initiallyPicked: ReadonlySet<string>, onAdopt: (models: readonly GrokCatalogModel[]) => void) => void;
     /** Populate the open picker with account candidates. */

@@ -2,18 +2,17 @@
 // Collapsed header quota: usage loads collapsed without expansion, expansion never refires, failures stay truthful.
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { GrokPluginCard } from '../src/client/GrokPluginCard.tsx'
 import { clearProviderUsageCache, peekCachedUsage, rememberHeadlineQuota } from 'dsh-llm-providers-ui/usage-readers'
 import type { GrokPluginCardProps } from '../src/client/GrokPluginCard.tsx'
 import { en } from '../src/client/locales.ts'
-import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
-import type { GrokSettingsView, GrokUsageReply } from '../src/client-contract.ts'
+import { GROK_CATALOG } from '../src/client-contract.ts'
+import type { GrokSettingsForm, GrokUsageReply } from '../src/client-contract.ts'
 
 afterEach(() => { cleanup(); clearProviderUsageCache() })
 
-const settings: GrokSettingsView = {
-  streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+const settings: GrokSettingsForm = {
   models: GROK_CATALOG.map(model => ({ ...model })),
   enableImageGen: false,
 }
@@ -30,12 +29,12 @@ const usageOk: GrokUsageReply = {
 }
 
 function props(overrides: Record<string, unknown> = {}): GrokPluginCardProps {
-  const current: SettingsScopeSnapshot<GrokSettingsView> = {
+  const current: ConfigFormSnapshot<GrokSettingsForm> = {
     status: 'ready', value: settings, base: settings, user: {}, revision: 1, writable: true, mode: 'host',
   }
   return {
     t: (key: keyof typeof en) => en[key],
-    useGrokSettings: (selector: (value: SettingsScopeSnapshot<GrokSettingsView>) => unknown) => selector(current),
+    useGrokSettings: (selector: (value: ConfigFormSnapshot<GrokSettingsForm>) => unknown) => selector(current),
     startAuth: vi.fn(),
     completeAuth: vi.fn(),
     cancelAuth: vi.fn(),
@@ -56,10 +55,10 @@ function props(overrides: Record<string, unknown> = {}): GrokPluginCardProps {
 describe('GrokPluginCard collapsed quota', () => {
   it('shows cached quota while settings and authentication are still loading', () => {
     rememberHeadlineQuota('llm-grok', 'Grok', { label: 'Cached quota', remainingPercent: 64 })
-    const loading: SettingsScopeSnapshot<GrokSettingsView> = { status: 'loading', value: undefined, base: undefined, user: undefined, revision: undefined, writable: false, mode: 'host' }
+    const loading: ConfigFormSnapshot<GrokSettingsForm> = { status: 'loading', value: undefined, base: undefined, user: undefined, revision: undefined, writable: false, mode: 'host' }
     const fetchUsage = vi.fn()
     render(<GrokPluginCard {...props({
-      useGrokSettings: (select: (value: SettingsScopeSnapshot<GrokSettingsView>) => unknown) => select(loading),
+      useGrokSettings: (select: (value: ConfigFormSnapshot<GrokSettingsForm>) => unknown) => select(loading),
       readAuthStatus: () => new Promise(() => {}), fetchUsage,
     })} />)
     expect(screen.getByRole('meter', { name: 'Cached quota' }).getAttribute('aria-valuenow')).toBe('64')

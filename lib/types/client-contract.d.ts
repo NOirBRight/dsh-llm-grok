@@ -1,12 +1,12 @@
 /** Browser-safe constants and JSON decoders shared by the Host and client plugin faces. */
-/** Settings namespace owned by the Grok plugin. */
+/** Loader entry id and provider-directory key owned by this plugin. */
 export declare const GROK_SETTINGS_NAMESPACE = "llm-grok";
 /** Provider route owned by the Grok plugin. Distinct from the built-in `xai` console-key route. */
 export declare const GROK_PROVIDER = "grok";
 /** Default maximum idle interval while a stream read is outstanding. */
 export declare const GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS = 300000;
-/** Private Connection RPC channel used by this package's Host and Web faces. */
-export declare const GROK_RPC_CHANNEL = "/grok";
+/** Logical method carried by the authenticated shared `/api` RPC endpoint. */
+export declare const GROK_RPC_METHOD = "plugin-rpc/grok";
 /** Begin a Host-owned PKCE sign-in against auth.x.ai. */
 export declare const GROK_AUTH_START_ENDPOINT = "auth/start";
 /** Secret-free login snapshot. */
@@ -19,7 +19,7 @@ export declare const GROK_AUTH_LOGOUT_ENDPOINT = "auth/logout";
 export declare const GROK_AUTH_COMPLETE_ENDPOINT = "auth/complete";
 /** Cancel one pending Host-owned authorization attempt. */
 export declare const GROK_AUTH_CANCEL_ENDPOINT = "auth/cancel";
-/** Secret-free subscription-usage snapshot inside {@link GROK_RPC_CHANNEL}. */
+/** Secret-free subscription-usage snapshot. */
 export declare const GROK_USAGE_ENDPOINT = "usage/read";
 /** One official models-v2 reasoning menu row (`id` → wire `value`). */
 export interface GrokReasoningEffort {
@@ -56,39 +56,14 @@ export interface GrokCatalogModel {
     tools?: boolean;
 }
 export declare const GROK_CATALOG: readonly GrokCatalogModel[];
-/** Account model list inside {@link GROK_RPC_CHANNEL}. */
+/** Account model list inside {@link GROK_RPC_METHOD}. */
 export declare const GROK_MODELS_ENDPOINT = "models/list";
-/** Read the redacted Grok settings snapshot through the management RPC. */
-export declare const GROK_SETTINGS_READ_ENDPOINT = "settings/read";
-/** Atomic settings-save endpoint. */
-export declare const GROK_SAVE_ENDPOINT = "settings/save";
-/** Settings fields presented by the package's Web configuration card. No apiKeyEnv. */
-export interface GrokSettingsView {
-    /** Stream idle timeout in milliseconds. */
-    streamIdleTimeoutMs: number;
+/** The fields of the Host loader Config exposed to the custom browser editor. */
+export interface GrokSettingsForm {
     /** Displayed advisory catalog (a subset of the account catalog). */
     models: GrokCatalogModel[];
     /** When true, register the `grok_image_gen` tool. */
     enableImageGen: boolean;
-}
-/** Atomic editable-settings payload sent by the browser face. */
-export interface GrokSaveRequest {
-    /** Complete displayed catalog currently shown by the editor. */
-    models: GrokCatalogModel[];
-    /** Optional `grok_image_gen` enablement; omission leaves the current value. */
-    enableImageGen?: boolean;
-    /** Settings descriptor revision from which the editor began. */
-    expectedRevision: number;
-}
-/** Accepted settings snapshot after one Host mutation. */
-export interface GrokSaveResult {
-    settings: GrokSettingsView;
-    revision: number;
-}
-/** Redacted settings snapshot returned by the management read endpoint. */
-export interface GrokSettingsReadResult {
-    settings: GrokSettingsView;
-    revision: number;
 }
 /** Secret-free login snapshot returned by {@link GROK_AUTH_STATUS_ENDPOINT}. */
 export type GrokAuthAttemptState = 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'expired';
@@ -174,12 +149,6 @@ export type GrokUsageReply = {
     status: 'logged-out';
 };
 /**
- * Narrow the schema-resolved settings section before it enters React state.
- * @param value - untrusted settings response value.
- * @returns the validated settings view, or undefined when the response is invalid.
- */
-export declare function decodeGrokSettings(value: unknown): GrokSettingsView | undefined;
-/**
  * Narrow an empty auth RPC payload. Token-shaped fields are rejected so a
  * confused caller cannot push secrets across the authenticated Host Connection.
  * @param value - untrusted RPC request payload.
@@ -219,17 +188,5 @@ export declare function decodeGrokAuthLogoutReply(value: unknown): GrokAuthLogou
 export declare function decodeGrokUsageView(value: unknown): GrokUsageView | undefined;
 export declare function decodeGrokCatalogModel(value: unknown): GrokCatalogModel | undefined;
 export declare function decodeGrokModelsReply(value: unknown): GrokModelsReply | undefined;
-/**
- * Narrow an atomic catalog-save request. Token-shaped fields fail closed.
- * @param value - untrusted RPC request payload.
- */
-export declare function decodeGrokSaveRequest(value: unknown): GrokSaveRequest | undefined;
-/**
- * Narrow the Host save reply before the card updates.
- * @param value - untrusted RPC result value.
- */
-/** Decode a redacted settings snapshot and its revision. */
-export declare function decodeGrokSettingsReadResult(value: unknown): GrokSettingsReadResult | undefined;
-export declare function decodeGrokSaveResult(value: unknown): GrokSaveResult | undefined;
 export declare function decodeGrokUsageReply(value: unknown): GrokUsageReply | undefined;
 //# sourceMappingURL=client-contract.d.ts.map

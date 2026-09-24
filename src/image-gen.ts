@@ -10,6 +10,7 @@ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-fs'
+
 import { extensionOf } from './image-bytes.ts'
 import {
   GROK_IMAGE_GEN_TIMEOUT_MS,
@@ -18,6 +19,14 @@ import {
   generateGrokImage,
 } from './image-gen-client.ts'
 import type { GenerateGrokImageRequest, GrokImagineAspectRatio } from './image-gen-client.ts'
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'llm-grok': {
+      kind: 'llm-grok'
+    }
+  }
+}
 
 /** Public DSH tool name. Distinct from Codex `codex_generate_image`. */
 export const GROK_IMAGE_GEN_TOOL_NAME = 'grok_image_gen'
@@ -226,7 +235,7 @@ export function grokImageGenTool(ctx: Context, options: GrokImageGenToolOptions)
       if (exec.parent !== undefined) {
         exec.deferContext(createUserMessage({
           content: contentOf(value),
-          source: { kind: 'plugin', plugin: 'dsh-llm-grok' },
+          source: { kind: 'llm-grok' },
         }))
       }
       return value

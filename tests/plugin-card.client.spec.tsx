@@ -3,25 +3,24 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { clearProviderUsageCache } from 'dsh-llm-providers-ui/usage-readers'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { ProviderDetail, providerDetailCopy } from 'dsh-llm-providers-ui/provider-detail'
 import { GrokPluginCard } from '../src/client/GrokPluginCard.tsx'
 import type { GrokPluginCardProps } from '../src/client/GrokPluginCard.tsx'
 import { en } from '../src/client/locales.ts'
-import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
-import type { GrokAuthStartReply, GrokAuthStatus, GrokCatalogModel, GrokSettingsView, GrokUsageReply } from '../src/client-contract.ts'
+import { GROK_CATALOG } from '../src/client-contract.ts'
+import type { GrokAuthStartReply, GrokAuthStatus, GrokCatalogModel, GrokSettingsForm, GrokUsageReply } from '../src/client-contract.ts'
 
 afterEach(() => { cleanup() })
 // Each case starts with an empty shared cache: the dash cases assert "nothing was ever cached".
 beforeEach(() => { clearProviderUsageCache() })
 
-const settings: GrokSettingsView = {
-  streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+const settings: GrokSettingsForm = {
   models: GROK_CATALOG.map(model => ({ ...model })),
   enableImageGen: false,
 }
 
-function snapshot(overrides: Partial<SettingsScopeSnapshot<GrokSettingsView>> = {}): SettingsScopeSnapshot<GrokSettingsView> {
+function snapshot(overrides: Partial<ConfigFormSnapshot<GrokSettingsForm>> = {}): ConfigFormSnapshot<GrokSettingsForm> {
   return {
     status: 'ready',
     value: settings,
@@ -98,7 +97,7 @@ describe('GrokPluginCard', () => {
   })
 
   it('saves a displayed subset without replacing it from the account list', async () => {
-    const saveConfiguration = vi.fn((next: GrokSettingsView) => Promise.resolve({ settings: next, revision: 2 }))
+    const saveConfiguration = vi.fn((next: GrokSettingsForm, expectedRevision: number) => Promise.resolve({ settings: next, revision: 2 }))
     const fetchModels = vi.fn(() => Promise.resolve([
       { id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true },
       { id: 'grok-4.5', name: 'Grok 4.5', thinking: true, vision: true },
@@ -114,10 +113,11 @@ describe('GrokPluginCard', () => {
     expect(saveConfiguration.mock.calls[0]?.[0]?.models.map((model: GrokCatalogModel) => model.id)).toEqual(['grok-4.6'])
     expect(saveConfiguration.mock.calls[0]?.[0]?.enableImageGen).toBe(false)
     expect(fetchModels).not.toHaveBeenCalled()
+    expect(saveConfiguration.mock.calls[0]?.[1]).toBe(1)
   })
 
   it('saves grok_image_gen enablement independently of the catalog', async () => {
-    const saveConfiguration = vi.fn((next: GrokSettingsView) => Promise.resolve({ settings: next, revision: 2 }))
+    const saveConfiguration = vi.fn((next: GrokSettingsForm) => Promise.resolve({ settings: next, revision: 2 }))
     render(<GrokPluginCard {...props({ saveConfiguration })} />)
     expand()
     await waitFor(() => { expect(screen.getByText(en.signedOut)).toBeTruthy() })
@@ -140,7 +140,7 @@ describe('GrokPluginCard', () => {
     const completeModelPicker = vi.fn((candidates: readonly GrokCatalogModel[]) => {
       adopt?.(candidates.filter(model => model.id === 'grok-4.6'))
     })
-    const saveConfiguration = vi.fn((next: GrokSettingsView) => Promise.resolve({ settings: next, revision: 2 }))
+    const saveConfiguration = vi.fn((next: GrokSettingsForm) => Promise.resolve({ settings: next, revision: 2 }))
     render(<GrokPluginCard {...props({ fetchModels, beginModelPicker, completeModelPicker, saveConfiguration })} />)
     expand()
     await waitFor(() => { expect(screen.getByText(en.signedOut)).toBeTruthy() })

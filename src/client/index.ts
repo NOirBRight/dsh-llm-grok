@@ -1,7 +1,7 @@
 /** Browser half: Grok setup inside Plugin configuration. */
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -11,6 +11,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from 'dsh-llm-providers-ui/client'
 import { createGrokUsageReader, dropPersistedUsageKeys } from 'dsh-llm-providers-ui/usage-readers'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
 /**
  * Register this card, its shared header ownership, quota reader, display name,
@@ -48,10 +49,8 @@ import {
   GROK_AUTH_START_ENDPOINT,
   GROK_AUTH_STATUS_ENDPOINT,
   GROK_AUTH_ATTEMPT_STATUS_ENDPOINT,
-  GROK_RPC_CHANNEL,
+  GROK_RPC_METHOD,
   GROK_MODELS_ENDPOINT,
-  GROK_SAVE_ENDPOINT,
-  GROK_SETTINGS_READ_ENDPOINT,
   GROK_SETTINGS_NAMESPACE,
   GROK_USAGE_ENDPOINT,
   decodeGrokAuthLogoutReply,
@@ -59,11 +58,9 @@ import {
   decodeGrokAuthStatus,
   decodeGrokAuthAttemptStatus,
   decodeGrokModelsReply,
-  decodeGrokSaveResult,
-  decodeGrokSettingsReadResult,
   decodeGrokUsageReply,
 } from '../client-contract.ts'
-import type { GrokSettingsView } from '../client-contract.ts'
+import type { GrokSettingsForm } from '../client-contract.ts'
 import { GrokPluginCard } from './GrokPluginCard.tsx'
 import type { GrokPluginCardFace } from './GrokPluginCard.tsx'
 import { GrokModelPicker, GrokModelPickerController } from './GrokModelPicker.tsx'
@@ -82,7 +79,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Stable browser-plugin name. */
 export const name = 'dsh-llm-grok-client'
 /** Client services required by the Plugin configuration contribution. */
-export const inject = ['slots', 'locale', 'connection']
+export const inject = ['slots', 'locale', 'connection', 'configForms']
 
 /** Register localized Grok configuration under Plugin configuration. */
 
@@ -96,18 +93,10 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(localeNamespace) as GrokPluginCardFace['t']
   const picker = new GrokModelPickerController()
   const { rpc } = ctx.get('connection') as unknown as ConnectionHandle
-  let currentSnapshot: SettingsScopeSnapshot<GrokSettingsView> = {
-    status: 'loading', value: undefined, base: undefined, user: undefined, revision: undefined, writable: true, mode: 'host',
-  }
-  const listeners = new Set<() => void>()
-  const scope: SettingsScope<GrokSettingsView> = {
-    getSnapshot: () => currentSnapshot,
-    subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener) },
-    mutate: async () => { throw new Error('Use Grok management settings/save') },
-    set: async () => { throw new Error('Use Grok management settings/save') },
-    unset: async () => { throw new Error('Use Grok management settings/save') },
-  }
-  // Registered after the snapshot exists so the published count always reads live state.
+  const settingsForm: ConfigForm<GrokSettingsForm> = ctx.configForms.get<GrokSettingsForm>(GROK_SETTINGS_NAMESPACE)
+  const callGrokRpc = (endpoint: string, payload: unknown, signal?: AbortSignal) =>
+    rpc.call('/api', GROK_RPC_METHOD, { endpoint, payload }, signal)
+  // The shared ConfigForm owns the snapshot and Provider directory updates.
   const account = { state: 'unknown' as 'connected' | 'configured' | 'unconnected' | 'unknown' }
   let closed = false
   const publishAccount = (state: typeof account.state): void => {
@@ -115,23 +104,14 @@ export function apply(ctx: ClientContext): void {
     account.state = state
     try { ctx.get('providerDirectory')?.update(GROK_SETTINGS_NAMESPACE) } catch { /* providerDirectory is optional in lab */ }
   }
-  installProviderDirectory(ctx, () => currentSnapshot.value?.models.length, {
+  installProviderDirectory(ctx, () => settingsForm.getSnapshot().value?.models?.length, {
     catalogId: 'grok',
     account: () => ({ state: account.state }),
   })
+  ctx.effect(() => settingsForm.subscribe(() => {
+    try { ctx.get('providerDirectory')?.update(GROK_SETTINGS_NAMESPACE) } catch { /* providerDirectory is optional in lab */ }
+  }), 'dsh-llm-grok: update provider model count')
 
-  const publishSettings = (settings: GrokSettingsView, revision: number): void => {
-    if (closed) return
-    currentSnapshot = { ...currentSnapshot, status: 'ready', value: settings, revision }
-    listeners.forEach(listener => listener())
-  }
-  const refreshSettings = async (): Promise<void> => {
-    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_SETTINGS_READ_ENDPOINT, {})
-    if (!result.ok) throw new Error(result.error.message)
-    const decoded = decodeGrokSettingsReadResult(result.value)
-    if (decoded === undefined) throw new Error('invalid Grok settings/read response')
-    publishSettings(decoded.settings, decoded.revision)
-  }
 
   const startAuth: GrokPluginCardFace['startAuth'] = async () => {
     const popup = typeof window === 'undefined' ? null : window.open('about:blank', '_blank')
@@ -140,7 +120,7 @@ export function apply(ctx: ClientContext): void {
       if (popup !== null && !popup.closed) popup.close()
     }
     try {
-      const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_START_ENDPOINT, {})
+      const result = await callGrokRpc(GROK_AUTH_START_ENDPOINT, {})
       if (!result.ok) {
         closePopup()
         return { ok: false, retryable: true, message: result.error.message }
@@ -169,7 +149,7 @@ export function apply(ctx: ClientContext): void {
   }
 
   const completeAuth: GrokPluginCardFace['completeAuth'] = async (code, attemptId) => {
-    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_COMPLETE_ENDPOINT, { code, ...attemptId === undefined ? {} : { attemptId } })
+    const result = await callGrokRpc(GROK_AUTH_COMPLETE_ENDPOINT, { code, ...attemptId === undefined ? {} : { attemptId } })
     if (!result.ok) return { ok: false, retryable: true, message: result.error.message }
     const decoded = decodeGrokAuthStartReply(result.value)
     if (decoded === undefined) return { ok: false, retryable: true, message: t('signInFailed') }
@@ -183,7 +163,7 @@ export function apply(ctx: ClientContext): void {
 
   const readAuthAttemptStatus: GrokPluginCardFace['readAuthAttemptStatus'] = async (attemptId) => {
     const generation = authGeneration
-    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_ATTEMPT_STATUS_ENDPOINT, { attemptId })
+    const result = await callGrokRpc(GROK_AUTH_ATTEMPT_STATUS_ENDPOINT, { attemptId })
     if (!result.ok) throw new Error(result.error.message)
     const decoded = decodeGrokAuthAttemptStatus(result.value)
     if (decoded === undefined) throw new Error(t('statusFailed'))
@@ -197,13 +177,13 @@ export function apply(ctx: ClientContext): void {
   }
 
   const cancelAuth: GrokPluginCardFace['cancelAuth'] = async (attemptId) => {
-    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_CANCEL_ENDPOINT, { attemptId })
+    const result = await callGrokRpc(GROK_AUTH_CANCEL_ENDPOINT, { attemptId })
     if (!result.ok) throw new Error(result.error.message)
   }
 
   const readAuthStatus: GrokPluginCardFace['readAuthStatus'] = async () => {
     const generation = authGeneration
-    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_STATUS_ENDPOINT, {})
+    const result = await callGrokRpc(GROK_AUTH_STATUS_ENDPOINT, {})
     if (!result.ok) throw new Error(result.error.message)
     const decoded = decodeGrokAuthStatus(result.value)
     if (decoded === undefined) throw new Error(t('statusFailed'))
@@ -214,7 +194,7 @@ export function apply(ctx: ClientContext): void {
   }
 
   const logout: GrokPluginCardFace['logout'] = async () => {
-    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_AUTH_LOGOUT_ENDPOINT, {})
+    const result = await callGrokRpc(GROK_AUTH_LOGOUT_ENDPOINT, {})
     if (!result.ok) throw new Error(result.error.message)
     if (decodeGrokAuthLogoutReply(result.value) === undefined) throw new Error(t('signOutFailed'))
     authGeneration += 1
@@ -223,7 +203,7 @@ export function apply(ctx: ClientContext): void {
   }
 
   const fetchModels: GrokPluginCardFace['fetchModels'] = async () => {
-    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_MODELS_ENDPOINT, {})
+    const result = await callGrokRpc(GROK_MODELS_ENDPOINT, {})
     if (!result.ok) throw new Error(result.error.message)
     const decoded = decodeGrokModelsReply(result.value)
     if (decoded === undefined) throw new Error(t('statusFailed'))
@@ -232,7 +212,7 @@ export function apply(ctx: ClientContext): void {
 
   const fetchUsage: GrokPluginCardFace['fetchUsage'] = async () => {
     const generation = authGeneration
-    const result = await rpc.call(GROK_RPC_CHANNEL, GROK_USAGE_ENDPOINT, {})
+    const result = await callGrokRpc(GROK_USAGE_ENDPOINT, {})
     if (!result.ok) {
       // Wire code is dropped by the Error below; purge here so a refused credential
       // cannot keep painting the previous account's quota in every bundle copy.
@@ -245,27 +225,19 @@ export function apply(ctx: ClientContext): void {
     return decoded
   }
 
-  const saveConfiguration: GrokPluginCardFace['saveConfiguration'] = async (settings) => {
-    const snapshot = scope.getSnapshot()
-    if (snapshot.revision === undefined) throw new Error(t('requestFailed'))
-    const saved = await rpc.call(GROK_RPC_CHANNEL, GROK_SAVE_ENDPOINT, {
-      models: settings.models,
-      enableImageGen: settings.enableImageGen,
-      expectedRevision: snapshot.revision,
-    })
-    if (!saved.ok) throw new Error(saved.error.message)
-    const accepted = decodeGrokSaveResult(saved.value)
-    if (accepted === undefined) throw new Error(t('requestFailed'))
-    publishSettings(accepted.settings, accepted.revision)
-    return accepted
+  const saveConfiguration: GrokPluginCardFace['saveConfiguration'] = async (settings, expectedRevision) => {
+    const models = JSON.parse(JSON.stringify(settings.models)) as JsonValue
+    const accepted = await settingsForm.mutate([
+      { op: 'set', path: ['models'], value: models },
+      { op: 'set', path: ['enableImageGen'], value: settings.enableImageGen },
+    ], expectedRevision)
+    if (!accepted) throw new Error(t('requestFailed'))
+    const snapshot = settingsForm.getSnapshot()
+    if (snapshot.value === undefined || snapshot.revision === undefined) throw new Error(t('requestFailed'))
+    return { settings: snapshot.value, revision: snapshot.revision }
   }
 
   ctx.effect(() => {
-    void refreshSettings().catch(() => {
-      if (closed) return
-      currentSnapshot = { ...currentSnapshot, status: 'unavailable' }
-      listeners.forEach(listener => listener())
-    })
     void readAuthStatus().catch(() => { /* overview stays unknown until a later card read */ })
     return () => { closed = true }
   }, 'dsh-llm-grok: account snapshot')
@@ -288,7 +260,7 @@ export function apply(ctx: ClientContext): void {
     locale: localeNamespace,
     inject: (): GrokPluginCardFace => ({
       t,
-      hooks: { grokSettings: scope },
+      hooks: { grokSettings: settingsForm },
       startAuth,
       completeAuth,
       cancelAuth,

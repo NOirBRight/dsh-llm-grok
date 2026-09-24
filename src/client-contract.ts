@@ -1,13 +1,13 @@
 /** Browser-safe constants and JSON decoders shared by the Host and client plugin faces. */
 
-/** Settings namespace owned by the Grok plugin. */
+/** Loader entry id and provider-directory key owned by this plugin. */
 export const GROK_SETTINGS_NAMESPACE = 'llm-grok'
 /** Provider route owned by the Grok plugin. Distinct from the built-in `xai` console-key route. */
 export const GROK_PROVIDER = 'grok'
 /** Default maximum idle interval while a stream read is outstanding. */
 export const GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS = 300_000
-/** Private Connection RPC channel used by this package's Host and Web faces. */
-export const GROK_RPC_CHANNEL = '/grok'
+/** Logical method carried by the authenticated shared `/api` RPC endpoint. */
+export const GROK_RPC_METHOD = 'plugin-rpc/grok'
 /** Begin a Host-owned PKCE sign-in against auth.x.ai. */
 export const GROK_AUTH_START_ENDPOINT = 'auth/start'
 /** Secret-free login snapshot. */
@@ -20,7 +20,7 @@ export const GROK_AUTH_LOGOUT_ENDPOINT = 'auth/logout'
 export const GROK_AUTH_COMPLETE_ENDPOINT = 'auth/complete'
 /** Cancel one pending Host-owned authorization attempt. */
 export const GROK_AUTH_CANCEL_ENDPOINT = 'auth/cancel'
-/** Secret-free subscription-usage snapshot inside {@link GROK_RPC_CHANNEL}. */
+/** Secret-free subscription-usage snapshot. */
 export const GROK_USAGE_ENDPOINT = 'usage/read'
 
 /** One official models-v2 reasoning menu row (`id` → wire `value`). */
@@ -110,44 +110,17 @@ export const GROK_CATALOG: readonly GrokCatalogModel[] = Object.freeze([
     reasoningEfforts: Object.freeze(GROK_4_6_EFFORTS.filter(effort => effort.value !== 'xhigh')),
   }),
 ])
-/** Account model list inside {@link GROK_RPC_CHANNEL}. */
+/** Account model list inside {@link GROK_RPC_METHOD}. */
 export const GROK_MODELS_ENDPOINT = 'models/list'
-/** Read the redacted Grok settings snapshot through the management RPC. */
-export const GROK_SETTINGS_READ_ENDPOINT = 'settings/read'
-/** Atomic settings-save endpoint. */
-export const GROK_SAVE_ENDPOINT = 'settings/save'
 
-/** Settings fields presented by the package's Web configuration card. No apiKeyEnv. */
-export interface GrokSettingsView {
-  /** Stream idle timeout in milliseconds. */
-  streamIdleTimeoutMs: number
+/** The fields of the Host loader Config exposed to the custom browser editor. */
+export interface GrokSettingsForm {
   /** Displayed advisory catalog (a subset of the account catalog). */
   models: GrokCatalogModel[]
   /** When true, register the `grok_image_gen` tool. */
   enableImageGen: boolean
 }
 
-/** Atomic editable-settings payload sent by the browser face. */
-export interface GrokSaveRequest {
-  /** Complete displayed catalog currently shown by the editor. */
-  models: GrokCatalogModel[]
-  /** Optional `grok_image_gen` enablement; omission leaves the current value. */
-  enableImageGen?: boolean
-  /** Settings descriptor revision from which the editor began. */
-  expectedRevision: number
-}
-
-/** Accepted settings snapshot after one Host mutation. */
-export interface GrokSaveResult {
-  settings: GrokSettingsView
-  revision: number
-}
-
-/** Redacted settings snapshot returned by the management read endpoint. */
-export interface GrokSettingsReadResult {
-  settings: GrokSettingsView
-  revision: number
-}
 
 /** Secret-free login snapshot returned by {@link GROK_AUTH_STATUS_ENDPOINT}. */
 export type GrokAuthAttemptState = 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'expired'
@@ -246,31 +219,6 @@ function optionalNonEmptyString(value: unknown): value is string | undefined {
   return value === undefined || (typeof value === 'string' && value.length > 0)
 }
 
-/**
- * Narrow the schema-resolved settings section before it enters React state.
- * @param value - untrusted settings response value.
- * @returns the validated settings view, or undefined when the response is invalid.
- */
-export function decodeGrokSettings(value: unknown): GrokSettingsView | undefined {
-  if (!isRecord(value)) return undefined
-  const streamIdleTimeoutMs = value['streamIdleTimeoutMs']
-  if (typeof streamIdleTimeoutMs !== 'number' || !Number.isFinite(streamIdleTimeoutMs) || streamIdleTimeoutMs <= 0) {
-    return undefined
-  }
-  const modelsValue = value['models']
-  const enableImageGen = value['enableImageGen'] === true
-  if (modelsValue === undefined) {
-    return { streamIdleTimeoutMs, models: GROK_CATALOG.map(model => ({ ...model })), enableImageGen }
-  }
-  if (!Array.isArray(modelsValue)) return undefined
-  const models: GrokCatalogModel[] = []
-  for (const entry of modelsValue) {
-    const model = decodeGrokCatalogModel(entry)
-    if (model === undefined) return undefined
-    models.push(model)
-  }
-  return { streamIdleTimeoutMs, models, enableImageGen }
-}
 
 /**
  * Narrow an empty auth RPC payload. Token-shaped fields are rejected so a
@@ -477,50 +425,6 @@ export function decodeGrokModelsReply(value: unknown): GrokModelsReply | undefin
   return { models }
 }
 
-/**
- * Narrow an atomic catalog-save request. Token-shaped fields fail closed.
- * @param value - untrusted RPC request payload.
- */
-export function decodeGrokSaveRequest(value: unknown): GrokSaveRequest | undefined {
-  if (!isRecord(value) || hasTokenFields(value)) return undefined
-  const expectedRevision = value['expectedRevision']
-  if (!Array.isArray(value['models']) || typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision)) {
-    return undefined
-  }
-  if (value['enableImageGen'] !== undefined && typeof value['enableImageGen'] !== 'boolean') return undefined
-  const models: GrokCatalogModel[] = []
-  for (const entry of value['models']) {
-    const model = decodeGrokCatalogModel(entry)
-    if (model === undefined) return undefined
-    models.push(model)
-  }
-  return {
-    models,
-    expectedRevision,
-    ...typeof value['enableImageGen'] === 'boolean' ? { enableImageGen: value['enableImageGen'] } : {},
-  }
-}
-
-/**
- * Narrow the Host save reply before the card updates.
- * @param value - untrusted RPC result value.
- */
-/** Decode a redacted settings snapshot and its revision. */
-export function decodeGrokSettingsReadResult(value: unknown): GrokSettingsReadResult | undefined {
-  if (!isRecord(value) || hasTokenFields(value)) return undefined
-  const revision = value['revision']
-  if (typeof revision !== 'number' || !Number.isSafeInteger(revision)) return undefined
-  const settings = decodeGrokSettings(value['settings'])
-  return settings === undefined ? undefined : { settings, revision }
-}
-
-export function decodeGrokSaveResult(value: unknown): GrokSaveResult | undefined {
-  if (!isRecord(value) || hasTokenFields(value)) return undefined
-  const revision = value['revision']
-  if (typeof revision !== 'number' || !Number.isSafeInteger(revision)) return undefined
-  const settings = decodeGrokSettings(value['settings'])
-  return settings === undefined ? undefined : { settings, revision }
-}
 
 export function decodeGrokUsageReply(value: unknown): GrokUsageReply | undefined {
   if (!isRecord(value) || hasTokenFields(value)) return undefined

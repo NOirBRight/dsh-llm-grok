@@ -1,19 +1,19 @@
 /**
- * Register the `grok` provider directory entry, the Responses chat adapter,
- * the `llm-grok` settings section, and the Host Connection `/grok` auth and usage RPC.
- * The route is distinct from the built-in `xai` console-key provider.
+ * Register the Grok provider, its loader-backed Config, and authenticated
+ * account/catalog RPC carried by the shared `/api` connection.
  * @module dsh-llm-grok
  */
 
-import type { Context, Fiber } from '@deepseek-ai/cordis'
+import type { Context, Fiber, Volatile, VolatileSnapshot } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type {} from '@deepseek-ai/dsh-client-connection'
-import type { ConnectionRpcHandler } from '@deepseek-ai/dsh-client-connection'
+import { clientRequestSchema } from '@deepseek-ai/dsh-client-connection'
+import type { ConnectionFetchRoute, ConnectionRpcHandler, ConnectionRpcHandlerResult } from '@deepseek-ai/dsh-client-connection'
 import { LlmError, resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
 import type { ResolvedRetryPolicy, RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
 import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
-import type { SettingsPathOp } from '@deepseek-ai/dsh-settings'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
+import type {} from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { allowDshRuntime } from './compatibility.ts'
 import type {} from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-fs'
@@ -33,15 +33,11 @@ import {
   GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   GROK_MODELS_ENDPOINT,
   GROK_PROVIDER,
-  GROK_RPC_CHANNEL,
-  GROK_SAVE_ENDPOINT,
-  GROK_SETTINGS_READ_ENDPOINT,
+  GROK_RPC_METHOD,
   GROK_SETTINGS_NAMESPACE,
   GROK_USAGE_ENDPOINT,
   decodeGrokAuthCompleteRequest,
   decodeGrokEmptyRequest,
-  decodeGrokSaveRequest,
-  decodeGrokSettings,
 } from './client-contract.ts'
 import type { GrokCatalogModel } from './client-contract.ts'
 import { beginPkceLogin, cancelAllPkceLogins, cancelPkceLogin, completePkceLogin, createGrokAuthRuntime, ensureFreshSession, statusPkceLogin } from './oauth.ts'
@@ -67,7 +63,7 @@ export {
   GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   GROK_PROVIDER,
   GROK_SETTINGS_NAMESPACE,
-  GROK_RPC_CHANNEL,
+  GROK_RPC_METHOD,
   GROK_AUTH_START_ENDPOINT,
   GROK_AUTH_STATUS_ENDPOINT,
   GROK_AUTH_ATTEMPT_STATUS_ENDPOINT,
@@ -75,13 +71,7 @@ export {
   GROK_AUTH_COMPLETE_ENDPOINT,
   GROK_AUTH_CANCEL_ENDPOINT,
   GROK_MODELS_ENDPOINT,
-  GROK_SETTINGS_READ_ENDPOINT,
-  GROK_SAVE_ENDPOINT,
   GROK_USAGE_ENDPOINT,
-  decodeGrokSettings,
-  decodeGrokSaveRequest,
-  decodeGrokSaveResult,
-  decodeGrokSettingsReadResult,
   decodeGrokAuthStatus,
   decodeGrokAuthAttemptStatus,
   decodeGrokAuthStartReply,
@@ -135,10 +125,7 @@ export {
 export type {
   GrokCatalogModel,
   GrokReasoningEffort,
-  GrokSaveRequest,
-  GrokSaveResult,
-  GrokSettingsReadResult,
-  GrokSettingsView,
+  GrokSettingsForm,
   GrokAuthStatus,
   GrokAuthStartReply,
   GrokAuthLogoutReply,
@@ -189,43 +176,112 @@ export {
 } from './image-gen-client.ts'
 
 export const name = 'llm-grok'
-export const inject = ['llm', 'webServer']
+export const inject = ['llm']
 
 const NS = GROK_SETTINGS_NAMESPACE
 
 /** One resolution's complete request facts. */
 export type ResolvedGrokOptions = GrokConnectionOptions
 
-/**
- * The one explicit resolve step from raw config to validated connection facts.
- * Catalog membership and the chat base URL are source constants.
- * @param config - raw plugin config or resolved settings snapshot.
- */
-function resolveModels(models: readonly GrokCatalogModel[] | undefined): GrokCatalogModel[] {
+type CatalogModelSchemaInput = {
+  id?: string | null
+  name?: string | null
+  description?: string | null
+  contextWindow?: number | null
+  maxTokens?: number | null
+  reasoningEfforts?: Array<{ id?: string | null; value?: string | null; label?: string | null; description?: string | null }> | null
+  defaultReasoningEffort?: string | null
+  vision?: boolean | null
+  thinking?: boolean | null
+  tools?: boolean | null
+}
+
+const catalogModel: z<CatalogModelSchemaInput, GrokCatalogModel> = z.object({
+  id: z.string().required(),
+  name: z.string(),
+  description: z.string(),
+  contextWindow: z.number().step(1).min(1),
+  maxTokens: z.number().step(1).min(1),
+  reasoningEfforts: z.array(z.object({
+    id: z.string().required(),
+    value: z.string().required(),
+    label: z.string(),
+    description: z.string(),
+  })),
+  defaultReasoningEffort: z.string(),
+  vision: z.boolean(),
+  thinking: z.boolean(),
+  tools: z.boolean(),
+})
+
+/** Shape accepted by Schemastery before optional nullable fields are normalized. */
+type CatalogModelInput = CatalogModelSchemaInput | GrokCatalogModel | VolatileSnapshot<GrokCatalogModel>
+
+function normalizeCatalogModel(model: CatalogModelInput): GrokCatalogModel {
+  if (typeof model.id !== 'string') throw new Error('llm-grok: catalog model ids must be strings')
+  const reasoningEfforts = model.reasoningEfforts?.map((effort) => {
+    if (typeof effort.id !== 'string' || typeof effort.value !== 'string') {
+      throw new Error(`llm-grok: catalog model "${model.id}" reasoning efforts need string ids and values`)
+    }
+    return {
+      id: effort.id,
+      value: effort.value,
+      ...typeof effort.label === 'string' ? { label: effort.label } : {},
+      ...typeof effort.description === 'string' ? { description: effort.description } : {},
+    }
+  })
+  return {
+    id: model.id,
+    ...typeof model.name === 'string' ? { name: model.name } : {},
+    ...typeof model.description === 'string' ? { description: model.description } : {},
+    ...typeof model.contextWindow === 'number' ? { contextWindow: model.contextWindow } : {},
+    ...typeof model.maxTokens === 'number' ? { maxTokens: model.maxTokens } : {},
+    ...typeof model.thinking === 'boolean' ? { thinking: model.thinking } : {},
+    ...reasoningEfforts === undefined ? {} : { reasoningEfforts },
+    ...typeof model.defaultReasoningEffort === 'string' ? { defaultReasoningEffort: model.defaultReasoningEffort } : {},
+    ...typeof model.vision === 'boolean' ? { vision: model.vision } : {},
+    ...typeof model.tools === 'boolean' ? { tools: model.tools } : {},
+  }
+}
+
+/** Normalize catalog values and reject duplicate ids before the provider uses an update. */
+function resolveModels(models: readonly CatalogModelInput[] | undefined): GrokCatalogModel[] {
   const seen = new Set<string>()
-  return (models ?? GROK_CATALOG).map((model) => {
+  return (models ?? GROK_CATALOG).map((input) => {
+    const model = normalizeCatalogModel(input)
     if (model.id.length === 0) throw new Error('llm-grok: catalog model ids must be non-empty')
     if (model.name !== undefined && model.name.length === 0) {
       throw new Error(`llm-grok: catalog model "${model.id}" has an empty name`)
     }
     if (seen.has(model.id)) throw new Error(`llm-grok: duplicate catalog model "${model.id}"`)
     seen.add(model.id)
-    return {
-      id: model.id,
-      ...model.name === undefined ? {} : { name: model.name },
-      ...model.description === undefined ? {} : { description: model.description },
-      ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
-      ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
-      ...model.thinking === undefined ? {} : { thinking: model.thinking },
-      ...model.vision === undefined ? {} : { vision: model.vision },
-      ...model.tools === undefined ? {} : { tools: model.tools },
-      ...model.defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort: model.defaultReasoningEffort },
-      ...model.reasoningEfforts === undefined ? {} : { reasoningEfforts: model.reasoningEfforts },
-    }
+    return model
   })
 }
 
-export function resolveAdapterOptions(config: Config): ResolvedGrokOptions {
+type ConfigField<T> = T | Volatile<T | undefined>
+interface ConfigValues {
+  streamIdleTimeoutMs?: number
+  models?: ConfigField<GrokCatalogModel[]>
+  enableImageGen?: ConfigField<boolean>
+  retryPolicy?: RetryPolicyConfig
+  registerLegacyTools?: boolean
+}
+
+function isVolatile<T>(value: T | Volatile<T | undefined> | undefined): value is Volatile<T | undefined> {
+  return typeof value === 'object'
+    && value !== null
+    && 'get' in value
+    && typeof value.get === 'function'
+}
+
+function configValue<T>(
+  value: T | Volatile<T | undefined> | undefined,
+): T | VolatileSnapshot<T | undefined> | undefined {
+  return isVolatile(value) ? value.get() : value
+}
+
+export function resolveAdapterOptions(config: ConfigValues): ResolvedGrokOptions {
   const streamIdleTimeoutMs = config.streamIdleTimeoutMs ?? GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS
   if (!Number.isFinite(streamIdleTimeoutMs)
     || streamIdleTimeoutMs <= 0
@@ -236,7 +292,7 @@ export function resolveAdapterOptions(config: Config): ResolvedGrokOptions {
   }
   return {
     baseURL: GROK_CHAT_BASE_URL,
-    models: resolveModels(config.models),
+    models: resolveModels(configValue(config.models)),
     streamIdleTimeoutMs,
     retryPolicy: withAuthRetries(resolveRetryPolicy(
       config.retryPolicy ?? { mode: 'normal', maxRetries: DEFAULT_MAX_RETRIES },
@@ -245,41 +301,31 @@ export function resolveAdapterOptions(config: Config): ResolvedGrokOptions {
   }
 }
 
-/**
- * Plugin config, validated by the same-named schemastery schema and doubling
- * as the `llm-grok` settings-section shape. There is no `apiKeyEnv`: this
- * provider authenticates with an xAI subscription, not a console API key.
- */
-export interface Config {
-  /** Maximum provider idle time while one stream read is outstanding (default five minutes). */
-  streamIdleTimeoutMs?: number
-  /** Displayed conversation-picker catalog; omission uses the frozen default. */
-  models?: GrokCatalogModel[]
-  /** When true, register the `grok_image_gen` tool. Default off. */
-  enableImageGen?: boolean
-  /** Provider-owned model-request retry policy; omission uses normal defaults. */
-  retryPolicy?: RetryPolicyConfig
-  /** Set false when Model Switch owns stable tool names, preventing legacy duplicates. */
-  registerLegacyTools?: boolean
+const catalogModels = z.array(catalogModel).default(GROK_CATALOG.map(model => ({ ...model }))).volatile()
+
+/** Parsed Loader Config; volatile fields hold stable references to validated snapshots. */
+export type Config = {
+  streamIdleTimeoutMs: number
+  models: Volatile<GrokCatalogModel[]>
+  enableImageGen: Volatile<boolean>
+  retryPolicy: RetryPolicyConfig
+  registerLegacyTools: boolean
 }
 
-const catalogModel = z.object({
-  id: z.string().required(),
-  name: z.string(),
-  description: z.string(),
-  contextWindow: z.number().step(1).min(1),
-  maxTokens: z.number().step(1).min(1),
-  vision: z.boolean(),
-  thinking: z.boolean(),
-  tools: z.boolean(),
-})
+type ConfigSchemaInput = {
+  streamIdleTimeoutMs?: number | null
+  models?: CatalogModelSchemaInput[] | null
+  enableImageGen?: boolean | null
+  retryPolicy?: RetryPolicyConfig | null
+  registerLegacyTools?: boolean | null
+}
 
-export const Config: z<Config> = z.object({
+export const Config: z<ConfigSchemaInput, Config> = z.object({
   streamIdleTimeoutMs: z.number().min(Number.MIN_VALUE).max(MAX_TIMER_DELAY_MS).default(
     GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   ),
-  models: z.array(catalogModel),
-  enableImageGen: z.boolean().default(false),
+  models: catalogModels,
+  enableImageGen: z.boolean().default(false).volatile(),
   retryPolicy: RetryPolicySchema,
   registerLegacyTools: z.boolean().default(true),
 })
@@ -414,55 +460,70 @@ export function createGrokRpcHandler(
   }
 }
 
-/** Return the schema-decoded, secret-free settings snapshot and descriptor revision. */
-async function readDisplayedSettings(ctx: Context, payload: unknown) {
-  if (decodeGrokEmptyRequest(payload) === undefined) return internalError('invalid Grok settings read request')
-  const descriptor = ctx.get('settings')?.describe().find(entry => entry.ns === NS)
-  if (descriptor === undefined) return internalError('Grok settings are unavailable')
-  const settings = decodeGrokSettings(descriptor.value)
-  if (settings === undefined) return internalError('Grok settings are invalid')
-  return { ok: true as const, value: { settings, revision: descriptor.revision } }
+function grokRpcResponse(rpcId: string, result: ConnectionRpcHandlerResult): Response {
+  const response = { type: 'server-response' as const, rpcId, result }
+  if (!result.ok || result.attachments === undefined || result.attachments.length === 0) {
+    return Response.json(response)
+  }
+
+  const form = new FormData()
+  const attachments = result.attachments.map((attachment, index) => {
+    const part = `bytes-${index}`
+    form.set(part, new Blob([new Uint8Array(attachment.bytes)]))
+    return { path: [...attachment.path], codec: 'bytes', part }
+  })
+  form.set('metadata', JSON.stringify({ ...response, attachments }))
+  return new Response(form)
 }
-async function saveDisplayedCatalog(ctx: Context, payload: unknown) {
-  const request = decodeGrokSaveRequest(payload)
-  if (request === undefined) return internalError('invalid Grok settings request')
-  const settings = ctx.get('settings')
-  if (settings === undefined) return internalError('Grok settings are unavailable')
-  try {
-    const before = settings.describe().find(descriptor => descriptor.ns === NS)
-    if (before === undefined) return internalError('Grok settings are unavailable')
-    const current = decodeGrokSettings(before.value)
-    if (current === undefined) return internalError('Grok settings are invalid')
-    const ops: SettingsPathOp[] = []
-    if (!deepEqualJson(current.models, request.models)) {
-      ops.push({ op: 'set', path: ['models'], value: request.models })
+
+function createGrokRpcFetch(
+  handler: ConnectionRpcHandler,
+  operator: Parameters<ConnectionRpcHandler>[3],
+): (request: Request) => Promise<Response> {
+  return async request => {
+    if (request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() !== 'application/json') {
+      return new Response('unsupported media type', { status: 415 })
     }
-    if (request.enableImageGen !== undefined && current.enableImageGen !== request.enableImageGen) {
-      ops.push({ op: 'set', path: ['enableImageGen'], value: request.enableImageGen })
+
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      return new Response('invalid JSON', { status: 400 })
     }
-    if (ops.length > 0) await settings.mutate(NS, ops, request.expectedRevision)
-    const accepted = settings.describe().find(descriptor => descriptor.ns === NS)
-    const acceptedSettings = decodeGrokSettings(accepted?.value)
-    if (accepted === undefined || acceptedSettings === undefined) {
-      return internalError('Grok settings could not be reloaded')
+    const parsed = clientRequestSchema.safeParse(body)
+    if (!parsed.success) return new Response('invalid RPC request', { status: 400 })
+    const message = parsed.data
+    if (message.method !== GROK_RPC_METHOD) return new Response('invalid RPC method', { status: 400 })
+
+    const value = message.payload
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return new Response('invalid RPC payload', { status: 400 })
     }
-    return { ok: true as const, value: { settings: acceptedSettings, revision: accepted.revision } }
-  } catch (error: unknown) {
-    const message = error instanceof Error && error.message.length > 0
-      ? error.message
-      : 'Grok settings save failed'
-    return internalError(message)
+    const wrapped = value as Record<string, unknown>
+    if (!Object.hasOwn(wrapped, 'endpoint')
+      || typeof wrapped['endpoint'] !== 'string'
+      || Object.keys(wrapped).some(key => key !== 'endpoint' && key !== 'payload')) {
+      return new Response('invalid RPC payload', { status: 400 })
+    }
+
+    try {
+      const result = await handler(wrapped['endpoint'], wrapped['payload'], request.signal, operator)
+      return grokRpcResponse(message.rpcId, result)
+    } catch {
+      return new Response('internal server error', { status: 500 })
+    }
   }
 }
+
 
 export function apply(ctx: Context, config: Config): void {
   if (!allowDshRuntime(ctx.logger, 'dsh-llm-grok', ['@deepseek-ai/dsh-llm'])) return
 
-  let current: () => Config = () => config
   let lastRaw: Config | undefined
   let lastGood: ResolvedGrokOptions | undefined
   const options = (): ResolvedGrokOptions => {
-    const raw = current()
+    const raw = config
     if (raw === lastRaw && lastGood !== undefined) return lastGood
     try {
       const next = resolveAdapterOptions(raw)
@@ -472,7 +533,7 @@ export function apply(ctx: Context, config: Config): void {
     } catch (error) {
       if (lastGood === undefined) throw error
       lastRaw = raw
-      ctx.logger.error('llm-grok: keeping the last good configuration after an invalid settings section')
+      ctx.logger.error('llm-grok: keeping the last good configuration after an invalid Loader Config')
       ctx.logger.error(error)
       return lastGood
     }
@@ -495,35 +556,38 @@ export function apply(ctx: Context, config: Config): void {
   ])
   const registration = ctx.llm.registerAdapter([GROK_PROVIDER], adapter)
   let registeredPolicy = options().retryPolicy
+  let registeredModels = options().models
   const ensureRegistrationFacts = (): void => {
     lastRaw = undefined
-    const policy = options().retryPolicy
-    if (deepEqualJson(policy, registeredPolicy)) return
+    const resolved = options()
+    if (deepEqualJson(resolved.retryPolicy, registeredPolicy)
+      && deepEqualJson(resolved.models, registeredModels)) return
     registration.replace([GROK_PROVIDER])
-    registeredPolicy = policy
+    registeredPolicy = resolved.retryPolicy
+    registeredModels = resolved.models
   }
 
-  const connectionFiber = ctx.inject(['connection', 'webServer'], (connectionCtx) => {
-    const inner = createGrokRpcHandler(runtime)
-    connectionCtx.effect(() => connectionCtx.connection.rpc.handle(
-      GROK_RPC_CHANNEL,
-      async (endpoint, payload, signal) => {
-        if (endpoint === GROK_SETTINGS_READ_ENDPOINT) return readDisplayedSettings(ctx, payload)
-        if (endpoint === GROK_SAVE_ENDPOINT) return saveDisplayedCatalog(ctx, payload)
-        return inner(endpoint, payload, signal)
-      },
-    ), 'llm-grok: register Host Connection RPC')
+  const connectionFiber = ctx.inject(['connection'], connectionCtx => {
+    const handler = createGrokRpcHandler(runtime)
+    const route: ConnectionFetchRoute = {
+      path: '/api/plugin-rpc/grok',
+      methods: ['POST'],
+      requestBody: 'buffered',
+      fetch: createGrokRpcFetch(handler, connectionCtx.connection.operator),
+    }
+    connectionCtx.effect(
+      () => connectionCtx.connection.fetch.register(route),
+      'llm-grok: register authenticated Grok RPC route',
+    )
   })
   ctx.effect(() => () => connectionFiber.dispose(), 'llm-grok: dispose Host Connection injection')
-  ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, NS, Config, config, {
-      setSource: (source) => {
-        current = source as () => Config
-      },
-      onChange: scheduleCapabilities,
-      validate: value => { resolveAdapterOptions(value) },
-    })
+  ctx.inject(['settings'], settingsCtx => {
+    settingsCtx.effect(
+      () => settingsCtx.settings.configure({ auto: false }, ctx.fiber),
+      'llm-grok: use custom Loader Config page',
+    )
   })
+
 
   let stopped = false
   let imageGenFiber: Fiber | undefined
@@ -531,8 +595,7 @@ export function apply(ctx: Context, config: Config): void {
 
   const reconcileImageGen = async (): Promise<void> => {
     if (stopped) return
-    const enabled = current().registerLegacyTools !== false && current().enableImageGen === true
-    if (enabled === (imageGenFiber !== undefined)) return
+    const enabled = config.registerLegacyTools !== false && configValue(config.enableImageGen) === true
     const previous = imageGenFiber
     imageGenFiber = undefined
     if (previous !== undefined) await previous.dispose()
@@ -558,6 +621,9 @@ export function apply(ctx: Context, config: Config): void {
       ctx.logger.error(error)
     })
   }
+  ctx.on('loader/volatile-update', paths => {
+    if (paths.some(path => path[0] === 'models' || path[0] === 'enableImageGen')) scheduleCapabilities()
+  })
 
   scheduleCapabilities()
   ctx.effect(() => async () => {

@@ -1,6 +1,13 @@
 /** Model-invoked `grok_image_gen` tool over the Grok subscription session. */
 import type { Context } from '@deepseek-ai/cordis';
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools';
+declare module '@deepseek-ai/dsh-llm' {
+    interface MessageSourceMap {
+        'llm-grok': {
+            kind: 'llm-grok';
+        };
+    }
+}
 /** Public DSH tool name. Distinct from Codex `codex_generate_image`. */
 export declare const GROK_IMAGE_GEN_TOOL_NAME = "grok_image_gen";
 /** Constructor options the plugin owns at registration time. */

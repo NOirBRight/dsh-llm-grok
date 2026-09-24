@@ -9,16 +9,13 @@ import {
   GROK_AUTH_LOGOUT_ENDPOINT,
   GROK_AUTH_START_ENDPOINT,
   GROK_AUTH_STATUS_ENDPOINT,
-  GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-  GROK_RPC_CHANNEL,
-  GROK_SAVE_ENDPOINT,
-  GROK_SETTINGS_NAMESPACE,
   GROK_USAGE_ENDPOINT,
+  GROK_RPC_METHOD,
   decodeGrokAuthStartReply,
   decodeGrokAuthStatus,
-  decodeGrokSaveResult,
   decodeGrokUsageReply,
 } from '../src/client-contract.ts'
+import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import { apply, Config, createGrokRpcHandler, inject } from '../src/index.ts'
 import { createGrokAuthRuntime } from '../src/oauth.ts'
@@ -31,11 +28,6 @@ afterEach(async () => {
   await closeFakeBillingServers()
 })
 
-type Handler = (
-  endpoint: string,
-  payload: unknown,
-  signal: AbortSignal,
-) => Promise<{ ok: boolean, value?: unknown, error?: { message: string } }>
 
 const tokens = {
   accessToken: 'access-secret',
@@ -46,21 +38,22 @@ const tokens = {
 }
 
 describe('Grok authenticated Host Connection RPC', () => {
-  it('registers /grok as an authenticated channel', async () => {
+  it('registers one authenticated /api route and disposes only that route', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime).await()
     let release: (() => void) | undefined
     const pending = new Promise<void>(resolve => { release = resolve })
     const dispose = vi.fn(async () => { await pending })
-    const handle = vi.fn((_channel: string, _handler: Handler) => dispose)
-    ctx.provide('connection', { rpc: { handle } } as never)
-    ctx.provide('webServer', { register: () => () => {} } as never)
+    const register = vi.fn((_route: ConnectionFetchRoute) => dispose)
+    ctx.provide('connection', { operator: {}, fetch: { register } } as never)
     const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})
     await fiber.await()
 
-    expect(handle).toHaveBeenCalledTimes(1)
-    expect(handle.mock.calls[0]?.[0]).toBe(GROK_RPC_CHANNEL)
-    expect(handle.mock.calls[0]).toHaveLength(2)
+    expect(register).toHaveBeenCalledTimes(1)
+    const route = register.mock.calls[0]?.[0]
+    expect(route?.path).toBe('/api/plugin-rpc/grok')
+    expect(route?.methods).toEqual(['POST'])
+    expect(route?.requestBody).toBe('buffered')
 
     const unloading = fiber.dispose()
     await vi.waitFor(() => expect(dispose).toHaveBeenCalledTimes(1))
@@ -74,19 +67,49 @@ describe('Grok authenticated Host Connection RPC', () => {
     expect(dispose).toHaveBeenCalledTimes(1)
   })
 
-  it('unloads an injected connection fiber when registration fails', async () => {
+  it('dispatches wrapped requests with an omitted undefined payload', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime).await()
-    const failure = new Error('rpc registration failed')
+    const register = vi.fn((_route: ConnectionFetchRoute) => () => Promise.resolve())
+    ctx.provide('connection', { operator: {}, fetch: { register } } as never)
+    const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})
+    await fiber.await()
+    const route = register.mock.calls[0]?.[0]
+    if (route === undefined) throw new Error('Grok Fetch route was not registered')
+
+    const response = await route.fetch(new Request('http://localhost/api/plugin-rpc/grok', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'client-request',
+        rpcId: 'grok-test',
+        method: GROK_RPC_METHOD,
+        payload: { endpoint: 'unknown' },
+      }),
+    }))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      type: 'server-response',
+      rpcId: 'grok-test',
+      result: { ok: false, error: { code: 'internal' } },
+    })
+
+    await fiber.dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('unloads an injected connection fiber when route registration fails', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime).await()
+    const failure = new Error('route registration failed')
     const logged = vi.spyOn(ctx.logger, 'error').mockImplementation(() => undefined)
-    const handle = vi.fn(() => { throw failure })
-    ctx.provide('connection', { rpc: { handle } } as never)
-    ctx.provide('webServer', { register: () => () => {} } as never)
+    const register = vi.fn((_route: ConnectionFetchRoute) => { throw failure })
+    ctx.provide('connection', { operator: {}, fetch: { register } } as never)
     const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})
     await fiber.await()
     expect(logged).toHaveBeenCalledWith(failure)
     await expect(fiber.dispose()).resolves.toBeUndefined()
-    expect(handle).toHaveBeenCalledTimes(1)
+    expect(register).toHaveBeenCalledTimes(1)
     logged.mockRestore()
     await ctx.fiber.dispose()
   })
@@ -454,96 +477,5 @@ describe('Grok authenticated Host Connection RPC', () => {
       createLaunchEnvironmentSnapshot([{ source: 'process', values: { DSH_HOME: root } }]),
     )
     expect(resolveGrokSessionPath(ctx)).toBe(join(root, 'grok-oauth.json'))
-  })
-})
-
-describe('Grok settings/save RPC', () => {
-  it('commits only the displayed catalog through one revision-fenced mutation', async () => {
-    const current = {
-      streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-      models: [
-        { id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true },
-        { id: 'grok-4.5', name: 'Grok 4.5', thinking: true, vision: true },
-      ],
-    }
-    let value = current
-    let revision = 1
-    const mutate = vi.fn(async (
-      _ns: string,
-      ops: readonly { op: string, path: readonly string[], value: unknown }[],
-      expected: number,
-    ) => {
-      expect(expected).toBe(revision)
-      const next = structuredClone(value) as Record<string, unknown>
-      for (const op of ops) next[op.path[0] as string] = structuredClone(op.value)
-      value = next as typeof current
-      revision += 1
-    })
-    const settings = {
-      register: () => ({
-        get: () => value,
-        watch: () => () => undefined,
-        update: () => Promise.resolve(),
-        replace: () => Promise.resolve(),
-      }),
-      describe: () => [{ ns: GROK_SETTINGS_NAMESPACE, value, revision }],
-      mutate,
-    }
-    const ctx = new Context()
-    await ctx.plugin(LlmRuntime).await()
-    const handle = vi.fn((_channel: string, _handler: Handler) =>
-      () => Promise.resolve())
-    ctx.provide('connection', { rpc: { handle } } as never)
-    ctx.provide('webServer', { register: () => () => {} } as never)
-    ctx.provide('settings', settings as never)
-    const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})
-    await fiber.await()
-    const handler = handle.mock.calls[0]?.[1]
-    if (handler === undefined) throw new Error('Grok RPC was not registered')
-
-    const result = await handler(GROK_SAVE_ENDPOINT, {
-      models: [{ id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true }],
-      expectedRevision: 1,
-    }, new AbortController().signal)
-
-    expect(decodeGrokSaveResult(result.ok ? result.value : undefined)).toEqual({
-      settings: {
-        streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-        models: [{ id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true }],
-        enableImageGen: false,
-      },
-      revision: 2,
-    })
-    expect(mutate).toHaveBeenCalledTimes(1)
-    expect(mutate.mock.calls[0]?.[1]).toEqual([
-      { op: 'set', path: ['models'], value: [{ id: 'grok-4.6', name: 'Grok 4.6', thinking: true, vision: true }] },
-    ])
-    expect(JSON.stringify(result)).not.toMatch(/accessToken|refreshToken|Bearer/u)
-
-    await fiber.dispose()
-    await ctx.fiber.dispose()
-  })
-
-  it('rejects a save payload that tries to send token fields', async () => {
-    const ctx = new Context()
-    await ctx.plugin(LlmRuntime).await()
-    const handle = vi.fn((_channel: string, _handler: Handler) =>
-      () => Promise.resolve())
-    ctx.provide('connection', { rpc: { handle } } as never)
-    ctx.provide('webServer', { register: () => () => {} } as never)
-    const fiber = ctx.plugin({ inject: [...inject], Config, apply }, {})
-    await fiber.await()
-    const handler = handle.mock.calls[0]?.[1]
-    if (handler === undefined) throw new Error('Grok RPC was not registered')
-
-    const result = await handler(GROK_SAVE_ENDPOINT, {
-      models: [{ id: 'grok-4.6' }],
-      expectedRevision: 1,
-      accessToken: 'nope',
-    }, new AbortController().signal)
-    expect(result.ok).toBe(false)
-
-    await fiber.dispose()
-    await ctx.fiber.dispose()
   })
 })

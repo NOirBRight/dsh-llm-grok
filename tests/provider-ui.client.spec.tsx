@@ -3,26 +3,25 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { clearProviderUsageCache } from 'dsh-llm-providers-ui/usage-readers'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { GrokPluginCard } from '../src/client/GrokPluginCard.tsx'
 import type { GrokPluginCardProps } from '../src/client/GrokPluginCard.tsx'
 import { en } from '../src/client/locales.ts'
-import { GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
-import type { GrokAuthStatus, GrokCatalogModel, GrokSettingsView, GrokUsageReply } from '../src/client-contract.ts'
+import { GROK_CATALOG } from '../src/client-contract.ts'
+import type { GrokAuthStatus, GrokCatalogModel, GrokSettingsForm, GrokUsageReply } from '../src/client-contract.ts'
 import { apply, inject } from '../src/client/index.ts'
-import { GROK_AUTH_COMPLETE_ENDPOINT, GROK_AUTH_LOGOUT_ENDPOINT, GROK_SETTINGS_NAMESPACE, GROK_SETTINGS_READ_ENDPOINT } from '../src/client-contract.ts'
+import { GROK_AUTH_COMPLETE_ENDPOINT, GROK_AUTH_LOGOUT_ENDPOINT, GROK_SETTINGS_NAMESPACE } from '../src/client-contract.ts'
 
 afterEach(() => { cleanup() })
 // Each case starts with an empty shared cache: the dash cases assert "nothing was ever cached".
 beforeEach(() => { clearProviderUsageCache() })
 
-const settings: GrokSettingsView = {
-  streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-  models: GROK_CATALOG.map((model) => ({ ...model })),
+const settings: GrokSettingsForm = {
+  models: GROK_CATALOG.map(model => ({ ...model })),
   enableImageGen: false,
 }
 
-function snapshot(overrides: Partial<SettingsScopeSnapshot<GrokSettingsView>> = {}): SettingsScopeSnapshot<GrokSettingsView> {
+function snapshot(overrides: Partial<ConfigFormSnapshot<GrokSettingsForm>> = {}): ConfigFormSnapshot<GrokSettingsForm> {
   return {
     status: 'ready',
     value: settings,
@@ -33,6 +32,23 @@ function snapshot(overrides: Partial<SettingsScopeSnapshot<GrokSettingsView>> = 
     mode: 'host',
     ...overrides,
   }
+}
+
+function provideSettingsForm(ctx: Context) {
+  const current = snapshot()
+  const form: ConfigForm<GrokSettingsForm> = {
+    getSnapshot: () => current,
+    subscribe: () => () => undefined,
+    mutate: async () => true,
+    set: async () => true,
+    unset: async () => true,
+  }
+  const get = vi.fn((entryId: string) => {
+    expect(entryId).toBe(GROK_SETTINGS_NAMESPACE)
+    return form
+  })
+  ctx.provide('configForms', { get } as never)
+  return get
 }
 
 function props(overrides: Partial<GrokPluginCardProps> = {}): GrokPluginCardProps {
@@ -125,18 +141,18 @@ describe('Grok provider directory shared header', () => {
       }
     }
     const ctx = new Context()
+    const configFormsGet = provideSettingsForm(ctx)
     await ctx.plugin(FakeSlots).await()
     const register = vi.fn(() => () => undefined)
     ctx.provide('providerDirectory', { register } as never)
     ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
-    const rpc = { call: async () => ({ ok: true, value: { settings, revision: 1 } }) }
+    const rpc = { call: async () => ({ ok: true, value: { loggedIn: false } }) }
     ctx.provide('connection', { rpc } as never)
-    ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     await waitFor(() => { expect(register).toHaveBeenCalled() })
     expect(register).toHaveBeenCalledWith(expect.objectContaining({ header: 'shared', key: GROK_SETTINGS_NAMESPACE }))
-    expect(GROK_SETTINGS_READ_ENDPOINT.length).toBeGreaterThan(0)
+    expect(configFormsGet).toHaveBeenCalledWith(GROK_SETTINGS_NAMESPACE)
     await fiber.dispose()
     await ctx.fiber.dispose()
   })
@@ -155,16 +171,17 @@ describe('Grok provider directory shared header', () => {
       }
     }
     const ctx = new Context()
+    provideSettingsForm(ctx)
     await ctx.plugin(FakeSlots2).await()
     const slots = ctx.get('slots') as FakeSlots2
     const register = vi.fn(() => () => undefined)
     const invalidateUsage = vi.fn()
     ctx.provide('providerDirectory', { register, invalidateUsage } as never)
     ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
-    const rpc = { call: vi.fn(async (_c: string, e: string) => {
-      if (e === GROK_AUTH_LOGOUT_ENDPOINT) return { ok: true, value: { ok: true } }
-      if (e === GROK_AUTH_COMPLETE_ENDPOINT) return { ok: true, value: { ok: true } }
-      return { ok: true, value: { settings, revision: 1 } }
+    const rpc = { call: vi.fn(async (_channel: string, _method: string, { endpoint }: { endpoint: string }) => {
+      if (endpoint === GROK_AUTH_LOGOUT_ENDPOINT) return { ok: true, value: { ok: true } }
+      if (endpoint === GROK_AUTH_COMPLETE_ENDPOINT) return { ok: true, value: { ok: true } }
+      return { ok: true, value: { loggedIn: false } }
     }) }
     ctx.provide('connection', { rpc } as never)
     ctx.provide('webServer', { register: () => () => {} } as never)

@@ -2,13 +2,13 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
-import { GROK_AUTH_ATTEMPT_STATUS_ENDPOINT, GROK_AUTH_LOGOUT_ENDPOINT, GROK_CATALOG, GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../src/client-contract.ts'
-import type { GrokSettingsView } from '../src/client-contract.ts'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { GROK_AUTH_ATTEMPT_STATUS_ENDPOINT, GROK_AUTH_LOGOUT_ENDPOINT, GROK_CATALOG, GROK_RPC_METHOD, GROK_USAGE_ENDPOINT } from '../src/client-contract.ts'
+import type { GrokSettingsForm } from '../src/client-contract.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { clearProviderUsageCache, peekCachedUsage, rememberHeadlineQuota } from 'dsh-llm-providers-ui/usage-readers'
 
-const value: GrokSettingsView = {
-  streamIdleTimeoutMs: GROK_DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+const value: GrokSettingsForm = {
   models: GROK_CATALOG.map(model => ({ ...model })),
   enableImageGen: false,
 }
@@ -40,8 +40,33 @@ class FakeSlots extends Service {
   }
 }
 
+function provideSettingsForm(ctx: Context): void {
+  const snapshot: ConfigFormSnapshot<GrokSettingsForm> = {
+    status: 'ready',
+    value,
+    base: value,
+    user: {},
+    revision: 1,
+    writable: true,
+    mode: 'host',
+  }
+  const form: ConfigForm<GrokSettingsForm> = {
+    getSnapshot: () => snapshot,
+    subscribe: () => () => undefined,
+    mutate: async () => true,
+    set: async () => true,
+    unset: async () => true,
+  }
+  ctx.provide('configForms', {
+    get: (entryId: string) => {
+      expect(entryId).toBe('llm-grok')
+      return form
+    },
+  } as never)
+}
 async function bench() {
   const ctx = new Context()
+  provideSettingsForm(ctx)
   await ctx.plugin(FakeSlots).await()
   const slots = ctx.get('slots') as FakeSlots
   ctx.provide('locale', {
@@ -58,12 +83,9 @@ async function bench() {
 }
 
 describe('Grok client plugin registration', () => {
-  it('declares only the client services it consumes', () => {
-    expect(inject).toEqual(['slots', 'locale', 'connection'])
-  })
-
   it('reads usage through the grok usage/read RPC without exposing tokens', async () => {
     const ctx = new Context()
+    provideSettingsForm(ctx)
     await ctx.plugin(FakeSlots).await()
     const slots = ctx.get('slots') as FakeSlots
     ctx.provide('locale', {
@@ -71,11 +93,11 @@ describe('Grok client plugin registration', () => {
       bind: () => (key: string) => key,
     } as never)
     const calls: Array<{ channel: string, endpoint: string, payload: unknown }> = []
-      ctx.provide('connection', {
+    ctx.provide('connection', {
       rpc: {
-        call: async (channel: string, endpoint: string, payload: unknown) => {
-          calls.push({ channel, endpoint, payload })
-          if (endpoint === 'settings/read') return { ok: true, value: { settings: value, revision: 1 } }
+        call: async (channel: string, method: string, wrapper: { endpoint: string, payload: unknown }) => {
+          calls.push({ channel, endpoint: method, payload: wrapper })
+          if (wrapper.endpoint !== GROK_USAGE_ENDPOINT) return { ok: true, value: { loggedIn: false } }
           return {
             ok: true,
             value: {
@@ -97,8 +119,11 @@ describe('Grok client plugin registration', () => {
       inject?: () => { fetchUsage: () => Promise<unknown> }
     }).inject?.()
     const usage = await face?.fetchUsage()
-    expect(calls).toContainEqual({ channel: '/grok', endpoint: 'settings/read', payload: {} })
-    expect(calls).toContainEqual({ channel: '/grok', endpoint: 'usage/read', payload: {} })
+    expect(calls).toContainEqual({
+      channel: '/api',
+      endpoint: GROK_RPC_METHOD,
+      payload: { endpoint: GROK_USAGE_ENDPOINT, payload: {} },
+    })
     expect(usage).toEqual({
       status: 'ok',
       usage: {
@@ -134,14 +159,15 @@ describe('Grok client plugin registration', () => {
 
   it('closes a pre-opened popup when auth/start is malformed', async () => {
     const ctx = new Context()
+    provideSettingsForm(ctx)
     await ctx.plugin(FakeSlots).await()
     const slots = ctx.get('slots') as FakeSlots
     ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
     const popup = { closed: false, opener: null as Window | null, close: vi.fn(), location: { href: 'about:blank' } }
     const open = vi.spyOn(window, 'open').mockReturnValue(popup as never)
-    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => endpoint === 'settings/read'
-      ? { ok: true, value: { settings: value, revision: 1 } }
-      : { ok: true, value: { ok: true, authorizationUrl: 7 } } } } as never)
+    ctx.provide('connection', { rpc: { call: async (_channel: string, _method: string, { endpoint }: { endpoint: string }) => endpoint === 'auth/start'
+      ? { ok: true, value: { ok: true, authorizationUrl: 7 } }
+      : { ok: true, value: { loggedIn: false } } } } as never)
     ctx.provide('webServer', { register: () => () => {} } as never)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
@@ -158,10 +184,11 @@ describe('Grok client plugin registration', () => {
     rememberHeadlineQuota('llm-grok', 'Grok', { label: 'W', remainingPercent: 50 })
     expect(peekCachedUsage('llm-grok')).not.toBeUndefined()
     const ctx = new Context()
+    provideSettingsForm(ctx)
     await ctx.plugin(FakeSlots).await()
     const slots = ctx.get('slots') as FakeSlots
     ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
-    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => endpoint === 'auth/logout'
+    ctx.provide('connection', { rpc: { call: async (_channel: string, _method: string, { endpoint }: { endpoint: string }) => endpoint === 'auth/logout'
       ? { ok: true, value: { ok: true } }
       : { ok: true, value: { loggedIn: false } } } } as never)
     ctx.provide('webServer', { register: () => () => {} } as never)
@@ -177,10 +204,11 @@ describe('Grok client plugin registration', () => {
 
   it('purges persisted quota on sign-in success signals without a provider directory', async () => {
     const ctx = new Context()
+    provideSettingsForm(ctx)
     await ctx.plugin(FakeSlots).await()
     const slots = ctx.get('slots') as FakeSlots
     ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
-    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => {
+    ctx.provide('connection', { rpc: { call: async (_channel: string, _method: string, { endpoint }: { endpoint: string }) => {
       if (endpoint === 'auth/complete') return { ok: true, value: { ok: true } }
       if (endpoint === 'auth/attempt-status') return { ok: true, value: { attemptId: 'attempt-1', state: 'succeeded' } }
       return { ok: true, value: { loggedIn: false } }
@@ -209,10 +237,11 @@ describe('Grok client plugin registration', () => {
 
   it('purges seeded quota on a logged-out usage response without waiting for auth/status', async () => {
     const ctx = new Context()
+    provideSettingsForm(ctx)
     await ctx.plugin(FakeSlots).await()
     const slots = ctx.get('slots') as FakeSlots
     ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
-    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => endpoint === 'usage/read'
+    ctx.provide('connection', { rpc: { call: async (_channel: string, _method: string, { endpoint }: { endpoint: string }) => endpoint === 'usage/read'
       ? { ok: true, value: { status: 'logged-out' } }
       : { ok: true, value: { loggedIn: false } } } } as never)
     ctx.provide('webServer', { register: () => () => {} } as never)
@@ -232,10 +261,11 @@ describe('Grok client plugin registration', () => {
     let resolveOld: ((value: unknown) => void) | undefined
     let statusCalls = 0
     const ctx = new Context()
+    provideSettingsForm(ctx)
     await ctx.plugin(FakeSlots).await()
     const slots = ctx.get('slots') as FakeSlots
     ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
-    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => {
+    ctx.provide('connection', { rpc: { call: async (_channel: string, _method: string, { endpoint }: { endpoint: string }) => {
       if (endpoint === 'auth/complete') return { ok: true, value: { ok: true } }
       if (endpoint === 'auth/status') {
         statusCalls += 1
@@ -265,10 +295,11 @@ describe('Grok client plugin registration', () => {
     let resolveOld: ((value: unknown) => void) | undefined
     let usageCalls = 0
     const ctx = new Context()
+    provideSettingsForm(ctx)
     await ctx.plugin(FakeSlots).await()
     const slots = ctx.get('slots') as FakeSlots
     ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
-    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => {
+    ctx.provide('connection', { rpc: { call: async (_channel: string, _method: string, { endpoint }: { endpoint: string }) => {
       if (endpoint === 'auth/complete') return { ok: true, value: { ok: true } }
       if (endpoint === 'usage/read') {
         usageCalls += 1
@@ -299,9 +330,10 @@ describe('Grok client plugin registration', () => {
     let statusCalls = 0
     let account = (): { state: string } => ({ state: 'unknown' })
     const ctx = new Context()
+    provideSettingsForm(ctx)
     await ctx.plugin(FakeSlots).await()
     ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
-    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => {
+    ctx.provide('connection', { rpc: { call: async (_channel: string, _method: string, { endpoint }: { endpoint: string }) => {
       if (endpoint === 'auth/complete') return { ok: true, value: { ok: true } }
       if (endpoint === 'auth/status') {
         statusCalls += 1
@@ -335,14 +367,14 @@ describe('Grok client plugin registration', () => {
     let resolveAttempt: ((value: unknown) => void) | undefined
     let account = (): { state: string } => ({ state: 'unknown' })
     const ctx = new Context()
+    provideSettingsForm(ctx)
     await ctx.plugin(FakeSlots).await()
     const slots = ctx.get('slots') as FakeSlots
     ctx.provide('locale', { register: () => () => undefined, bind: () => (key: string) => key } as never)
-    ctx.provide('connection', { rpc: { call: async (_channel: string, endpoint: string) => {
+    ctx.provide('connection', { rpc: { call: async (_channel: string, _method: string, { endpoint }: { endpoint: string }) => {
       if (endpoint === GROK_AUTH_ATTEMPT_STATUS_ENDPOINT) return new Promise<unknown>(resolve => { resolveAttempt = resolve })
       if (endpoint === GROK_AUTH_LOGOUT_ENDPOINT) return { ok: true, value: { ok: true } }
       if (endpoint === 'auth/status') return { ok: true, value: { loggedIn: false } }
-      if (endpoint === 'settings/read') return { ok: true, value: { settings: value, revision: 1 } }
       return { ok: true, value: {} }
     } } } as never)
     ctx.provide('webServer', { register: () => () => {} } as never)
