@@ -8,11 +8,11 @@ The package root exposes the Cordis plugin contract. The same artifact exports `
 
 ## Compatibility
 
-Host `@deepseek-ai/dsh-*` packages are not version-locked: peers are `*` and optional. `devDependencies` pin the compile target (`0.1.5-rc.1`). Cordis stays `>=4.0.2 <5.0.0`.
+The DSH peer and compile-time dependencies target the official `0.1.7-alpha.2` release; Cordis targets `~4.0.4`. Other Host versions are not verified by this release.
 
 Verified Hosts in `package.json#dsh.compatibility.dshReleases` are evidence, not an allowlist. Unknown newer Hosts warn once and keep the normal mount path. Only a reproduced failure is blocklisted.
 
-`catalogId` and the unresolved `unknown` account state are attached at runtime. Published `dsh-llm-providers-ui` 0.2.8 omits those fields and treats `unknown` as unconnected; they only take effect on a newer Owner.
+`catalogId` and the unresolved `unknown` account state are attached at runtime. The older `dsh-llm-providers-ui` 0.2.8 omits those fields and treats `unknown` as unconnected; install Owner 0.2.12 or newer.
 
 ## LLM Providers UI ownership
 
@@ -27,13 +27,13 @@ Install `dsh-llm-providers-ui` explicitly in the profile alongside provider plug
 
 ## Installation
 
-Verified on DeepSeek Harness `0.1.2-alpha.4`, `0.1.2-rc.1`, `0.1.5-rc.1`, and `0.1.5-rc.2` (Cordis `4.0.2`). Install directly from GitHub:
+Verified on official DeepSeek Harness `0.1.7-alpha.2`. Install directly from GitHub:
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.9/dsh-llm-providers-ui-0.2.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.12/dsh-llm-providers-ui-0.2.12.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.17/dsh-llm-grok-0.3.17.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.19/dsh-llm-grok-0.3.19.tgz
 dsh web
 ~~~
 
@@ -85,7 +85,7 @@ The composer picker groups sibling catalog rows that share a base id after peeli
 
 ## Release installation (Latest)
 
-xAI Grok subscription login, Responses chat, usage, search, and Imagine. The release artifact targets DeepSeek Harness 0.1.2-alpha.4, 0.1.2-rc.1, 0.1.5-rc.1, and 0.1.5-rc.2 and contains built Host/Client files only; it has no sibling-repository source, workstation path, link:, or workspace: dependency.
+xAI Grok subscription login, Responses chat, usage, search, and Imagine. The release artifact targets DeepSeek Harness `0.1.7-alpha.2` and contains built Host/Client files only; it has no sibling-repository source, workstation path, link:, or workspace: dependency.
 
 The dsh-llm-providers-ui package owns the LLM Providers page, navigation, and shared order store. This package owns only its provider card, models, credentials, and Host route. Install the Owner first for Web; headless Host routing works without the Owner.
 
@@ -93,18 +93,18 @@ Latest (Owner + this plugin; required together on Web):
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.12.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.17.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.19.tgz
 ~~~
 
 Fixed versions (reproducible):
 
 ~~~sh
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.9/dsh-llm-providers-ui-0.2.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.12/dsh-llm-providers-ui-0.2.12.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.17/dsh-llm-grok-0.3.17.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.19/dsh-llm-grok-0.3.19.tgz
 ~~~
 
 Update, uninstall, and verify:
@@ -112,9 +112,9 @@ Update, uninstall, and verify:
 ~~~sh
 # Update Owner + this plugin to Latest
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.9.tgz
+  https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.12.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.17.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.19.tgz
 # Verify the loaded version
 dsh plugin --profile web list
 dsh plugin --profile web doctor
@@ -124,9 +124,9 @@ dsh plugin --profile web remove dsh-llm-grok
 
 Configuration: use the plugin section in Settings for Web UI plugins, or the profile dsh.profile.bundles entry for Host-only plugins. Start with this README's minimal YAML/JSON example and provide credentials/backend addresses explicitly.
 
-Rollback: rerun the fixed v0.3.17 command, verify the profile list, then restart the Web service once. Inspect journalctl --user -u dsh-web.service and dsh plugin --profile web doctor; never put a source checkout in the production profile.
+Rollback: reinstall the prior stable [v0.3.18](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.18/dsh-llm-grok-0.3.18.tgz), verify the profile list, then restart the Web service once. Inspect journalctl --user -u dsh-web.service and dsh plugin --profile web doctor; never put a source checkout in the production profile.
 
-Release and integrity: [v0.3.17](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.17) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.17/SHA256SUMS).
+Release and integrity: [v0.3.19](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.19) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.19/SHA256SUMS).
 
 ## Independent Model Switch search
 
@@ -134,4 +134,4 @@ The Host registers Search and Image adapters together through the existing Model
 
 This requires the coordinated Model Switch dynamic-search implementation (`dsh-model-switch` 0.4.7; the adapter itself builds against the 0.4.6 registry contract). Registering an adapter does not select global Web routing: explicitly configure `web.searchProvider: model-switch`, retaining every other Web config field, then choose the provider/model in Model Switch. No replacement web tool is registered; `web_fetch` is unchanged. ProviderDirectory deferred role/usage integration is preserved.
 
-Validation: `pnpm test` (143 passed), `pnpm run build`; 3082 official Web selection returned real sources with both `grok-4.6` and `grok-4.5` in sequence. See the Model Switch integration audit for exact lab composition and evidence.
+Validation: `pnpm test` (198 passed), `pnpm run build`; 3082 official Web selection returned real sources with both `grok-4.6` and `grok-4.5` in sequence. See the Model Switch integration audit for exact lab composition and evidence.

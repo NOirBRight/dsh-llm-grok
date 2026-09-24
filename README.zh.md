@@ -8,7 +8,7 @@ DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由�
 
 ## 兼容性
 
-宿主 `@deepseek-ai/dsh-*` 不锁定发行号：peer 为 `*` 且 optional。`devDependencies` 钉编译目标（`0.1.5-rc.1`）。Cordis 保持 `>=4.0.2 <5.0.0`。
+宿主 DSH peer 和编译依赖精确面向官方 `0.1.7-alpha.2`；Cordis 为 `~4.0.4`。本版没有验收其他宿主版本。
 
 `package.json#dsh.compatibility.dshReleases` 里的已验证宿主是证据，不是允许列表。未知的新宿主告警一次后仍按正常路径挂载。只有复现过的故障才会加入 blocklist。
 
@@ -16,7 +16,7 @@ DeepSeek Harness 的 xAI Grok 集成。本插件使用独立的提供方路由�
 
 ## 安装
 
-已在 DeepSeek Harness `0.1.2-alpha.4`、`0.1.2-rc.1` 、`0.1.5-rc.1` 与 `0.1.5-rc.2`（Cordis `4.0.2`）验证。直接从 GitHub 安装：
+已在官方 DeepSeek Harness `0.1.7-alpha.2` 验证。直接从 GitHub 安装：
 
 ~~~sh
 dsh plugin --profile web add --force \
