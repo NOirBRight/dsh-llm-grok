@@ -22,7 +22,7 @@ DSH 宿主 peer 和编译依赖范围接受 `0.1.7-alpha.2` 及之后的发行�
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.13/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.20/dsh-llm-grok-0.3.20.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.21/dsh-llm-grok-0.3.21.tgz
 dsh web
 ~~~
 
@@ -48,7 +48,7 @@ dsh web
 
 Plugin 卡上有两份目录：登录后从 `GET /v1/models-v2` 读到的账户列表，以及存进 `settings.models` 的显示子集。对话选择器只用显示子集。每行可设默认思考和作为 DSH 压缩预算的上下文窗口。官方 `grok-4.6` / `grok-4.5` 默认为 500,000 tokens。卡片上的目录默认折叠，可以拖动、改、删，或从账户列表里挑 1–2 个。尚未保存过时，默认显示 `grok-4.6` 和 `grok-4.5`。聊天走 `POST https://cli-chat-proxy.grok.com/v1/responses`。每条请求都带上 DSH function tools，以及始终开启的服务端 `{ type: "web_search" }` 与 `{ type: "x_search" }`。搜索不是 `ctx.web` 提供方。服务端搜索会以加密的 `tco_*` reasoning 项回放；这些项没有可见 summary，不会再各画一个空 Think 块。若 Grok 把同一次搜索再回成客户端 `custom_tool_call`（`xs_call-*` / `ws_call-*`，名字常抄成 `x_keyword_search`），插件会丢掉，避免 DSH 报 `unknown tool`。推理按官方 Responses 字段 `reasoning: { effort }` 传递，取值为 `low` / `medium` / `high`（默认）/ `xhigh`（仅 4.6）。登录后卡片还会展示 Host 读取的订阅额度（`GET /v1/billing?format=credits`）。未登录不请求额度；无法识别的接口显示为不支持，而不是错误。
 
-安装 `dsh-model-switch` v0.4.x 后，Grok 还会给统一的 `generate_image` 路由注册一个可选的 Image-only Adapter。它复用同一套认证实现，不注册 Search 或 Vision Adapter；独立运行行为不变。
+安装 `dsh-model-switch` v0.4.5+ 后，Grok 还会给统一的 `generate_image` 路由注册一个可选的 Image-only Adapter。它复用同一套认证实现，不注册 Search 或 Vision Adapter；独立运行行为不变。
 
 可选的 **`grok_image_gen`**（默认关闭）会注册一个模型可调用的生图工具，走 Grok Imagine。它复用同一套 Host OAuth 会话，请求 `https://api.x.ai/v1/images/generations` —— 和 Grok Build 本地 `image_gen` 同一条轨，不是 console API key，也不是聊天 proxy。工具名与 Codex 的 `codex_generate_image` 区分。生成的图会写到工作区并通过 attachment store 落盘。
 
@@ -92,7 +92,7 @@ Latest（Owner + 本插件；Web 必须一起装）：
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.20.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.21.tgz
 ~~~
 
 固定版本（可复现）：
@@ -101,7 +101,7 @@ dsh plugin --profile web add --force \
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.13/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.20/dsh-llm-grok-0.3.20.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.21/dsh-llm-grok-0.3.21.tgz
 ~~~
 
 更新、卸载与验证：
@@ -111,7 +111,7 @@ dsh plugin --profile web add --force \
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.20.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.21.tgz
 # 验证加载与版本
 dsh plugin --profile web list
 dsh plugin --profile web doctor
@@ -123,7 +123,7 @@ dsh plugin --profile web remove dsh-llm-grok
 
 回滚：重新安装上一稳定版 [v0.3.18](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.18/dsh-llm-grok-0.3.18.tgz)，确认插件列表后只重启一次 Web 服务。失败时查看 journalctl --user -u dsh-web.service 与 dsh plugin --profile web doctor，不要把源码 checkout 写入 production profile。
 
-Release 与完整性：[v0.3.20](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.20) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.20/SHA256SUMS)。
+Release 与完整性：[v0.3.21](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.21) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.21/SHA256SUMS)。
 
 ## 独立 Model Switch 搜索
 
