@@ -33,7 +33,7 @@ Verified on official DeepSeek Harness `0.1.7-alpha.2` and `0.1.7-rc.1`. Install 
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.13/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.21/dsh-llm-grok-0.3.21.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.22/dsh-llm-grok-0.3.22.tgz
 dsh web
 ~~~
 
@@ -95,7 +95,7 @@ Latest (Owner + this plugin; required together on Web):
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.21.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.22.tgz
 ~~~
 
 Fixed versions (reproducible):
@@ -104,7 +104,7 @@ Fixed versions (reproducible):
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.13/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.21/dsh-llm-grok-0.3.21.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.22/dsh-llm-grok-0.3.22.tgz
 ~~~
 
 Update, uninstall, and verify:
@@ -114,7 +114,7 @@ Update, uninstall, and verify:
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.21.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.22.tgz
 # Verify the loaded version
 dsh plugin --profile web list
 dsh plugin --profile web doctor
@@ -126,7 +126,7 @@ Configuration: use the plugin section in Settings for Web UI plugins, or the pro
 
 Rollback: reinstall the prior stable [v0.3.18](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.18/dsh-llm-grok-0.3.18.tgz), verify the profile list, then restart the Web service once. Inspect journalctl --user -u dsh-web.service and dsh plugin --profile web doctor; never put a source checkout in the production profile.
 
-Release and integrity: [v0.3.21](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.21) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.21/SHA256SUMS).
+Release and integrity: [v0.3.22](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.22) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.22/SHA256SUMS).
 
 ## Independent Model Switch search
 

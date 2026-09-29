@@ -675,6 +675,66 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
     settled: auth.kind === 'signed-in' && (usage.status === 'error' || usage.status === 'unsupported'),
   })
 
+  const signInBody = auth.kind !== 'signing-in'
+    ? undefined
+    : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {authorizationUrl !== undefined && popupBlocked
+            ? <a href={authorizationUrl} target="_blank" rel="noopener noreferrer" style={statusStyle}>Open xAI sign-in</a>
+            : null}
+          <p style={hintStyle}>{t('pasteCode')}</p>
+          <label style={labelStyle} htmlFor="grok-oauth-code">{t('pasteCodeLabel')}</label>
+          <input
+            id="grok-oauth-code"
+            style={inputStyle}
+            value={pasteCode}
+            autoComplete="off"
+            spellCheck={false}
+            aria-label={t('pasteCodeLabel')}
+            onChange={event => { setPasteCode(event.target.value) }}
+          />
+          <button
+            type="button"
+            style={buttonStyle}
+            disabled={pasteCode.trim().length === 0}
+            onClick={() => { void onPasteCode() }}
+          >
+            {t('pasteCodeSubmit')}
+          </button>
+        </div>
+      )
+
+  if (props.mode === 'detail' && props.template !== undefined && props.copy !== undefined
+      && (snapshot.status !== 'ready' || draft === undefined)) {
+    const Detail = props.template
+    const accountActions = auth.kind === 'signed-in'
+      ? <button type="button" style={buttonStyle} onClick={() => { void onSignOut() }}>{t('signOut')}</button>
+      : auth.kind === 'signing-in'
+        ? <button type="button" style={buttonStyle} onClick={() => { void onCancelSignIn() }}>{t('cancel')}</button>
+        : <button type="button" style={buttonStyle} onClick={() => { void onSignIn() }}>{t('signIn')}</button>
+    return (
+      <Detail
+        name={USAGE_PROVIDER_NAME}
+        role="llm"
+        mark={<BrandMark />}
+        copy={props.copy}
+        notice={snapshot.status === 'unavailable' ? t('remoteAccess') : t('description')}
+        account={{
+          state: auth.kind === 'signed-in' ? 'connected' : 'unconnected',
+          label: statusLabel,
+          actions: accountActions,
+          ...(signInBody === undefined ? {} : { body: signInBody }),
+        }}
+        quota={{
+          status: props.usage?.status ?? 'loading',
+          windows: props.usage?.windows ?? [],
+          ...(props.onRefresh === undefined ? {} : { onRefresh: props.onRefresh }),
+        }}
+        models={{ count: modelCount, items: [], sortDisabled: true, chooseDisabled: true, addDisabled: true }}
+      />
+    )
+  }
+
   if (snapshot.status === 'unavailable') {
     return (
       <li style={cardStyle} data-provider-card="" data-provider-role="llm">
@@ -929,34 +989,6 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
       : auth.kind === 'signing-in'
         ? <button type="button" style={buttonStyle} onClick={() => { void onCancelSignIn() }}>{t('cancel')}</button>
         : <button type="button" style={buttonStyle} onClick={() => { void onSignIn() }}>{t('signIn')}</button>
-    const accountBody = auth.kind === 'signing-in'
-      ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {authorizationUrl !== undefined && popupBlocked
-              ? <a href={authorizationUrl} target="_blank" rel="noopener noreferrer" style={statusStyle}>Open xAI sign-in</a>
-              : null}
-            <p style={hintStyle}>{t('pasteCode')}</p>
-            <label style={labelStyle} htmlFor="grok-oauth-code">{t('pasteCodeLabel')}</label>
-            <input
-              id="grok-oauth-code"
-              style={inputStyle}
-              value={pasteCode}
-              autoComplete="off"
-              spellCheck={false}
-              aria-label={t('pasteCodeLabel')}
-              onChange={event => { setPasteCode(event.target.value) }}
-            />
-            <button
-              type="button"
-              style={buttonStyle}
-              disabled={pasteCode.trim().length === 0}
-              onClick={() => { void onPasteCode() }}
-            >
-              {t('pasteCodeSubmit')}
-            </button>
-          </div>
-        )
-      : undefined
     return (
         <SharedDetail
           name={USAGE_PROVIDER_NAME}
@@ -968,7 +1000,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
             state: auth.kind === 'signed-in' ? 'connected' : 'unconnected',
             label: statusLabel,
             actions: accountActions,
-            ...(accountBody === undefined ? {} : { body: accountBody }),
+            ...(signInBody === undefined ? {} : { body: signInBody }),
           }}
           quota={{
             status: props.usage?.status ?? 'loading',
@@ -1062,34 +1094,7 @@ export function GrokPluginCard(props: GrokPluginCardProps): ReactNode {
                     ? <button type="button" style={buttonStyle} onClick={() => { void onCancelSignIn() }}>{t('cancel')}</button>
                     : <button type="button" style={buttonStyle} onClick={() => { void onSignIn() }}>{t('signIn')}</button>}
               />
-                    {auth.kind === 'signing-in'
-                      ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {authorizationUrl !== undefined && popupBlocked
-                             ? <a href={authorizationUrl} target="_blank" rel="noopener noreferrer" style={statusStyle}>Open xAI sign-in</a>
-                             : null}
-                           <p style={hintStyle}>{t('pasteCode')}</p>
-                          <label style={labelStyle} htmlFor="grok-oauth-code">{t('pasteCodeLabel')}</label>
-                          <input
-                            id="grok-oauth-code"
-                            style={inputStyle}
-                            value={pasteCode}
-                            autoComplete="off"
-                            spellCheck={false}
-                            aria-label={t('pasteCodeLabel')}
-                            onChange={event => { setPasteCode(event.target.value) }}
-                          />
-                          <button
-                            type="button"
-                            style={buttonStyle}
-                            disabled={pasteCode.trim().length === 0}
-                            onClick={() => { void onPasteCode() }}
-                          >
-                            {t('pasteCodeSubmit')}
-                          </button>
-                        </div>
-                      )
-                      : null}
+                    {signInBody}
             </section>
             {auth.kind === 'signed-in'
               ? (

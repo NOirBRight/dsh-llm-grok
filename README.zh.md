@@ -22,7 +22,7 @@ DSH 宿主 peer 和编译依赖范围接受 `0.1.7-alpha.2` 及之后的发行�
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.13/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.21/dsh-llm-grok-0.3.21.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.22/dsh-llm-grok-0.3.22.tgz
 dsh web
 ~~~
 
@@ -92,7 +92,7 @@ Latest（Owner + 本插件；Web 必须一起装）：
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.21.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.22.tgz
 ~~~
 
 固定版本（可复现）：
@@ -101,7 +101,7 @@ dsh plugin --profile web add --force \
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/download/v0.2.13/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.21/dsh-llm-grok-0.3.21.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.22/dsh-llm-grok-0.3.22.tgz
 ~~~
 
 更新、卸载与验证：
@@ -111,7 +111,7 @@ dsh plugin --profile web add --force \
 dsh plugin --profile web add --force \
   https://github.com/NOirBRight/dsh-llm-providers-ui/releases/latest/download/dsh-llm-providers-ui-0.2.13.tgz
 dsh plugin --profile web add --force \
-  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.21.tgz
+  https://github.com/NOirBRight/dsh-llm-grok/releases/latest/download/dsh-llm-grok-0.3.22.tgz
 # 验证加载与版本
 dsh plugin --profile web list
 dsh plugin --profile web doctor
@@ -123,7 +123,7 @@ dsh plugin --profile web remove dsh-llm-grok
 
 回滚：重新安装上一稳定版 [v0.3.18](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.18/dsh-llm-grok-0.3.18.tgz)，确认插件列表后只重启一次 Web 服务。失败时查看 journalctl --user -u dsh-web.service 与 dsh plugin --profile web doctor，不要把源码 checkout 写入 production profile。
 
-Release 与完整性：[v0.3.21](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.21) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.21/SHA256SUMS)。
+Release 与完整性：[v0.3.22](https://github.com/NOirBRight/dsh-llm-grok/releases/tag/v0.3.22) · [SHA256SUMS](https://github.com/NOirBRight/dsh-llm-grok/releases/download/v0.3.22/SHA256SUMS)。
 
 ## 独立 Model Switch 搜索
 

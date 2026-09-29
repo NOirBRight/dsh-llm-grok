@@ -1,3 +1,7 @@
+## v0.3.22
+
+- Keep the shared provider detail page, including paste-code sign-in, while settings are still loading or unavailable.
+
 ## v0.3.21
 
 - Allow future Model Switch releases that retain the public adapter-registry API; keep the tested development artifact pinned.

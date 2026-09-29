@@ -311,6 +311,25 @@ describe('GrokPluginCard', () => {
      // Re-auth re-reads quota for the new session instead of keeping a stale snapshot.
      await waitFor(() => { expect(fetchUsage).toHaveBeenCalledTimes(1) })
    })
+  it('keeps the paste-code form on the shared detail page while settings are still loading', async () => {
+    const loading = snapshot({ status: 'loading', value: undefined, revision: undefined })
+    render(<GrokPluginCard {...props({
+      mode: 'detail',
+      copy: providerDetailCopy.en,
+      template: ProviderDetail,
+      useGrokSettings: selector => selector(loading),
+      startAuth: vi.fn(() => Promise.resolve({
+        ok: true,
+        attemptId: 'loading-detail',
+        authorizationUrl: 'https://auth.x.ai/oauth2/authorize',
+      } satisfies GrokAuthStartReply)),
+    })} />)
+    fireEvent.click(await screen.findByRole('button', { name: en.signIn }))
+    expect(await screen.findByLabelText(en.pasteCodeLabel)).toBeTruthy()
+    expect(document.querySelector('[data-provider-detail]')).not.toBeNull()
+    expect(document.querySelector('[data-provider-card]')).toBeNull()
+  })
+
    it('renders the shared detail template when the settings page asks for it', () => {
      const onRefresh = vi.fn()
      const usage = {
