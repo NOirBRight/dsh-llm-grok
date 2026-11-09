@@ -91,3 +91,5 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/schemastery@3.18.4'
   - 'dsh-llm-providers-ui@0.2.13'
   - 'dsh-model-switch@0.4.15'
+patchedDependencies:
+  '@earendil-works/pi-ai@0.85.1': patches/@earendil-works__pi-ai@0.85.1.patch

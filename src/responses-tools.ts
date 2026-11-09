@@ -69,6 +69,95 @@ function catalogFor(model: Model<Api>, models: readonly GrokCatalogModel[]): Gro
   }
 }
 
+interface PiToolSpec {
+  name: string
+  description?: string
+  parameters?: unknown
+}
+
+interface PiMessage {
+  role: string
+  content?: unknown
+  toolsAdded?: PiToolSpec[]
+  toolsRemoved?: Array<{ name: string }>
+}
+
+function textOfContent(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .map(block => (isRecord(block) && typeof block['text'] === 'string' ? block['text'] : ''))
+    .filter(text => text.length > 0)
+    .join('\n\n')
+}
+
+function piToolsOf(tools: unknown): PiToolSpec[] {
+  if (!Array.isArray(tools)) return []
+  const out: PiToolSpec[] = []
+  for (const tool of tools) {
+    if (isRecord(tool) && typeof tool['name'] === 'string') out.push(tool as unknown as PiToolSpec)
+  }
+  return out
+}
+
+/**
+ * Fold pi `system` messages into `context.systemPrompt` before pi-ai 0.85.x
+ * sees them.
+ *
+ * Newer `dsh-llm-pi-ai` seams deliver the harness system prompt (and developer
+ * tool declarations) as `role: "system"` messages whose `content` may be a
+ * plain string. pi-ai 0.85.x both crashes estimating such messages
+ * (`estimateMessageTokens` iterates non-user content as a block array and
+ * reads `block.name.length` off a string character) and silently drops any
+ * role it does not convert on the wire. Lifting them into the supported
+ * `systemPrompt` field fixes the estimation crash *and* restores the prompt
+ * and tool declarations on the wire. Tool updates merge into `context.tools`
+ * (deduplicated by name; removed names dropped), the only tool channel pi-ai
+ * 0.85.x understands. Fixed upstream in pi-ai 1.3.0 (`role === "system"`
+ * branch); this is the plugin-owned backport for the `^0.85.1` line.
+ */
+export function liftSystemMessages(context: PiContext): PiContext {
+  const messages = context.messages as unknown as PiMessage[] | undefined
+  if (messages === undefined || !messages.some(message => message.role === 'system')) return context
+  const texts: string[] = []
+  const tools = Array.isArray(context.tools) ? [...piToolsOf(context.tools)] : []
+  const names = new Set(tools.map(tool => tool.name))
+  const kept: PiMessage[] = []
+  for (const message of messages) {
+    if (message.role !== 'system') {
+      kept.push(message)
+      continue
+    }
+    texts.push(textOfContent(message.content))
+    for (const tool of piToolsOf(message.toolsAdded)) {
+      if (!names.has(tool.name)) {
+        names.add(tool.name)
+        tools.push(tool)
+      }
+    }
+    const removed = new Set(piToolsOf(message.toolsRemoved).map(tool => tool.name))
+    if (removed.size > 0) {
+      for (let index = tools.length - 1; index >= 0; index -= 1) {
+        if (removed.has(tools[index]!.name)) tools.splice(index, 1)
+      }
+      names.clear()
+      for (const tool of tools) names.add(tool.name)
+    }
+  }
+  const prompt = [context.systemPrompt, ...texts].filter(text => text !== undefined && text.length > 0).join('\n\n')
+  const next = {
+    ...context,
+    messages: kept as never,
+  } as PiContext & Record<string, unknown>
+  if (prompt.length > 0) next.systemPrompt = prompt
+  else delete next.systemPrompt
+  if (tools.length > 0) next.tools = tools as never
+  else delete next.tools
+  return next as PiContext
+}
+
+/** Apply every Grok context transform ahead of the pi-ai 0.85.x stream. */
+
 function withGrokResponsesBody<TOptions extends StreamOptions>(
   streamFn: (model: Model<Api>, context: PiContext, options?: TOptions) => AssistantMessageEventStream,
   models: readonly GrokCatalogModel[],
@@ -100,10 +189,14 @@ function withHiddenOpaqueThinking<TOptions extends StreamOptions>(
 
 export function grokResponsesApi(models: readonly GrokCatalogModel[] = []): ProviderStreams {
   const base = openAIResponsesApi()
+  const withGrokContext = <TOptions extends StreamOptions>(
+    streamFn: (model: Model<Api>, context: PiContext, options?: TOptions) => AssistantMessageEventStream,
+  ): ((model: Model<Api>, context: PiContext, options?: TOptions) => AssistantMessageEventStream) =>
+    (model, context, options) => streamFn(model, liftSystemMessages(context), options)
   return {
-    stream: withHiddenOpaqueThinking(withGrokResponsesBody<StreamOptions>(base.stream, models)),
+    stream: withHiddenOpaqueThinking(withGrokContext(withGrokResponsesBody<StreamOptions>(base.stream, models))),
     streamSimple: withHiddenOpaqueThinking(
-      withGrokResponsesBody<SimpleStreamOptions>(base.streamSimple, models),
+      withGrokContext(withGrokResponsesBody<SimpleStreamOptions>(base.streamSimple, models)),
     ),
   }
 }

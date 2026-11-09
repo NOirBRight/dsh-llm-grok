@@ -176,7 +176,7 @@ describe('official WebRuntime selector into the Grok search adapter', () => {
     expect(init?.method).toBe('POST')
     const headers = init?.headers as Record<string, string>
     expect(headers.authorization).toBe('Bearer test-access')
-    expect(headers['x-grok-client-version']).toBe('1.0.4')
+    expect(headers['x-grok-client-version']).toBe('1.0.13')
     expect(headers['x-grok-client-identifier']).toBe('grok-shell')
     const body = JSON.parse(String(init?.body)) as { model?: string, input?: string, tools?: unknown[], tool_choice?: unknown }
     expect(body.model).toBe(MODEL)

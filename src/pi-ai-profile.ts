@@ -21,7 +21,12 @@ export const GROK_DEFAULT_CONTEXT_WINDOW = 500_000
 /** Safe output capability used when the frozen catalog entry has none. */
 export const GROK_DEFAULT_MODEL_MAX_TOKENS = 32_768
 
-const NO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+/**
+ * Zero pricing for the subscription proxy. `tiers: []` is required by pi-ai
+ * `calculateCost`, which dereferences `model.cost.tiers` on every usage
+ * report; a cost object without the field crashes usage accounting.
+ */
+const NO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tiers: [] }
 
 const { name: PACKAGE_NAME, version: PACKAGE_VERSION } = createRequire(import.meta.url)('../package.json') as {
   name: string

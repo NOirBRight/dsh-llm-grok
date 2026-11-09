@@ -4,13 +4,16 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@earendil-works/pi-ai@0.85.1': 818ee3737026849c6ab1bacea850b61011901ed6628550030a0aee729d5cfda0
+
 importers:
 
   .:
     dependencies:
       '@earendil-works/pi-ai':
         specifier: ^0.85.1
-        version: 0.85.1(ws@8.21.3)(zod@4.6.5)
+        version: 0.85.1(patch_hash=818ee3737026849c6ab1bacea850b61011901ed6628550030a0aee729d5cfda0)(ws@8.21.3)(zod@4.6.5)
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ~4.0.4
@@ -2876,7 +2879,7 @@ snapshots:
       '@deepseek-ai/dsh-timeout': 0.1.7-rc.1(@deepseek-ai/cordis@4.0.4)
       '@deepseek-ai/dsh-util-values': 0.1.7-rc.1(@deepseek-ai/cordis@4.0.4)
       '@deepseek-ai/schemastery': 3.18.4
-      '@earendil-works/pi-ai': 0.85.1(ws@8.21.3)(zod@4.6.5)
+      '@earendil-works/pi-ai': 0.85.1(patch_hash=818ee3737026849c6ab1bacea850b61011901ed6628550030a0aee729d5cfda0)(ws@8.21.3)(zod@4.6.5)
     optionalDependencies:
       '@deepseek-ai/cordis-plugin-loader': 1.0.5(@deepseek-ai/cordis@4.0.4)(node-addon-require-builtin@0.1.6)
     transitivePeerDependencies:
@@ -3028,7 +3031,7 @@ snapshots:
       '@deepseek-ai/cosmokit': 1.8.5
       '@standard-schema/spec': 1.1.0
 
-  '@earendil-works/pi-ai@0.85.1(ws@8.21.3)(zod@4.6.5)':
+  '@earendil-works/pi-ai@0.85.1(patch_hash=818ee3737026849c6ab1bacea850b61011901ed6628550030a0aee729d5cfda0)(ws@8.21.3)(zod@4.6.5)':
     dependencies:
       '@anthropic-ai/sdk': 0.123.0(zod@4.6.5)
       '@aws-sdk/client-bedrock-runtime': 3.1048.0
