@@ -423,7 +423,7 @@ describe('GrokAdapter.stream request shape', () => {
     expect(server.requests[0]?.method).toBe('POST')
     expect(server.requests[0]?.path).toBe('/v1/responses')
     expect(server.requests[0]?.headers.authorization).toBe('Bearer test-access')
-    expect(server.requests[0]?.headers['x-grok-client-version']).toBe('1.0.4')
+    expect(server.requests[0]?.headers['x-grok-client-version']).toBe('1.0.13')
     expect(server.requests[0]?.headers['x-grok-client-identifier']).toBe('grok-shell')
     const body = server.requests[0]?.body as { model?: string, tools?: Array<{ type?: string, name?: string }> }
     expect(body.model).toBe(MODEL_ID)
